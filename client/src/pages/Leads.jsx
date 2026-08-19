@@ -32,6 +32,7 @@ import {
   User,
   CheckCircle2
 } from 'lucide-react';
+import { Skeleton, SkeletonCard } from '../components/ui/Skeleton';
 
 const COLUMNS = [
   {
@@ -511,11 +512,18 @@ export default function Leads() {
 
       {/* Board View */}
       {loading ? (
-        <div className="min-h-[400px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 text-xs font-medium">Loading Lead Pipeline...</p>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">
+          {Array.from({ length: 5 }).map((_, colIdx) => (
+            <div key={colIdx} className="bg-white/70 rounded-2xl border border-slate-200/80 p-3 space-y-3">
+              <div className="p-3 bg-white rounded-xl border border-slate-200/60 flex items-center justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-6 w-8 rounded-full" />
+              </div>
+              <SkeletonCard className="h-32" />
+              <SkeletonCard className="h-32" />
+              <SkeletonCard className="h-32" />
+            </div>
+          ))}
         </div>
       ) : viewMode === 'kanban' ? (
         <DragDropContext onDragEnd={handleDragEnd}>

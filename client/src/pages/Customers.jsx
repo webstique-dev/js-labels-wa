@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building } from 'lucide-react';
+import { SkeletonTable } from '../components/ui/Skeleton';
 
 export default function Customers() {
   const navigate = useNavigate();
@@ -112,12 +113,7 @@ export default function Customers() {
 
       {/* Main Content Area */}
       {loading ? (
-        <div className="min-h-[400px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 text-xs font-medium">Loading Customer Accounts...</p>
-          </div>
-        </div>
+        <SkeletonTable rows={6} cols={5} />
       ) : safeCustomers.length === 0 ? (
         <div className="py-20 text-center bg-white rounded-2xl border border-slate-200/80 space-y-3">
           <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400">

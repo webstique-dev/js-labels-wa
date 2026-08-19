@@ -20,6 +20,7 @@ import {
   X,
   AlertTriangle
 } from 'lucide-react';
+import { Skeleton, SkeletonCard } from '../components/ui/Skeleton';
 
 export default function CustomerDetails() {
   const { id } = useParams();
@@ -122,10 +123,12 @@ export default function CustomerDetails() {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-500 text-xs font-medium">Loading Customer 360 Profile...</p>
+      <div className="space-y-6 pb-12">
+        <Skeleton className="h-6 w-48" />
+        <SkeletonCard className="h-40" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <SkeletonCard className="lg:col-span-4 h-96" />
+          <SkeletonCard className="lg:col-span-8 h-96" />
         </div>
       </div>
     );

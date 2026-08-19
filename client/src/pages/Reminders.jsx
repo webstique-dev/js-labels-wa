@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Bell, Phone, MessageSquare, Mail, CheckCircle2, Clock, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Skeleton, SkeletonCard } from '../components/ui/Skeleton';
 
 export default function Reminders() {
   const { role } = useAuth();
@@ -192,11 +193,10 @@ export default function Reminders() {
 
           {/* Reminder Cards Stream */}
           {loading ? (
-            <div className="min-h-[300px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-slate-500 text-xs font-medium">Computing Reorder Predictions...</p>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <SkeletonCard key={idx} className="h-44" />
+              ))}
             </div>
           ) : safeReminders.length === 0 ? (
             <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80 space-y-2">

@@ -5,6 +5,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import NewOrderModal from '../components/NewOrderModal';
 import { Plus, Trash2, CheckCircle2, Package, Calendar, Filter, X } from 'lucide-react';
+import { SkeletonTable } from '../components/ui/Skeleton';
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All Orders' },
@@ -165,9 +166,7 @@ export default function Orders() {
 
       {/* Main Table View */}
       {loading ? (
-        <div className="min-h-[300px] bg-white rounded-2xl border border-slate-200 p-8 flex items-center justify-center">
-          <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-        </div>
+        <SkeletonTable rows={6} cols={7} />
       ) : orders.length === 0 ? (
         <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-3">
           <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto">

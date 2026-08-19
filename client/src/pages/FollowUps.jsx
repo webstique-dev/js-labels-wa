@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Clock, CheckCircle2, Phone, Mail, User, AlertCircle, ArrowRight, Trash2 } from 'lucide-react';
+import { SkeletonTable } from '../components/ui/Skeleton';
 
 export default function FollowUps() {
   const [searchParams] = useSearchParams();
@@ -131,12 +132,7 @@ export default function FollowUps() {
 
       {/* Main Table / Stream View */}
       {loading ? (
-        <div className="min-h-[300px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 text-xs font-medium">Loading Follow-up Tasks...</p>
-          </div>
-        </div>
+        <SkeletonTable rows={5} cols={6} />
       ) : followups.length === 0 ? (
         <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-3">
           <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto">

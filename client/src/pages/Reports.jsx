@@ -3,6 +3,7 @@ import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, 
 import api from '../api/axios';
 import { useNotification } from '../context/NotificationContext';
 import { Download, AlertTriangle } from 'lucide-react';
+import { Skeleton, SkeletonCard, SkeletonStatsGrid, SkeletonTable } from '../components/ui/Skeleton';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#10B981', '#EF4444', '#64748B'];
 
@@ -206,8 +207,24 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Overview KPI Cards Row (6 Cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Main Report Body / Skeletons */}
+      {loading ? (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <SkeletonCard key={idx} className="h-20" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <SkeletonCard className="lg:col-span-8 h-80" />
+            <SkeletonCard className="lg:col-span-4 h-80" />
+          </div>
+          <SkeletonTable rows={5} cols={6} />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Overview KPI Cards Row (6 Cards) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         
         {/* Total Revenue */}
         <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
@@ -278,16 +295,6 @@ export default function Reports() {
         </div>
 
       </div>
-
-      {loading ? (
-        <div className="min-h-[300px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 text-xs font-medium">Processing Analytics Datasets...</p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-6">
           
           {/* Charts Row 1: Revenue Growth & Orders Status Pie Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

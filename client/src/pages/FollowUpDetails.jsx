@@ -24,6 +24,7 @@ import {
   UserCheck,
   AlertTriangle
 } from 'lucide-react';
+import { Skeleton, SkeletonCard } from '../components/ui/Skeleton';
 
 export default function FollowUpDetails() {
   const { id } = useParams();
@@ -160,10 +161,15 @@ export default function FollowUpDetails() {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-500 text-xs font-medium">Loading Follow-up Workspace...</p>
+      <div className="space-y-6 pb-12">
+        <Skeleton className="h-6 w-48" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <SkeletonCard className="lg:col-span-3 h-80" />
+          <div className="lg:col-span-5 space-y-6">
+            <SkeletonCard className="h-24" />
+            <SkeletonCard className="h-80" />
+          </div>
+          <SkeletonCard className="lg:col-span-4 h-96" />
         </div>
       </div>
     );

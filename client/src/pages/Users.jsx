@@ -16,6 +16,7 @@ import {
   EyeOff,
   Lock
 } from 'lucide-react';
+import { SkeletonTable } from '../components/ui/Skeleton';
 
 export default function Users() {
   const { user: currentUser, role: currentRole } = useAuth();
@@ -335,12 +336,7 @@ export default function Users() {
 
       {/* Users List / Table */}
       {loading ? (
-        <div className="min-h-[300px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 text-xs font-medium">Loading User Accounts...</p>
-          </div>
-        </div>
+        <SkeletonTable rows={5} cols={6} />
       ) : users.length === 0 ? (
         <div className="min-h-[250px] bg-white rounded-2xl border border-slate-200 p-8 text-center flex flex-col items-center justify-center space-y-2">
           <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">

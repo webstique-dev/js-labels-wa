@@ -15,6 +15,7 @@ import {
   X,
   UserCheck
 } from 'lucide-react';
+import { Skeleton, SkeletonCard, SkeletonStatsGrid, SkeletonList } from '../components/ui/Skeleton';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -112,10 +113,32 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-500 text-xs font-medium">Loading Dashboard Intelligence...</p>
+      <div className="space-y-6 pb-12">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-64" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <Skeleton className="h-9 w-32 rounded-xl" />
+        </div>
+
+        <SkeletonStatsGrid count={4} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <SkeletonCard key={idx} className="h-24" />
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8 space-y-6">
+            <SkeletonCard className="h-80" />
+            <SkeletonCard className="h-72" />
+          </div>
+          <div className="lg:col-span-4 space-y-6">
+            <SkeletonCard className="h-80" />
+            <SkeletonCard className="h-72" />
+          </div>
         </div>
       </div>
     );
