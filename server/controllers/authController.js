@@ -36,11 +36,12 @@ const login = async (req, res) => {
     await user.save();
 
     const token = generateToken(user._id, user.role);
+    const isProd = process.env.NODE_ENV === 'production';
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
@@ -80,7 +81,12 @@ const me = async (req, res) => {
 };
 
 const logout = async (req, res) => {
-  res.clearCookie('token');
+  const isProd = process.env.NODE_ENV === 'production';
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax'
+  });
   return res.json({ message: 'Logged out successfully' });
 };
 
