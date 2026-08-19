@@ -58,11 +58,6 @@ MONGO_URI=mongodb://localhost:27017/js-labels-wa
 JWT_SECRET=your_jwt_secret_key_here
 ```
 
-Seed initial database records:
-```bash
-node seed.js
-```
-
 Start backend development server:
 ```bash
 npm run dev

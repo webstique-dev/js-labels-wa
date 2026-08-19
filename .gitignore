@@ -11,6 +11,15 @@ server/.env
 !.env.example
 Dump
 
+# Seed & Test scripts / data
+server/seeds/
+server/tests/
+seeds/
+tests/
+server/seed*.js
+server/test*.js
+seed*.js
+test*.js
 
 # Build Outputs
 dist/
