@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 const NotificationContext = createContext();
@@ -27,15 +27,15 @@ export function NotificationProvider({ children }) {
     });
   }, []);
 
-  // Universal notify helper functions
-  const notify = {
+  // Universal notify helper functions (Memoized for stable reference across re-renders)
+  const notify = useMemo(() => ({
     success: (msg, title = null, dur = 3000) => addNotification('success', msg, title, dur),
     error: (msg, title = null, dur = 3000) => addNotification('error', msg, title, dur),
     warning: (msg, title = null, dur = 3000) => addNotification('warning', msg, title, dur),
     info: (msg, title = null, dur = 3000) => addNotification('info', msg, title, dur),
     showNotification: (msg, type = 'info', title = null, dur = 3000) => addNotification(type, msg, title, dur),
     dismiss
-  };
+  }), [addNotification, dismiss]);
 
   return (
     <NotificationContext.Provider value={notify}>
@@ -129,9 +129,8 @@ function ToastItem({ notification, onDismiss }) {
     <div
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`p-4 rounded-2xl border shadow-xl flex items-start justify-between gap-3 pointer-events-auto transition-all duration-300 transform translate-y-0 opacity-100 backdrop-blur-xs select-none ${style.bg} ${
-        isHovered ? 'ring-2 ring-slate-400/20 scale-[1.02]' : ''
-      }`}
+      className={`p-4 rounded-2xl border shadow-xl flex items-start justify-between gap-3 pointer-events-auto transition-all duration-300 transform translate-y-0 opacity-100 backdrop-blur-xs select-none ${style.bg} ${isHovered ? 'ring-2 ring-slate-400/20 scale-[1.02]' : ''
+        }`}
     >
       <div className="flex items-start gap-3 min-w-0 flex-1">
         {style.icon}

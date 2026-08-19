@@ -56,7 +56,7 @@ export default function Dashboard() {
       setActivities(actRes.data || []);
       setAlerts(altRes.data);
 
-      if (isManagerOrAdmin) {
+      if (role === 'super_admin' || role === 'manager') {
         try {
           const [reviewRes, usersRes] = await Promise.all([
             api.get('/dashboard/needs-review'),
@@ -74,7 +74,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [isManagerOrAdmin, notify]);
+  }, [role]);
 
   useEffect(() => {
     fetchDashboardData();

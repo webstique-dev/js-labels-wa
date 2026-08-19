@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../api/axios';
 
 const AuthContext = createContext();
@@ -9,7 +9,7 @@ export const AuthProvider = ({ children }) => {
   const [permissions, setPermissions] = useState({});
   const [loading, setLoading] = useState(true);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const res = await api.get('/auth/me');
       setUser(res.data.user);
@@ -22,21 +22,21 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [checkAuth]);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
     setUser(res.data.user);
     setRole(res.data.user.role);
     setPermissions(res.data.permissions || {});
     return res.data;
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
     } catch (err) {
@@ -46,10 +46,20 @@ export const AuthProvider = ({ children }) => {
       setRole(null);
       setPermissions({});
     }
-  };
+  }, []);
+
+  const authValue = useMemo(() => ({
+    user,
+    role,
+    permissions,
+    loading,
+    login,
+    logout,
+    checkAuth
+  }), [user, role, permissions, loading, login, logout, checkAuth]);
 
   return (
-    <AuthContext.Provider value={{ user, role, permissions, loading, login, logout, checkAuth }}>
+    <AuthContext.Provider value={authValue}>
       {children}
     </AuthContext.Provider>
   );

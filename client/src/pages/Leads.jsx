@@ -512,8 +512,8 @@ export default function Leads() {
 
       {/* Board View */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">
-          {Array.from({ length: 5 }).map((_, colIdx) => (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+          {Array.from({ length: 4 }).map((_, colIdx) => (
             <div key={colIdx} className="bg-white/70 rounded-2xl border border-slate-200/80 p-3 space-y-3">
               <div className="p-3 bg-white rounded-xl border border-slate-200/60 flex items-center justify-between">
                 <Skeleton className="h-4 w-24" />
@@ -527,8 +527,8 @@ export default function Leads() {
         </div>
       ) : viewMode === 'kanban' ? (
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="flex md:grid md:grid-cols-5 lg:grid-cols-5 gap-4 items-start overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-4">
-            {COLUMNS.map((column) => {
+          <div className="flex md:grid md:grid-cols-4 lg:grid-cols-4 gap-4 items-start overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-4">
+            {COLUMNS.filter(c => c.id !== 'cancelled').map((column) => {
               const columnLeads = filteredLeads.filter(l => l.status === column.id);
               const columnTotalStr = calculateColumnTotal(columnLeads);
               const IconComp = column.icon;
@@ -596,6 +596,15 @@ export default function Leads() {
                                     setActiveActivityModal({ leadId: lead._id, leadName: lead.name, type });
                                     setActivityNote('');
                                   }}
+                                  onCancel={() => {
+                                    setPendingCancelMove({
+                                      leadId: lead._id,
+                                      sourceStatus: lead.status,
+                                      destStatus: 'cancelled',
+                                      lead: lead
+                                    });
+                                    setCancelReasonInput('');
+                                  }}
                                 />
                               )}
                             </Draggable>
@@ -647,6 +656,15 @@ export default function Leads() {
                   onLogActivity={(type) => {
                     setActiveActivityModal({ leadId: lead._id, leadName: lead.name, type });
                     setActivityNote('');
+                  }}
+                  onCancel={() => {
+                    setPendingCancelMove({
+                      leadId: lead._id,
+                      sourceStatus: lead.status,
+                      destStatus: 'cancelled',
+                      lead: lead
+                    });
+                    setCancelReasonInput('');
                   }}
                 />
               );
@@ -956,7 +974,7 @@ export default function Leads() {
 }
 
 // Kanban Lead Card matching exact reference design
-function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, canDelete, onDelete, onReassign, onLogActivity }) {
+function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, canDelete, onDelete, onReassign, onLogActivity, onCancel }) {
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
 
@@ -1089,6 +1107,18 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
               >
                 <Mail size={14} />
               </button>
+
+              <button
+                type="button"
+                title="Cancel Lead"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancel();
+                }}
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+              >
+                <XCircle size={14} />
+              </button>
             </>
           )}
 
@@ -1161,6 +1191,19 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
                   >
                     <UserCheck size={12} />
                     <span>Reassign</span>
+                  </button>
+                )}
+                {['new', 'contacted', 'follow_up'].includes(lead.status) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onCancel();
+                    }}
+                    className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
+                  >
+                    <XCircle size={12} />
+                    <span>Cancel Lead</span>
                   </button>
                 )}
                 {canDelete && (
