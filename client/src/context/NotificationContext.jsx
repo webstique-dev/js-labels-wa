@@ -81,7 +81,7 @@ function ToastItem({ notification, onDismiss }) {
       <div className="flex items-start gap-3 min-w-0 flex-1">
         {style.icon}
         <div className="text-xs font-semibold leading-relaxed">
-          {title && <div className="font-extrabold text-sm mb-0.5">{title}</div>}
+          {title && <div className="font-semibold text-sm mb-0.5">{title}</div>}
           <p>{message}</p>
         </div>
       </div>

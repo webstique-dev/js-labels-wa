@@ -99,7 +99,7 @@ export default function Dashboard() {
       await api.post(`/escalations/${reassignModalItem._id}/reassign`, {
         reassignedTo: selectedCallerId
       });
-      notify.success('Lead successfully reassigned and escalation resolved!');
+      notify.success('Escalated lead reassigned successfully');
       setReassignModalItem(null);
       setSelectedCallerId('');
       fetchDashboardData();
@@ -110,34 +110,58 @@ export default function Dashboard() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-[400px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-500 text-xs font-medium">Loading Dashboard Intelligence...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-12">
+      
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Executive Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1">Real-time performance metrics, conversion funnels, and urgent action alerts</p>
+          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Executive Dashboard</h1>
+          <p className="text-slate-500 text-sm mt-1">Real-time CRM metrics, conversion performance, and reorder forecasts</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            {role === 'caller' ? `Sales Executive Scope (${user?.name})` : 'Company-Wide Scope'}
-          </span>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchDashboardData}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5"
+          >
+            <RefreshCw size={14} />
+            <span>Refresh</span>
+          </button>
+
+          <Link
+            to="/leads"
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-2"
+          >
+            <span>Lead Board</span>
+            <ArrowRight size={14} />
+          </Link>
         </div>
       </div>
 
-      {/* KPI Cards Row (4 Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Top 4 Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         
         {/* Total Leads */}
         <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-extrabold uppercase text-slate-400">
-            <span>Total Leads</span>
+          <div className="flex items-center justify-between text-xs font-medium uppercase text-slate-500">
+            <span>Total Active Leads</span>
             <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg"><Target size={18} /></span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-slate-900">{summary?.totalLeads?.count || 0}</span>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+            <span className="text-3xl font-semibold text-slate-900">{summary?.totalLeads?.count || 0}</span>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
               (summary?.totalLeads?.change || 0) >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
             }`}>
               {(summary?.totalLeads?.change || 0) >= 0 ? `+${summary?.totalLeads?.change}%` : `${summary?.totalLeads?.change}%`} vs last mo
@@ -147,13 +171,13 @@ export default function Dashboard() {
 
         {/* Converted Customers */}
         <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-extrabold uppercase text-slate-400">
+          <div className="flex items-center justify-between text-xs font-medium uppercase text-slate-500">
             <span>Converted Customers</span>
             <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg"><Star size={18} /></span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-slate-900">{summary?.convertedCustomers?.count || 0}</span>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+            <span className="text-3xl font-semibold text-slate-900">{summary?.convertedCustomers?.count || 0}</span>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
               (summary?.convertedCustomers?.change || 0) >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
             }`}>
               {(summary?.convertedCustomers?.change || 0) >= 0 ? `+${summary?.convertedCustomers?.change}%` : `${summary?.convertedCustomers?.change}%`} vs last mo
@@ -163,13 +187,13 @@ export default function Dashboard() {
 
         {/* Orders Delivered */}
         <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-extrabold uppercase text-slate-400">
+          <div className="flex items-center justify-between text-xs font-medium uppercase text-slate-500">
             <span>Orders Delivered</span>
             <span className="p-1.5 bg-purple-50 text-purple-600 rounded-lg"><Package size={18} /></span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-slate-900">{summary?.ordersDelivered?.count || 0}</span>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+            <span className="text-3xl font-semibold text-slate-900">{summary?.ordersDelivered?.count || 0}</span>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
               (summary?.ordersDelivered?.change || 0) >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
             }`}>
               {(summary?.ordersDelivered?.change || 0) >= 0 ? `+${summary?.ordersDelivered?.change}%` : `${summary?.ordersDelivered?.change}%`} vs last mo
@@ -179,13 +203,13 @@ export default function Dashboard() {
 
         {/* Repeat Orders */}
         <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-xs font-extrabold uppercase text-slate-400">
+          <div className="flex items-center justify-between text-xs font-medium uppercase text-slate-500">
             <span>Repeat Order Clients</span>
             <span className="p-1.5 bg-amber-50 text-amber-600 rounded-lg"><RefreshCw size={18} /></span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-slate-900">{summary?.repeatOrders?.count || 0}</span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">
+            <span className="text-3xl font-semibold text-slate-900">{summary?.repeatOrders?.count || 0}</span>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">
               +{summary?.repeatOrders?.change || 12}% vs last mo
             </span>
           </div>
@@ -202,8 +226,8 @@ export default function Dashboard() {
           className="p-4 bg-rose-50/70 hover:bg-rose-50 border border-rose-200 rounded-2xl shadow-xs transition flex items-center justify-between group"
         >
           <div>
-            <span className="text-[11px] font-extrabold uppercase text-rose-700">Overdue Follow-ups</span>
-            <span className="text-2xl font-black text-rose-900 block mt-0.5">{alerts?.overdueFollowups || 0}</span>
+            <span className="text-[11px] font-semibold uppercase text-rose-700">Overdue Follow-ups</span>
+            <span className="text-2xl font-semibold text-rose-900 block mt-0.5">{alerts?.overdueFollowups || 0}</span>
           </div>
           <ArrowRight size={16} className="text-rose-500 group-hover:translate-x-1 transition" />
         </Link>
@@ -214,8 +238,8 @@ export default function Dashboard() {
           className="p-4 bg-amber-50/70 hover:bg-amber-50 border border-amber-200 rounded-2xl shadow-xs transition flex items-center justify-between group"
         >
           <div>
-            <span className="text-[11px] font-extrabold uppercase text-amber-700">Follow-ups Due Today</span>
-            <span className="text-2xl font-black text-amber-900 block mt-0.5">{alerts?.dueToday || 0}</span>
+            <span className="text-[11px] font-semibold uppercase text-amber-700">Follow-ups Due Today</span>
+            <span className="text-2xl font-semibold text-amber-900 block mt-0.5">{alerts?.dueToday || 0}</span>
           </div>
           <ArrowRight size={16} className="text-amber-500 group-hover:translate-x-1 transition" />
         </Link>
@@ -226,8 +250,8 @@ export default function Dashboard() {
           className="p-4 bg-blue-50/70 hover:bg-blue-50 border border-blue-200 rounded-2xl shadow-xs transition flex items-center justify-between group"
         >
           <div>
-            <span className="text-[11px] font-extrabold uppercase text-blue-700">Reminders (7 Days)</span>
-            <span className="text-2xl font-black text-blue-900 block mt-0.5">{alerts?.upcomingReminders || 0}</span>
+            <span className="text-[11px] font-semibold uppercase text-blue-700">Reminders (7 Days)</span>
+            <span className="text-2xl font-semibold text-blue-900 block mt-0.5">{alerts?.upcomingReminders || 0}</span>
           </div>
           <ArrowRight size={16} className="text-blue-500 group-hover:translate-x-1 transition" />
         </Link>
@@ -238,8 +262,8 @@ export default function Dashboard() {
           className="p-4 bg-emerald-50/70 hover:bg-emerald-50 border border-emerald-200 rounded-2xl shadow-xs transition flex items-center justify-between group"
         >
           <div>
-            <span className="text-[11px] font-extrabold uppercase text-emerald-700">30-Day Reorder Forecast</span>
-            <span className="text-xl font-black text-emerald-900 block mt-0.5">
+            <span className="text-[11px] font-semibold uppercase text-emerald-700">30-Day Reorder Forecast</span>
+            <span className="text-xl font-semibold text-emerald-900 block mt-0.5">
               ₹{(alerts?.reorderForecast || 0).toLocaleString('en-IN')}
             </span>
           </div>
@@ -255,17 +279,17 @@ export default function Dashboard() {
         <div className="lg:col-span-8 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-sm">Lead to Customer Conversion Rate Trend</h3>
-              <p className="text-xs text-slate-500">Daily running conversion % throughout the current month</p>
+              <h3 className="font-semibold text-slate-900 text-sm">Lead to Customer Conversion Rate Trend</h3>
+              <p className="text-xs text-slate-500 font-normal">Daily running conversion % throughout the current month</p>
             </div>
-            <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold">
+            <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium">
               Current Month
             </span>
           </div>
 
           <div className="h-64 w-full">
             {trendData.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">Loading chart...</div>
+              <div className="h-full flex items-center justify-center text-xs text-slate-400 font-normal">Loading chart...</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trendData}>
@@ -274,7 +298,7 @@ export default function Dashboard() {
                   <YAxis tick={{ fontSize: 11, fill: '#64748B' }} unit="%" />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#0F172A', borderRadius: '12px', border: 'none', color: '#FFF' }}
-                    itemStyle={{ color: '#38BDF8', fontWeight: 'bold' }}
+                    itemStyle={{ color: '#38BDF8', fontWeight: '500' }}
                   />
                   <Line
                     type="monotone"
@@ -293,16 +317,16 @@ export default function Dashboard() {
         {/* Sales Funnel Progress Bars (4 Cols) */}
         <div className="lg:col-span-4 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-5 flex flex-col justify-between">
           <div>
-            <h3 className="font-extrabold text-slate-900 text-sm">Sales Funnel</h3>
-            <p className="text-xs text-slate-500">Lead progression across pipeline stages</p>
+            <h3 className="font-semibold text-slate-900 text-sm">Sales Funnel</h3>
+            <p className="text-xs text-slate-500 font-normal">Lead progression across pipeline stages</p>
           </div>
 
           <div className="space-y-4">
             {/* Total Leads */}
             <div className="space-y-1">
-              <div className="flex justify-between text-xs font-bold text-slate-700">
+              <div className="flex justify-between text-xs font-medium text-slate-700">
                 <span>Leads (Total)</span>
-                <span className="text-slate-900 font-black">{funnel?.leads || 0}</span>
+                <span className="text-slate-900 font-semibold">{funnel?.leads || 0}</span>
               </div>
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                 <div className="bg-blue-500 h-full rounded-full w-full"></div>
@@ -311,9 +335,9 @@ export default function Dashboard() {
 
             {/* Contacted */}
             <div className="space-y-1">
-              <div className="flex justify-between text-xs font-bold text-slate-700">
+              <div className="flex justify-between text-xs font-medium text-slate-700">
                 <span>Contacted</span>
-                <span className="text-slate-900 font-black">{funnel?.contacted || 0}</span>
+                <span className="text-slate-900 font-semibold">{funnel?.contacted || 0}</span>
               </div>
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                 <div
@@ -325,9 +349,9 @@ export default function Dashboard() {
 
             {/* Follow-up */}
             <div className="space-y-1">
-              <div className="flex justify-between text-xs font-bold text-slate-700">
+              <div className="flex justify-between text-xs font-medium text-slate-700">
                 <span>Follow-up</span>
-                <span className="text-slate-900 font-black">{funnel?.followUp || 0}</span>
+                <span className="text-slate-900 font-semibold">{funnel?.followUp || 0}</span>
               </div>
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                 <div
@@ -339,9 +363,9 @@ export default function Dashboard() {
 
             {/* Order Received */}
             <div className="space-y-1">
-              <div className="flex justify-between text-xs font-bold text-slate-700">
+              <div className="flex justify-between text-xs font-medium text-slate-700">
                 <span>Order Received (Won)</span>
-                <span className="text-emerald-700 font-black">{funnel?.orderReceived || 0}</span>
+                <span className="text-emerald-700 font-semibold">{funnel?.orderReceived || 0}</span>
               </div>
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                 <div
@@ -353,7 +377,7 @@ export default function Dashboard() {
           </div>
 
           <div className="pt-3 border-t border-slate-100 text-center">
-            <Link to="/leads" className="text-xs font-bold text-red-600 hover:text-red-700 inline-flex items-center gap-1">
+            <Link to="/leads" className="text-xs font-medium text-red-600 hover:text-red-700 inline-flex items-center gap-1">
               <span>Open Leads Kanban Board</span>
               <ArrowRight size={12} />
             </Link>
@@ -368,8 +392,8 @@ export default function Dashboard() {
         {/* Recent Activity Stream */}
         <div className={`${isManagerOrAdmin && needsReview.length > 0 ? 'lg:col-span-7' : 'lg:col-span-12'} bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4`}>
           <div className="flex items-center justify-between">
-            <h3 className="font-extrabold text-slate-900 text-sm">Recent Activities Stream</h3>
-            <span className="text-xs text-slate-400 font-semibold">Live Feed</span>
+            <h3 className="font-semibold text-slate-900 text-sm">Recent Activities Stream</h3>
+            <span className="text-xs text-slate-400 font-medium">Live Feed</span>
           </div>
 
           {activities.length === 0 ? (
@@ -378,11 +402,11 @@ export default function Dashboard() {
             <div className="space-y-3">
               {activities.map((act) => (
                 <div key={act._id} className="flex items-start gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs">
-                  <div className="w-8 h-8 rounded-lg bg-slate-900 text-white font-bold flex items-center justify-center text-[10px] shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-slate-900 text-white font-semibold flex items-center justify-center text-[10px] shrink-0">
                     {act.createdBy?.name ? act.createdBy.name.slice(0, 2).toUpperCase() : 'SY'}
                   </div>
                   <div className="flex-1">
-                    <p className="font-bold text-slate-900">{act.description}</p>
+                    <p className="font-medium text-slate-900">{act.description}</p>
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
                       <span>By: {act.createdBy?.name || 'System'}</span>
                       <span>•</span>
@@ -398,54 +422,47 @@ export default function Dashboard() {
         {/* Needs MD Review Panel */}
         {isManagerOrAdmin && needsReview.length > 0 && (
           <div className="lg:col-span-5 bg-white rounded-2xl p-6 border border-rose-200/90 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-rose-600">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping"></span>
-                <h3 className="font-extrabold text-slate-900 text-sm">Needs MD Review</h3>
+            <div className="flex items-center justify-between border-b border-rose-100 pb-3">
+              <div className="flex items-center gap-2 text-rose-700">
+                <AlertTriangle size={18} />
+                <h3 className="font-semibold text-sm">Escalations Pending MD Review</h3>
               </div>
-              <span className="px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-black uppercase rounded-md flex items-center gap-1">
-                <AlertTriangle size={12} />
-                Critical Escalation
+              <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md text-xs font-medium">
+                {needsReview.length} Urgent
               </span>
             </div>
 
-            <div className="space-y-3">
-              {needsReview.map((item) => {
-                const rec = item.relatedRecord || {};
-                const callerName = item.assignedTo?.name || 'Unassigned Caller';
-
-                return (
-                  <div key={item._id} className="p-4 bg-rose-50/60 border border-rose-200/80 rounded-xl space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="font-black text-slate-900 text-sm block">{rec.name || 'Escalated Lead'}</span>
-                        <span className="text-slate-500 text-xs">{rec.company || rec.phone || ''}</span>
-                      </div>
-                      <span className="px-2 py-0.5 bg-rose-600 text-white font-black text-[10px] rounded uppercase">
-                        {item.hoursOverdue}h Overdue
-                      </span>
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+              {needsReview.map((item) => (
+                <div key={item._id} className="p-3 bg-rose-50/50 border border-rose-100 rounded-xl space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold text-slate-900 text-xs">
+                        {item.relatedType === 'lead' ? item.relatedId?.name : item.relatedId?.name}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {item.relatedType === 'lead' ? item.relatedId?.company : 'Customer Reorder'} • Overdue: {item.hoursOverdue}h
+                      </p>
                     </div>
+                    <span className="px-2 py-0.5 bg-rose-200 text-rose-900 rounded text-[10px] font-semibold uppercase">
+                      Stage 3 MD Review
+                    </span>
+                  </div>
 
-                    <div className="text-xs text-slate-700 bg-white p-2.5 rounded-lg border border-rose-100">
-                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Assigned Caller</span>
-                      <span className="font-bold text-slate-800">{callerName}</span>
-                      <span className="block text-[11px] text-slate-500 mt-1">{item.notes || 'No follow-up notes'}</span>
-                    </div>
-
+                  <div className="flex justify-end gap-2 pt-1">
                     <button
-                      type="button"
                       onClick={() => {
                         setReassignModalItem(item);
-                        setSelectedCallerId(callers[0]?._id || '');
+                        setSelectedCallerId(item.assignedTo?._id || '');
                       }}
-                      className="w-full py-2 bg-slate-900 hover:bg-black text-white text-xs font-extrabold rounded-xl shadow-xs transition flex items-center justify-center gap-1.5"
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[11px] font-medium shadow-xs transition flex items-center gap-1"
                     >
+                      <UserCheck size={12} />
                       <span>Reassign Executive</span>
-                      <ArrowRight size={14} />
                     </button>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -455,53 +472,57 @@ export default function Dashboard() {
       {/* Reassign Executive Modal */}
       {reassignModalItem && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Reassign Escalated Lead</h3>
+              <h3 className="font-semibold text-slate-900 text-sm">Reassign Escalated Account</h3>
               <button
                 onClick={() => setReassignModalItem(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition"
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
               >
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleReassignSubmit} className="space-y-4">
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Select a new Tele Caller / Sales Executive to take over this escalated lead and resolve the MD Review flag.
-              </p>
+              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-1">
+                <p className="font-medium text-slate-800">
+                  Target: {reassignModalItem.relatedId?.name || 'Account'} ({reassignModalItem.relatedType})
+                </p>
+                <p className="text-slate-500">Currently assigned to: {reassignModalItem.assignedTo?.name || 'Unassigned'}</p>
+                <p className="text-rose-600 font-medium">Overdue Duration: {reassignModalItem.hoursOverdue} Hours</p>
+              </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Select New Executive *</label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Select New Executive Caller</label>
                 <select
                   required
                   value={selectedCallerId}
                   onChange={(e) => setSelectedCallerId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
                 >
-                  <option value="">-- Choose Sales Executive --</option>
-                  {callers.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name} ({c.email})
+                  <option value="">Select an active caller...</option>
+                  {callers.map((caller) => (
+                    <option key={caller._id} value={caller._id}>
+                      {caller.name} ({caller.email})
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setReassignModalItem(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isReassigning}
-                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-md transition disabled:opacity-50"
+                  disabled={isReassigning || !selectedCallerId}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50"
                 >
-                  {isReassigning ? 'Reassigning...' : 'Confirm Reassignment'}
+                  {isReassigning ? 'Reassigning...' : 'Confirm Reassign'}
                 </button>
               </div>
             </form>

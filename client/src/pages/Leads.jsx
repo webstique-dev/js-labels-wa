@@ -312,8 +312,8 @@ export default function Leads() {
       {/* Header Bar */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-red-600/30">
+          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center font-semibold text-sm shadow-md shadow-red-600/30">
               LD
             </span>
             Leads Management & Pipeline
@@ -366,28 +366,28 @@ export default function Leads() {
       {/* Summary KPI Pills */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Leads</span>
-          <span className="text-xl font-black text-slate-900">{totalCount}</span>
+          <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Total Leads</span>
+          <span className="text-xl font-semibold text-slate-900">{totalCount}</span>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-bold text-blue-500 uppercase tracking-wider block">New</span>
-          <span className="text-xl font-black text-blue-700">{newCount}</span>
+          <span className="text-[11px] font-medium text-blue-500 uppercase tracking-wider block">New</span>
+          <span className="text-xl font-semibold text-blue-700">{newCount}</span>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-bold text-purple-500 uppercase tracking-wider block">Contacted</span>
-          <span className="text-xl font-black text-purple-700">{contactedCount}</span>
+          <span className="text-[11px] font-medium text-purple-500 uppercase tracking-wider block">Contacted</span>
+          <span className="text-xl font-semibold text-purple-700">{contactedCount}</span>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-bold text-amber-500 uppercase tracking-wider block">Follow-up</span>
-          <span className="text-xl font-black text-amber-700">{followUpCount}</span>
+          <span className="text-[11px] font-medium text-amber-500 uppercase tracking-wider block">Follow-up</span>
+          <span className="text-xl font-semibold text-amber-700">{followUpCount}</span>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-wider block">Won</span>
-          <span className="text-xl font-black text-emerald-700">{wonCount}</span>
+          <span className="text-[11px] font-medium text-emerald-500 uppercase tracking-wider block">Won</span>
+          <span className="text-xl font-semibold text-emerald-700">{wonCount}</span>
         </div>
         <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center col-span-2 sm:col-span-1">
-          <span className="text-[11px] font-bold text-rose-500 uppercase tracking-wider block">Cancelled</span>
-          <span className="text-xl font-black text-rose-700">{cancelledCount}</span>
+          <span className="text-[11px] font-medium text-rose-500 uppercase tracking-wider block">Cancelled</span>
+          <span className="text-xl font-semibold text-rose-700">{cancelledCount}</span>
         </div>
       </div>
 
@@ -460,7 +460,7 @@ export default function Leads() {
       <div className="flex items-center gap-1.5 border-b border-slate-200 overflow-x-auto scrollbar-hide pb-0.5">
         <button
           onClick={() => setActiveStageTab('all')}
-          className={`px-3.5 py-2 rounded-t-xl text-xs font-extrabold transition whitespace-nowrap ${
+          className={`px-3.5 py-2 rounded-t-xl text-xs font-medium transition whitespace-nowrap ${
             activeStageTab === 'all'
               ? 'bg-slate-900 text-white shadow-xs'
               : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
@@ -481,7 +481,7 @@ export default function Leads() {
               }`}
             >
               <span>{col.title}</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold ${
                 activeStageTab === col.id ? 'bg-white/20 text-white' : col.badgeClass
               }`}>
                 {cnt}
@@ -511,8 +511,8 @@ export default function Leads() {
                   className={`bg-slate-100/90 rounded-2xl border border-slate-200/80 border-t-4 ${column.color} flex flex-col max-h-[calc(100vh-250px)] min-w-[85vw] sm:min-w-[320px] md:min-w-0 snap-center flex-shrink-0 md:flex-shrink`}
                 >
                   <div className="p-3.5 border-b border-slate-200/60 flex items-center justify-between bg-white rounded-t-xl">
-                    <h3 className="font-extrabold text-slate-800 text-sm">{column.title}</h3>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-black ${column.headerBg}`}>
+                    <h3 className="font-semibold text-slate-800 text-sm">{column.title}</h3>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${column.headerBg}`}>
                       {columnLeads.length}
                     </span>
                   </div>

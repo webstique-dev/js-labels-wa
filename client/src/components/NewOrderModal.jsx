@@ -217,7 +217,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
           {/* Customer Selection Section */}
           <div className="space-y-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase text-slate-600">1. Customer Selection</span>
+              <span className="text-xs font-semibold uppercase text-slate-600">1. Customer Selection</span>
               {!initialLead && (
                 <div className="flex items-center gap-2">
                   <button
@@ -310,7 +310,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
           {/* Line Items Section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase text-slate-600">2. Order Line Items</span>
+              <span className="text-xs font-semibold uppercase text-slate-600">2. Order Line Items</span>
               <button
                 type="button"
                 onClick={addLineItem}
@@ -358,7 +358,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
                   {/* Line Total */}
                   <div className="col-span-3 text-right">
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Total</label>
-                    <span className="font-extrabold text-slate-900 text-xs">
+                    <span className="font-semibold text-slate-900 text-xs">
                       ₹{item.lineTotal.toLocaleString('en-IN')}
                     </span>
                   </div>
@@ -381,8 +381,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
 
             {/* Grand Total Bar */}
             <div className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider">Order Total Amount</span>
-              <span className="text-lg font-black text-emerald-400">₹{grandTotal.toLocaleString('en-IN')}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">Order Total Amount</span>
+              <span className="text-lg font-semibold text-emerald-400">₹{grandTotal.toLocaleString('en-IN')}</span>
             </div>
           </div>
 

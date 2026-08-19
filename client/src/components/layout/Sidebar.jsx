@@ -87,26 +87,24 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const { permissions } = useAuth();
 
-  const allowedNavItems = NAV_ITEMS.filter(item => 
+  const allowedNavItems = NAV_ITEMS.filter(item =>
     permissions[item.key]?.includes('view')
   );
 
   return (
     <aside className="w-64 bg-[#0F1729] text-slate-300 flex flex-col fixed top-0 left-0 bottom-0 h-screen z-30 border-r border-slate-800 hidden md:flex">
       {/* Brand Header */}
-      <div className="p-6 flex items-center gap-3 border-b border-slate-800/80">
-        <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center font-black text-xl shadow-lg shadow-red-600/30">
-          JS
-        </div>
-        <div>
-          <h2 className="font-black text-white tracking-wider text-base leading-tight">JS LABELS</h2>
-          <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest">CRM Enterprise</span>
-        </div>
+      <div className="p-5 flex items-center gap-3 border-b border-slate-800/80">
+        <img
+          src="https://res.cloudinary.com/rlokioxu/image/upload/v1787146423/js-logo-2_de8obr.png"
+          alt="JS Labels Logo"
+          className="h-9 w-auto object-contain"
+        />
       </div>
 
       {/* Navigation Links */}
       <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto scrollbar-hide">
-        <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+        <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
           Main Menu
         </div>
         {allowedNavItems.map(item => (
@@ -116,7 +114,7 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition duration-200 ${
                 isActive
-                  ? 'bg-red-600 text-white font-semibold shadow-md shadow-red-600/20'
+                  ? 'bg-red-600 text-white font-medium shadow-md shadow-red-600/20'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
               }`
             }
@@ -126,11 +124,6 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      {/* Footer info */}
-      <div className="p-4 border-t border-slate-800/80 text-xs text-slate-500 text-center font-medium">
-        JS Labels v1.0 • 2026
-      </div>
     </aside>
   );
 }
