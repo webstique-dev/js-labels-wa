@@ -3,6 +3,13 @@ const Activity = require('../models/Activity');
 const Lead = require('../models/Lead');
 const Customer = require('../models/Customer');
 
+// Derive priority from probability score
+const derivePriority = (score) => {
+  if (score >= 80) return 'high';
+  if (score >= 50) return 'medium';
+  return 'low';
+};
+
 // GET /api/followups
 const getFollowUps = async (req, res) => {
   try {
@@ -66,6 +73,68 @@ const getFollowUps = async (req, res) => {
   } catch (error) {
     console.error('Error fetching followUps list:', error);
     return res.status(500).json({ message: 'Server error fetching followUps' });
+  }
+};
+
+// GET /api/followups/:id - Fetch single followUp workspace & activity history
+const getFollowUpById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let followUp = await FollowUp.findById(id).populate('assignedTo', 'name email phone avatarUrl role');
+
+    if (!followUp) {
+      followUp = await FollowUp.findOne({ relatedId: id }).populate('assignedTo', 'name email phone avatarUrl role');
+    }
+
+    // Auto-create followUp if requested via Lead ID
+    if (!followUp) {
+      const lead = await Lead.findById(id).populate('assignedTo', 'name email phone avatarUrl role');
+      if (lead) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        followUp = await FollowUp.create({
+          relatedType: 'lead',
+          relatedId: lead._id,
+          dueDate: tomorrow,
+          notes: `Follow up with ${lead.name}`,
+          assignedTo: lead.assignedTo?._id || req.user.id,
+          status: 'open'
+        });
+        followUp = await FollowUp.findById(followUp._id).populate('assignedTo', 'name email phone avatarUrl role');
+      }
+    }
+
+    if (!followUp) {
+      return res.status(404).json({ message: 'Follow-up or related Lead record not found' });
+    }
+
+    const itemObj = followUp.toObject();
+    let relatedRecord = null;
+    if (followUp.relatedType === 'lead') {
+      relatedRecord = await Lead.findById(followUp.relatedId).populate('assignedTo', 'name email phone avatarUrl role');
+    } else if (followUp.relatedType === 'customer') {
+      relatedRecord = await Customer.findById(followUp.relatedId).populate('salesExecutive', 'name email phone avatarUrl role');
+    }
+
+    itemObj.relatedId = relatedRecord || itemObj.relatedId;
+    itemObj.relatedRecord = relatedRecord;
+
+    // Fetch related activity log history
+    const history = await Activity.find({
+      $or: [
+        { relatedId: followUp._id },
+        { relatedId: followUp.relatedId }
+      ]
+    }).populate('createdBy', 'name email avatarUrl role').sort({ createdAt: -1 });
+
+    return res.json({
+      followup: itemObj,
+      history
+    });
+  } catch (error) {
+    console.error('Error fetching followUp details:', error);
+    return res.status(500).json({ message: 'Server error fetching followUp details' });
   }
 };
 
@@ -139,6 +208,48 @@ const createFollowUp = async (req, res) => {
   }
 };
 
+// POST /api/followups/:id/log - Log interaction & update follow-up
+const logFollowUpInteraction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { callStatus, notes, nextFollowupDate } = req.body;
+
+    let followUp = await FollowUp.findById(id);
+    if (!followUp) {
+      followUp = await FollowUp.findOne({ relatedId: id });
+    }
+
+    if (!followUp) {
+      return res.status(404).json({ message: 'Follow-up record not found' });
+    }
+
+    if (nextFollowupDate) {
+      followUp.dueDate = new Date(nextFollowupDate);
+    }
+    if (notes) {
+      followUp.notes = notes;
+    }
+    followUp.status = 'open';
+    await followUp.save();
+
+    // Log Activity Entry
+    await Activity.create({
+      relatedType: followUp.relatedType,
+      relatedId: followUp.relatedId || followUp._id,
+      type: 'call',
+      description: `[Call ${callStatus || 'connected'}] ${notes || ''}`,
+      createdBy: req.user.id
+    });
+
+    const updatedFollowUp = await FollowUp.findById(followUp._id).populate('assignedTo', 'name email phone avatarUrl role');
+
+    return res.json({ message: 'Interaction logged successfully', followup: updatedFollowUp });
+  } catch (error) {
+    console.error('Error logging followUp interaction:', error);
+    return res.status(500).json({ message: 'Server error logging interaction' });
+  }
+};
+
 // PATCH /api/followups/:id
 const updateFollowUpStatus = async (req, res) => {
   try {
@@ -189,8 +300,10 @@ const deleteFollowUp = async (req, res) => {
 
 module.exports = {
   getFollowUps,
+  getFollowUpById,
   getFollowUpSummary,
   createFollowUp,
+  logFollowUpInteraction,
   updateFollowUpStatus,
   deleteFollowUp
 };

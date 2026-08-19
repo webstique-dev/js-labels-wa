@@ -19,7 +19,6 @@ import Reminders from './pages/Reminders';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
-import Trash from './pages/Trash';
 
 export default function App() {
   return (
@@ -27,128 +26,129 @@ export default function App() {
       <NotificationProvider>
         <ConfirmDialogProvider>
           <BrowserRouter>
-        <Routes>
-          {/* Public Route */}
-          <Route path="/login" element={<Login />} />
+            <Routes>
+              {/* Public Route */}
+              <Route path="/login" element={<Login />} />
 
-          {/* Authenticated Layout Routes */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/dashboard" element={<Dashboard />} />
-            
-            <Route
-              path="/leads"
-              element={
-                <RoleGuard module="leads">
-                  <Leads />
-                </RoleGuard>
-              }
-            />
+              {/* Protected Workspace Layout */}
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <AppLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                
+                <Route
+                  path="/dashboard"
+                  element={
+                    <RoleGuard module="dashboard">
+                      <Dashboard />
+                    </RoleGuard>
+                  }
+                />
 
-            <Route
-              path="/leads/:id/followup"
-              element={
-                <RoleGuard module="leads">
-                  <FollowUpDetails />
-                </RoleGuard>
-              }
-            />
+                <Route
+                  path="/leads"
+                  element={
+                    <RoleGuard module="leads">
+                      <Leads />
+                    </RoleGuard>
+                  }
+                />
 
-            <Route
-              path="/customers"
-              element={
-                <RoleGuard module="customers">
-                  <Customers />
-                </RoleGuard>
-              }
-            />
+                <Route
+                  path="/leads/:id/followup"
+                  element={
+                    <RoleGuard module="leads">
+                      <FollowUpDetails />
+                    </RoleGuard>
+                  }
+                />
 
-            <Route
-              path="/customers/:id"
-              element={
-                <RoleGuard module="customers">
-                  <CustomerDetails />
-                </RoleGuard>
-              }
-            />
+                <Route
+                  path="/customers"
+                  element={
+                    <RoleGuard module="customers">
+                      <Customers />
+                    </RoleGuard>
+                  }
+                />
 
-            <Route
-              path="/orders"
-              element={
-                <RoleGuard module="orders">
-                  <Orders />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="/products"
-              element={
-                <RoleGuard module="products">
-                  <Products />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="/followups"
-              element={
-                <RoleGuard module="followups">
-                  <FollowUps />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="/reminders"
-              element={
-                <RoleGuard module="reminders">
-                  <Reminders />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="/reports"
-              element={
-                <RoleGuard module="reports">
-                  <Reports />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="/users"
-              element={
-                <RoleGuard module="users">
-                  <Users />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <RoleGuard module="settings">
-                  <Settings />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="/trash"
-              element={
-                <RoleGuard module="trash">
-                  <Trash />
-                </RoleGuard>
-              }
-            />
-          </Route>
+                <Route
+                  path="/customers/:id"
+                  element={
+                    <RoleGuard module="customers">
+                      <CustomerDetails />
+                    </RoleGuard>
+                  }
+                />
 
-          {/* Catch-all redirect */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </ConfirmDialogProvider>
-  </NotificationProvider>
-</AuthProvider>
-);
+                <Route
+                  path="/orders"
+                  element={
+                    <RoleGuard module="orders">
+                      <Orders />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="/products"
+                  element={
+                    <RoleGuard module="products">
+                      <Products />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="/followups"
+                  element={
+                    <RoleGuard module="followups">
+                      <FollowUps />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="/reminders"
+                  element={
+                    <RoleGuard module="reminders">
+                      <Reminders />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="/reports"
+                  element={
+                    <RoleGuard module="reports">
+                      <Reports />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="/users"
+                  element={
+                    <RoleGuard module="users">
+                      <Users />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    <RoleGuard module="settings">
+                      <Settings />
+                    </RoleGuard>
+                  }
+                />
+              </Route>
+
+              {/* Catch-all redirect */}
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </ConfirmDialogProvider>
+      </NotificationProvider>
+    </AuthProvider>
+  );
 }

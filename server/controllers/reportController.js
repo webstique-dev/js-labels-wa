@@ -25,7 +25,7 @@ const calcChange = (thisVal, prevVal) => {
 // GET /api/reports/overview?from=&to=
 const getReportsOverview = async (req, res) => {
   try {
-    const { from, to, prevFrom, prevTo } = parseDates(req.query.from, req.query.to);
+    const { from, to, prevFrom, prevTo } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate);
 
     // Delivered Revenue
     const [delCurr, delPrev] = await Promise.all([
@@ -49,31 +49,27 @@ const getReportsOverview = async (req, res) => {
     const aovCurr = totalOrdersCurr > 0 ? Math.round(totalAmtCurr / totalOrdersCurr) : 0;
     const aovPrev = totalOrdersPrev > 0 ? Math.round(totalAmtPrev / totalOrdersPrev) : 0;
 
-    // Win Rate (Won Leads / Total Leads)
-    const [leadsCurr, leadsPrev, wonCurr, wonPrev] = await Promise.all([
-      Lead.countDocuments({ createdAt: { $gte: from, $lte: to } }),
-      Lead.countDocuments({ createdAt: { $gte: prevFrom, $lte: prevTo } }),
-      Lead.countDocuments({ status: 'won', createdAt: { $gte: from, $lte: to } }),
-      Lead.countDocuments({ status: 'won', createdAt: { $gte: prevFrom, $lte: prevTo } })
-    ]);
-    const winRateCurr = leadsCurr > 0 ? Math.round((wonCurr / leadsCurr) * 100) : 45;
-    const winRatePrev = leadsPrev > 0 ? Math.round((wonPrev / leadsPrev) * 100) : 40;
-
     // Repeat Order Rate
-    const customers = await Customer.find();
-    let repeatCount = 0;
-    for (const c of customers) {
-      const cnt = await Order.countDocuments({ customerId: c._id });
-      if (cnt > 1) repeatCount++;
-    }
-    const repeatRateCurr = customers.length > 0 ? Math.round((repeatCount / customers.length) * 100) : 33;
+    const customersCurr = await Customer.find({ updatedAt: { $gte: from, $lte: to } });
+    const repeatCust = customersCurr.filter((c) => c.reorderProbability >= 50).length;
+    const repRateCurr = customersCurr.length > 0 ? Math.round((repeatCust / customersCurr.length) * 100) : 0;
+
+    // Lead Win Rate
+    const [leadsCurr, leadsWonCurr] = await Promise.all([
+      Lead.countDocuments({ createdAt: { $gte: from, $lte: to } }),
+      Lead.countDocuments({ status: 'won', createdAt: { $gte: from, $lte: to } })
+    ]);
+    const winRateCurr = leadsCurr > 0 ? Math.round((leadsWonCurr / leadsCurr) * 100) : 0;
+
+    // Total Active Clients
+    const totalCustCount = await Customer.countDocuments();
 
     return res.json({
-      totalRevenue: { value: revCurr || totalAmtCurr, change: calcChange(revCurr || totalAmtCurr, revPrev || totalAmtPrev) },
+      totalRevenue: { value: revCurr, change: calcChange(revCurr, revPrev) },
       avgOrderValue: { value: aovCurr, change: calcChange(aovCurr, aovPrev) },
-      repeatOrderRate: { value: repeatRateCurr, change: 5 },
-      winRate: { value: winRateCurr, change: calcChange(winRateCurr, winRatePrev) },
-      totalCustomers: { value: customers.length, change: 10 },
+      repeatOrderRate: { value: repRateCurr, change: 5 },
+      winRate: { value: winRateCurr, change: 4 },
+      totalCustomers: { value: totalCustCount, change: 10 },
       totalOrders: { value: totalOrdersCurr, change: calcChange(totalOrdersCurr, totalOrdersPrev) }
     });
   } catch (error) {
@@ -85,26 +81,25 @@ const getReportsOverview = async (req, res) => {
 // GET /api/reports/revenue-trend?from=&to=
 const getRevenueTrend = async (req, res) => {
   try {
-    const { from, to } = parseDates(req.query.from, req.query.to);
-    const orders = await Order.find({ orderDate: { $gte: from, $lte: to } }).sort({ orderDate: 1 });
+    const { from, to } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate);
 
-    const dateMap = {};
+    const orders = await Order.find({
+      status: 'delivered',
+      updatedAt: { $gte: from, $lte: to }
+    }).sort({ updatedAt: 1 });
+
+    const monthlyMap = {};
     orders.forEach((o) => {
-      const dateKey = new Date(o.orderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-      if (!dateMap[dateKey]) dateMap[dateKey] = 0;
-      dateMap[dateKey] += (o.amount || 0);
+      const monthLabel = new Date(o.updatedAt).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      monthlyMap[monthLabel] = (monthlyMap[monthLabel] || 0) + (o.amount || 0);
     });
 
-    const trend = Object.keys(dateMap).map((date) => ({
-      date,
-      revenue: dateMap[date]
+    const trendData = Object.keys(monthlyMap).map((m) => ({
+      month: m,
+      revenue: monthlyMap[m]
     }));
 
-    if (trend.length === 0) {
-      trend.push({ date: 'Aug 1', revenue: 15000 }, { date: 'Aug 5', revenue: 45000 }, { date: 'Aug 10', revenue: 85000 }, { date: 'Aug 15', revenue: 125000 });
-    }
-
-    return res.json(trend);
+    return res.json(trendData);
   } catch (error) {
     console.error('Error fetching revenue trend:', error);
     return res.status(500).json({ message: 'Server error fetching revenue trend' });
@@ -114,41 +109,23 @@ const getRevenueTrend = async (req, res) => {
 // GET /api/reports/top-products?from=&to=
 const getTopProducts = async (req, res) => {
   try {
-    const { from, to } = parseDates(req.query.from, req.query.to);
+    const { from, to } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate);
 
-    const agg = await Order.aggregate([
+    const topProducts = await Order.aggregate([
       { $match: { orderDate: { $gte: from, $lte: to } } },
-      { $unwind: '$lineItems' },
+      { $unwind: '$items' },
       {
         $group: {
-          _id: '$lineItems.name',
-          name: { $first: '$lineItems.name' },
-          totalQty: { $sum: '$lineItems.qty' },
-          totalAmount: { $sum: { $multiply: ['$lineItems.qty', '$lineItems.price'] } }
+          _id: '$items.productName',
+          totalQty: { $sum: '$items.quantity' },
+          totalAmount: { $sum: '$items.total' }
         }
       },
-      { $sort: { totalAmount: -1 } }
+      { $sort: { totalAmount: -1 } },
+      { $limit: 5 }
     ]);
 
-    const grandTotal = agg.reduce((sum, p) => sum + p.totalAmount, 0);
-
-    let top = agg.slice(0, 5).map((p) => ({
-      name: p.name || 'Label Product',
-      totalQty: p.totalQty,
-      totalAmount: p.totalAmount,
-      percentage: grandTotal > 0 ? Math.round((p.totalAmount / grandTotal) * 100) : 0
-    }));
-
-    if (top.length === 0) {
-      top = [
-        { name: 'Premium BOPP Labels', totalQty: 50000, totalAmount: 62500, percentage: 45 },
-        { name: 'Barcode Labels 50x25mm', totalQty: 30000, totalAmount: 25500, percentage: 25 },
-        { name: 'Transparent Poly Labels', totalQty: 10000, totalAmount: 18000, percentage: 18 },
-        { name: 'Matt Finish Labels', totalQty: 8000, totalAmount: 7600, percentage: 12 }
-      ];
-    }
-
-    return res.json(top);
+    return res.json(topProducts);
   } catch (error) {
     console.error('Error fetching top products report:', error);
     return res.status(500).json({ message: 'Server error fetching top products' });
@@ -158,32 +135,16 @@ const getTopProducts = async (req, res) => {
 // GET /api/reports/orders-by-status?from=&to=
 const getOrdersByStatus = async (req, res) => {
   try {
-    const { from, to } = parseDates(req.query.from, req.query.to);
-    const orders = await Order.find({ orderDate: { $gte: from, $lte: to } });
-    const total = orders.length;
+    const { from, to } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate);
 
-    const statusMap = {
-      delivered: 0,
-      dispatched: 0,
-      production: 0,
-      confirmed: 0,
-      pending: 0,
-      cancelled: 0
-    };
+    const statusCounts = await Order.aggregate([
+      { $match: { orderDate: { $gte: from, $lte: to } } },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
 
-    orders.forEach((o) => {
-      if (statusMap[o.status] !== undefined) statusMap[o.status]++;
-    });
-
-    const result = Object.keys(statusMap).map((st) => ({
-      status: st,
-      count: statusMap[st],
-      percentage: total > 0 ? Math.round((statusMap[st] / total) * 100) : 0
-    }));
-
-    return res.json(result);
+    return res.json(statusCounts);
   } catch (error) {
-    console.error('Error fetching orders by status:', error);
+    console.error('Error fetching orders by status report:', error);
     return res.status(500).json({ message: 'Server error fetching orders by status' });
   }
 };
@@ -191,9 +152,9 @@ const getOrdersByStatus = async (req, res) => {
 // GET /api/reports/top-customers?from=&to=
 const getTopCustomersReport = async (req, res) => {
   try {
-    const { from, to } = parseDates(req.query.from, req.query.to);
+    const { from, to } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate);
 
-    const agg = await Order.aggregate([
+    const topCust = await Order.aggregate([
       { $match: { orderDate: { $gte: from, $lte: to } } },
       {
         $group: {
@@ -203,25 +164,12 @@ const getTopCustomersReport = async (req, res) => {
         }
       },
       { $sort: { totalSpent: -1 } },
-      { $limit: 5 }
+      { $limit: 10 }
     ]);
 
-    const result = [];
-    for (const item of agg) {
-      const cust = await Customer.findById(item._id).select('name company city phone email');
-      if (cust) {
-        result.push({
-          _id: cust._id,
-          name: cust.name,
-          company: cust.company,
-          city: cust.city,
-          totalSpent: item.totalSpent,
-          orderCount: item.orderCount
-        });
-      }
-    }
+    await Order.populate(topCust, { path: '_id', select: 'name company phone' });
 
-    return res.json(result);
+    return res.json(topCust);
   } catch (error) {
     console.error('Error fetching top customers report:', error);
     return res.status(500).json({ message: 'Server error fetching top customers' });
@@ -231,7 +179,7 @@ const getTopCustomersReport = async (req, res) => {
 // GET /api/reports/executive-performance?from=&to=
 const getExecutivePerformance = async (req, res) => {
   try {
-    const { from, to } = parseDates(req.query.from, req.query.to);
+    const { from, to } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate);
     const callers = await User.find({ role: 'caller' }).select('name email phone avatarUrl');
 
     const performance = [];
@@ -270,8 +218,8 @@ const getExecutivePerformance = async (req, res) => {
 // GET /api/reports/export?type=orders|customers|leads&from=&to=
 const exportReportCSV = async (req, res) => {
   try {
-    const { type = 'orders', from: fromStr, to: toStr } = req.query;
-    const { from, to } = parseDates(fromStr, toStr);
+    const { type = 'orders', from: fromStr, to: toStr, fromDate, toDate } = req.query;
+    const { from, to } = parseDates(fromStr || fromDate, toStr || toDate);
 
     let csvContent = '';
 
@@ -318,11 +266,10 @@ const exportReportCSV = async (req, res) => {
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${type}_report_${Date.now()}.csv"`);
-    return res.status(200).send(csvContent);
-
+    return res.send(csvContent);
   } catch (error) {
-    console.error('Error exporting CSV report:', error);
-    return res.status(500).json({ message: 'Server error exporting CSV report' });
+    console.error('Error exporting report CSV:', error);
+    return res.status(500).json({ message: 'Server error exporting report CSV' });
   }
 };
 

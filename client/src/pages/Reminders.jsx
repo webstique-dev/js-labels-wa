@@ -4,7 +4,7 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Bell, Phone, MessageSquare, Mail, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { Bell, Phone, MessageSquare, Mail, CheckCircle2, Clock, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 export default function Reminders() {
   const { role } = useAuth();
@@ -16,25 +16,57 @@ export default function Reminders() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [errorState, setErrorState] = useState(null);
 
   const isManagerOrAdmin = role === 'super_admin' || role === 'manager';
 
   const fetchRemindersData = async () => {
     try {
       setLoading(true);
+      setErrorState(null);
       const url = activeTab === 'all' ? '/reminders' : `/reminders?priority=${activeTab}`;
-      const [remRes, sumRes, leadRes] = await Promise.all([
+      
+      // Root Cause Fix: /reminders/leaderboard is restricted to super_admin and manager ONLY.
+      // Only include leaderboard request for authorized roles so caller/executive roles do not trigger 403 errors.
+      const requests = [
         api.get(url),
-        api.get('/reminders/summary'),
-        api.get('/reminders/leaderboard')
-      ]);
+        api.get('/reminders/summary')
+      ];
 
-      setReminders(remRes.data || []);
-      setSummary(sumRes.data || null);
-      setLeaderboard(leadRes.data || []);
+      if (isManagerOrAdmin) {
+        requests.push(api.get('/reminders/leaderboard'));
+      }
+
+      // Use Promise.allSettled so individual endpoint failures do not crash the entire page
+      const results = await Promise.allSettled(requests);
+
+      const remRes = results[0];
+      const sumRes = results[1];
+      const leadRes = isManagerOrAdmin ? results[2] : null;
+
+      if (remRes.status === 'fulfilled') {
+        setReminders(Array.isArray(remRes.value.data) ? remRes.value.data : []);
+      } else {
+        console.error('Error fetching reminders:', remRes.reason);
+        if (remRes.reason?.response?.status === 403) {
+          setErrorState('Access Denied: You do not have permission to view reorder reminders.');
+        } else {
+          setErrorState(remRes.reason?.response?.data?.message || 'Error fetching reorder reminders');
+        }
+      }
+
+      if (sumRes?.status === 'fulfilled') {
+        setSummary(sumRes.value.data || null);
+      }
+
+      if (leadRes?.status === 'fulfilled') {
+        setLeaderboard(Array.isArray(leadRes.value.data) ? leadRes.value.data : []);
+      } else {
+        setLeaderboard([]);
+      }
     } catch (err) {
-      console.error('Error fetching reminders:', err);
-      notify.error(err.response?.data?.message || 'Error fetching reorder reminders');
+      console.error('Unexpected error fetching reminders:', err);
+      setErrorState('Unexpected error loading reminders data');
     } finally {
       setLoading(false);
     }
@@ -42,7 +74,7 @@ export default function Reminders() {
 
   useEffect(() => {
     fetchRemindersData();
-  }, [activeTab]);
+  }, [activeTab, role]);
 
   const handleDismiss = async (customerId, customerName) => {
     const isConfirmed = await confirm({
@@ -103,8 +135,9 @@ export default function Reminders() {
     return name.substring(0, 2).toUpperCase();
   };
 
-  // Filter overdue reminders
-  const overdueReminders = reminders.filter((r) => r.isOverdue);
+  // Defensive array checks
+  const safeReminders = Array.isArray(reminders) ? reminders : [];
+  const overdueReminders = safeReminders.filter((r) => r?.isOverdue);
 
   return (
     <div className="space-y-6 pb-12">
@@ -118,6 +151,14 @@ export default function Reminders() {
           Proactive Reminders Engine
         </div>
       </div>
+
+      {/* Permission Error Banner */}
+      {errorState && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-700 text-xs font-medium">
+          <ShieldAlert size={18} className="flex-shrink-0" />
+          <span>{errorState}</span>
+        </div>
+      )}
 
       {/* 2-Column Main Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -137,7 +178,7 @@ export default function Reminders() {
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`px-3 py-1.5 text-xs font-medium capitalize rounded-lg transition ${
+                  className={`px-3 py-1.5 text-xs font-medium capitalize rounded-lg transition cursor-pointer ${
                     activeTab === tab.key
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-500 hover:text-slate-800'
@@ -157,7 +198,7 @@ export default function Reminders() {
                 <p className="text-slate-500 text-xs font-medium">Computing Reorder Predictions...</p>
               </div>
             </div>
-          ) : reminders.length === 0 ? (
+          ) : safeReminders.length === 0 ? (
             <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80 space-y-2">
               <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
                 <Bell size={24} />
@@ -167,8 +208,8 @@ export default function Reminders() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {reminders.map((r) => {
-                const c = r.customer;
+              {safeReminders.map((r) => {
+                const c = r.customer || {};
 
                 return (
                   <div key={r._id} className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
@@ -182,7 +223,7 @@ export default function Reminders() {
                             to={`/customers/${c._id}`}
                             className="font-semibold text-slate-900 text-sm hover:text-red-600 transition block truncate max-w-[150px]"
                           >
-                            {c.name}
+                            {c.name || 'Customer'}
                           </Link>
                           <span className="text-slate-500 text-xs truncate block max-w-[140px] font-normal">{c.company || 'Individual'}</span>
                         </div>
@@ -228,21 +269,21 @@ export default function Reminders() {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => handleQuickAction(c, 'call')}
-                          className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition"
+                          className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition cursor-pointer"
                           title="Call Customer"
                         >
                           <Phone size={14} />
                         </button>
                         <button
                           onClick={() => handleQuickAction(c, 'whatsapp')}
-                          className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition"
+                          className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition cursor-pointer"
                           title="WhatsApp Reorder Reminder"
                         >
                           <MessageSquare size={14} />
                         </button>
                         <button
                           onClick={() => handleQuickAction(c, 'email')}
-                          className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition"
+                          className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition cursor-pointer"
                           title="Email Reorder Template"
                         >
                           <Mail size={14} />
@@ -251,7 +292,7 @@ export default function Reminders() {
 
                       <button
                         onClick={() => handleDismiss(c._id, c.name)}
-                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium transition flex items-center gap-1 shadow-xs"
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium transition flex items-center gap-1 shadow-xs cursor-pointer"
                       >
                         <CheckCircle2 size={12} />
                         <span>Done</span>
@@ -286,31 +327,31 @@ export default function Reminders() {
                     {overdueReminders.map((r) => (
                       <tr key={r._id} className="hover:bg-slate-50 transition">
                         <td className="p-3">
-                          <Link to={`/customers/${r.customer._id}`} className="font-semibold text-slate-900 hover:text-red-600">
-                            {r.customer.name}
+                          <Link to={`/customers/${r.customer?._id}`} className="font-semibold text-slate-900 hover:text-red-600">
+                            {r.customer?.name}
                           </Link>
-                          <span className="text-slate-400 text-[10px] block font-normal">{r.customer.company || 'Individual'}</span>
+                          <span className="text-slate-400 text-[10px] block font-normal">{r.customer?.company || 'Individual'}</span>
                         </td>
                         <td className="p-3 font-semibold text-rose-600">
                           {Math.abs(r.daysUntilReorder)} Days
                         </td>
                         <td className="p-3 font-normal text-slate-700">
-                          {new Date(r.customer.expectedReorderDate).toLocaleDateString('en-IN')}
+                          {r.customer?.expectedReorderDate ? new Date(r.customer.expectedReorderDate).toLocaleDateString('en-IN') : 'N/A'}
                         </td>
                         <td className="p-3 font-normal text-slate-700">
-                          {r.customer.salesExecutive?.name || 'Unassigned'}
+                          {r.customer?.salesExecutive?.name || 'Unassigned'}
                         </td>
                         <td className="p-3 text-right space-x-1">
                           <button
                             onClick={() => handleQuickAction(r.customer, 'call')}
-                            className="px-2 py-1 bg-emerald-50 text-emerald-700 font-medium rounded text-[10px] inline-flex items-center gap-1"
+                            className="px-2 py-1 bg-emerald-50 text-emerald-700 font-medium rounded text-[10px] inline-flex items-center gap-1 cursor-pointer"
                           >
                             <Phone size={10} />
                             <span>Call</span>
                           </button>
                           <button
-                            onClick={() => handleDismiss(r.customer._id, r.customer.name)}
-                            className="px-2 py-1 bg-slate-900 text-white font-medium rounded text-[10px] inline-flex items-center gap-1"
+                            onClick={() => handleDismiss(r.customer?._id, r.customer?.name)}
+                            className="px-2 py-1 bg-slate-900 text-white font-medium rounded text-[10px] inline-flex items-center gap-1 cursor-pointer"
                           >
                             <CheckCircle2 size={10} />
                             <span>Done</span>
@@ -355,10 +396,10 @@ export default function Reminders() {
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Top Sales Executive Leaderboard</h3>
               <div className="space-y-2.5">
                 {leaderboard.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No leaderboard metrics available.</p>
+                  <p className="text-xs text-slate-400 font-normal italic">No leaderboard metrics available.</p>
                 ) : (
                   leaderboard.map((exec, idx) => (
-                    <div key={exec.execId} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs">
+                    <div key={exec.execId || idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs">
                       <div className="flex items-center gap-2.5">
                         <span className="w-6 h-6 rounded-lg bg-slate-900 text-white font-semibold flex items-center justify-center text-[10px]">
                           #{idx + 1}

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import api from '../api/axios';
 import { useNotification } from '../context/NotificationContext';
-import { Download, BarChart3, TrendingUp, Users, Package } from 'lucide-react';
+import { Download, AlertTriangle } from 'lucide-react';
 
 const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#10B981', '#EF4444', '#64748B'];
 
@@ -18,6 +18,7 @@ export default function Reports() {
   const [topProducts, setTopProducts] = useState([]);
   const [callerPerformance, setCallerPerformance] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   // Helper to Calculate Preset Dates
   const calculatePresetDates = useCallback((preset) => {
@@ -32,7 +33,8 @@ export default function Reports() {
       start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       end = new Date(now.getFullYear(), now.getMonth(), 0);
     } else if (preset === '30_days') {
-      start = new Date(now.setDate(now.getDate() - 30));
+      start = new Date();
+      start.setDate(start.getDate() - 30);
       end = new Date();
     }
 
@@ -40,6 +42,7 @@ export default function Reports() {
     return { from: formatDateStr(start), to: formatDateStr(end) };
   }, []);
 
+  // Update dates on preset change
   useEffect(() => {
     if (rangePreset !== 'custom') {
       const { from, to } = calculatePresetDates(rangePreset);
@@ -48,42 +51,51 @@ export default function Reports() {
     }
   }, [rangePreset, calculatePresetDates]);
 
-  const fetchReportData = useCallback(async () => {
-    if (!fromDate || !toDate) return;
+  // Stable Data Fetcher (empty deps to prevent infinite re-render loops)
+  const fetchReportData = useCallback(async (fDate, tDate) => {
+    if (!fDate || !tDate) return;
     try {
       setLoading(true);
-      const params = { fromDate, toDate };
+      setErrorMessage(null);
+      const params = { from: fDate, to: tDate, fromDate: fDate, toDate: tDate };
 
+      // Root Cause Fix: Corrected route paths to match reportRoutes.js
+      // /reports/executive-performance (not /reports/caller-performance)
       const [overRes, revRes, statRes, prodRes, callRes] = await Promise.all([
         api.get('/reports/overview', { params }),
         api.get('/reports/revenue-trend', { params }),
         api.get('/reports/orders-by-status', { params }),
         api.get('/reports/top-products', { params }),
-        api.get('/reports/caller-performance', { params })
+        api.get('/reports/executive-performance', { params })
       ]);
 
       setOverview(overRes.data);
-      setRevenueTrend(revRes.data || []);
-      setOrdersByStatus(statRes.data || []);
-      setTopProducts(prodRes.data || []);
-      setCallerPerformance(callRes.data || []);
+      setRevenueTrend(Array.isArray(revRes.data) ? revRes.data : []);
+      setOrdersByStatus(Array.isArray(statRes.data) ? statRes.data : []);
+      setTopProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
+      setCallerPerformance(Array.isArray(callRes.data) ? callRes.data : []);
     } catch (err) {
       console.error('Error fetching reports data:', err);
-      notify.error(err.response?.data?.message || 'Error fetching analytics reports');
+      const msg = err.response?.data?.message || 'Failed to load analytics reports';
+      setErrorMessage(msg);
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, notify]);
+  }, []);
 
+  // Trigger fetch ONLY when dates change
   useEffect(() => {
-    fetchReportData();
-  }, [fetchReportData]);
+    if (fromDate && toDate) {
+      fetchReportData(fromDate, toDate);
+    }
+  }, [fromDate, toDate, fetchReportData]);
 
   // CSV Export Trigger
   const handleExportCSV = async (type) => {
     try {
-      const response = await api.get(`/reports/export-${type}`, {
-        params: { fromDate, toDate },
+      // Root Cause Fix: Corrected route path to /reports/export?type=...
+      const response = await api.get('/reports/export', {
+        params: { type, from: fromDate, to: toDate, fromDate, toDate },
         responseType: 'blob'
       });
 
@@ -115,21 +127,21 @@ export default function Reports() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => handleExportCSV('orders')}
-            className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white font-medium text-xs rounded-xl shadow-xs transition flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white font-medium text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
           >
             <Download size={14} />
             <span>Orders CSV</span>
           </button>
           <button
             onClick={() => handleExportCSV('customers')}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-xs rounded-xl transition flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
           >
             <Download size={14} />
             <span>Customers CSV</span>
           </button>
           <button
             onClick={() => handleExportCSV('leads')}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-xs rounded-xl transition flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
           >
             <Download size={14} />
             <span>Leads CSV</span>
@@ -150,7 +162,7 @@ export default function Reports() {
               <button
                 key={preset.key}
                 onClick={() => setRangePreset(preset.key)}
-                className={`px-3 py-1.5 text-xs font-medium capitalize rounded-lg transition whitespace-nowrap ${
+                className={`px-3 py-1.5 text-xs font-medium capitalize rounded-lg transition whitespace-nowrap cursor-pointer ${
                   rangePreset === preset.key
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-500 hover:text-slate-800'
@@ -185,6 +197,14 @@ export default function Reports() {
           />
         </div>
       </div>
+
+      {/* Error Banner */}
+      {errorMessage && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-700 text-xs font-medium">
+          <AlertTriangle size={18} className="flex-shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
       {/* Overview KPI Cards Row (6 Cards) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -272,7 +292,7 @@ export default function Reports() {
           {/* Charts Row 1: Revenue Growth & Orders Status Pie Chart */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
-            {/* Revenue Growth Trend Bar/Line Chart */}
+            {/* Revenue Growth Trend Bar Chart */}
             <div className="lg:col-span-8 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -349,15 +369,19 @@ export default function Reports() {
               </div>
 
               <div className="space-y-3">
-                {topProducts.map((p, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs">
-                    <div>
-                      <span className="font-medium text-slate-900 block">{p._id || 'Standard Label'}</span>
-                      <span className="text-slate-400 text-[11px] font-normal">{p.totalQty} Units Ordered</span>
+                {topProducts.length === 0 ? (
+                  <p className="text-xs text-slate-400 font-normal text-center py-6">No top products recorded.</p>
+                ) : (
+                  topProducts.map((p, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs">
+                      <div>
+                        <span className="font-medium text-slate-900 block">{p._id || 'Standard Label'}</span>
+                        <span className="text-slate-400 text-[11px] font-normal">{p.totalQty} Units Ordered</span>
+                      </div>
+                      <span className="font-semibold text-slate-900">₹{(p.totalAmount || 0).toLocaleString('en-IN')}</span>
                     </div>
-                    <span className="font-semibold text-slate-900">₹{(p.totalAmount || 0).toLocaleString('en-IN')}</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -369,36 +393,40 @@ export default function Reports() {
               </div>
 
               <div className="overflow-x-auto scrollbar-hide">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200/80 text-[10px] font-semibold uppercase text-slate-500 tracking-wider">
-                      <th className="p-3">Executive</th>
-                      <th className="p-3 text-center">Leads Handled</th>
-                      <th className="p-3 text-center">Won Leads</th>
-                      <th className="p-3 text-center">Win Rate %</th>
-                      <th className="p-3 text-right">Revenue Generated</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {callerPerformance.map((exec) => (
-                      <tr key={exec.callerId} className="hover:bg-slate-50/80 transition">
-                        <td className="p-3 font-medium text-slate-900">
-                          {exec.name}
-                        </td>
-                        <td className="p-3 text-center font-normal text-slate-700">{exec.totalLeads}</td>
-                        <td className="p-3 text-center font-normal text-slate-700">{exec.wonLeads}</td>
-                        <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded text-[11px]">
-                            {exec.winRate}%
-                          </span>
-                        </td>
-                        <td className="p-3 text-right font-semibold text-slate-900">
-                          ₹{(exec.revenueSum || 0).toLocaleString('en-IN')}
-                        </td>
+                {callerPerformance.length === 0 ? (
+                  <p className="text-xs text-slate-400 font-normal text-center py-6">No executive performance data available.</p>
+                ) : (
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200/80 text-[10px] font-semibold uppercase text-slate-500 tracking-wider">
+                        <th className="p-3">Executive</th>
+                        <th className="p-3 text-center">Leads Handled</th>
+                        <th className="p-3 text-center">Won Leads</th>
+                        <th className="p-3 text-center">Win Rate %</th>
+                        <th className="p-3 text-right">Revenue Generated</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {callerPerformance.map((exec) => (
+                        <tr key={exec._id || exec.callerId} className="hover:bg-slate-50/80 transition">
+                          <td className="p-3 font-medium text-slate-900">
+                            {exec.name}
+                          </td>
+                          <td className="p-3 text-center font-normal text-slate-700">{exec.assignedLeads ?? exec.totalLeads ?? 0}</td>
+                          <td className="p-3 text-center font-normal text-slate-700">{exec.wonLeads ?? 0}</td>
+                          <td className="p-3 text-center">
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded text-[11px]">
+                              {exec.winRate ?? 0}%
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-semibold text-slate-900">
+                            ₹{(exec.revenueSum || 0).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
 

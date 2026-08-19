@@ -11,8 +11,7 @@ import {
   Bell,
   BarChart3,
   Users as UsersIcon,
-  Settings as SettingsIcon,
-  Trash2
+  Settings as SettingsIcon
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -75,12 +74,6 @@ const NAV_ITEMS = [
     label: 'Settings',
     path: '/settings',
     icon: <SettingsIcon size={20} />
-  },
-  {
-    key: 'trash',
-    label: 'Trash',
-    path: '/trash',
-    icon: <Trash2 size={20} />
   }
 ];
 

@@ -5,6 +5,8 @@ const {
   createUser,
   updateUser,
   deactivateUser,
+  activateUser,
+  updateUserPassword,
   reassignAndDeactivateUser,
   deleteUser
 } = require('../controllers/userController');
@@ -22,7 +24,9 @@ router.get('/trash', allowRoles('super_admin'), (req, res, next) => { req.params
 // Modification & Administration Endpoints: Super Admin Only
 router.post('/', allowRoles('super_admin'), createUser);
 router.patch('/:id', allowRoles('super_admin'), updateUser);
+router.patch('/:id/activate', allowRoles('super_admin'), activateUser);
 router.patch('/:id/deactivate', allowRoles('super_admin'), deactivateUser);
+router.patch('/:id/password', allowRoles('super_admin'), updateUserPassword);
 router.post('/:id/reassign-and-deactivate', allowRoles('super_admin'), reassignAndDeactivateUser);
 router.delete('/:id', allowRoles('super_admin'), deleteUser);
 router.post('/:id/restore', allowRoles('super_admin'), (req, res, next) => { req.params.resource = 'users'; next(); }, restoreRecord);

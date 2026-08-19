@@ -3,7 +3,19 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { UserPlus, Edit, Trash2, UserX, X, Shield, Search } from 'lucide-react';
+import {
+  UserPlus,
+  Edit,
+  Trash2,
+  UserX,
+  UserCheck,
+  X,
+  Shield,
+  Key,
+  Eye,
+  EyeOff,
+  Lock
+} from 'lucide-react';
 
 export default function Users() {
   const { user: currentUser, role: currentRole } = useAuth();
@@ -15,12 +27,12 @@ export default function Users() {
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  // Modal States
+  // Add / Edit Modal State
   const [showModal, setShowModal] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
   const [editUserId, setEditUserId] = useState(null);
 
-  // Form State
+  // Form State for Add/Edit User
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -30,11 +42,21 @@ export default function Users() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Update Password Modal State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordUser, setPasswordUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswordText, setShowPasswordText] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
   // Deactivate Reassignment State
   const [deactivateTargetUser, setDeactivateTargetUser] = useState(null);
   const [openItemsData, setOpenItemsData] = useState(null);
   const [reassignTo, setReassignTo] = useState('');
   const [isSubmittingReassign, setIsSubmittingReassign] = useState(false);
+
+  const loggedInUserId = currentUser?.id || currentUser?._id;
 
   const fetchUsers = async () => {
     try {
@@ -46,6 +68,7 @@ export default function Users() {
       const res = await api.get('/users', { params });
       setUsers(res.data || []);
     } catch (err) {
+      console.error('Error fetching users list:', err);
       notify.error(err.response?.data?.message || 'Error fetching users list');
     } finally {
       setLoading(false);
@@ -99,6 +122,11 @@ export default function Users() {
         await api.patch(`/users/${editUserId}`, payload);
         notify.success('User updated successfully!');
       } else {
+        if (!formData.password || formData.password.length < 6) {
+          notify.error('Password must be at least 6 characters long');
+          setIsSubmitting(false);
+          return;
+        }
         await api.post('/users', formData);
         notify.success('User created successfully!');
       }
@@ -106,14 +134,47 @@ export default function Users() {
       setShowModal(false);
       fetchUsers();
     } catch (err) {
+      console.error('Error saving user:', err);
       notify.error(err.response?.data?.message || 'Failed to save user details');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Direct Deactivate Check
+  // Activate User Handler
+  const handleActivateUser = async (u) => {
+    const isConfirmed = await confirm({
+      title: 'Activate User Account',
+      message: `Are you sure you want to activate user "${u.name}"?`,
+      confirmLabel: 'Activate User',
+      cancelLabel: 'Cancel',
+      variant: 'default'
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      const res = await api.patch(`/users/${u._id}/activate`);
+      notify.success(res.data?.message || `Activated user ${u.name}`);
+      fetchUsers();
+    } catch (err) {
+      console.error('Error activating user:', err);
+      notify.error(err.response?.data?.message || 'Error activating user');
+    }
+  };
+
+  // Deactivate User Handler
   const handleDeactivate = async (u) => {
+    const isConfirmed = await confirm({
+      title: 'Deactivate User Account',
+      message: `Are you sure you want to deactivate user "${u.name}"?`,
+      confirmLabel: 'Deactivate User',
+      cancelLabel: 'Cancel',
+      variant: 'danger'
+    });
+
+    if (!isConfirmed) return;
+
     try {
       const res = await api.patch(`/users/${u._id}/deactivate`);
       if (res.data.hasOpenItems) {
@@ -126,7 +187,42 @@ export default function Users() {
         fetchUsers();
       }
     } catch (err) {
+      console.error('Error deactivating user:', err);
       notify.error(err.response?.data?.message || 'Error deactivating user');
+    }
+  };
+
+  // Open Update Password Modal
+  const handleOpenPasswordModal = (u) => {
+    setPasswordUser(u);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowPasswordModal(true);
+  };
+
+  // Submit Password Update
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 6) {
+      notify.error('Password must be at least 6 characters long');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      notify.error('Passwords do not match. Please verify.');
+      return;
+    }
+
+    try {
+      setIsUpdatingPassword(true);
+      await api.patch(`/users/${passwordUser._id}/password`, { password: newPassword });
+      notify.success(`Password for ${passwordUser.name} updated successfully!`);
+      setShowPasswordModal(false);
+      setPasswordUser(null);
+    } catch (err) {
+      console.error('Error updating password:', err);
+      notify.error(err.response?.data?.message || 'Failed to update user password');
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
@@ -144,9 +240,10 @@ export default function Users() {
 
     try {
       await api.delete(`/users/${u._id}`);
-      notify.success(`User "${u.name}" moved to Trash successfully`);
+      notify.success(`User "${u.name}" deleted successfully`);
       fetchUsers();
     } catch (err) {
+      console.error('Error deleting user:', err);
       notify.error(err.response?.data?.message || 'Failed to delete user');
     }
   };
@@ -166,6 +263,7 @@ export default function Users() {
       setOpenItemsData(null);
       fetchUsers();
     } catch (err) {
+      console.error('Error reassigning user items:', err);
       notify.error(err.response?.data?.message || 'Failed to reassign and deactivate user');
     } finally {
       setIsSubmittingReassign(false);
@@ -192,13 +290,15 @@ export default function Users() {
           <p className="text-slate-500 text-sm mt-1 font-normal">Manage team accounts, role privileges, caller status, and lead reassignments</p>
         </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          className="px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs rounded-xl shadow-md transition flex items-center gap-2"
-        >
-          <UserPlus size={16} />
-          <span>Add User</span>
-        </button>
+        {currentRole === 'super_admin' && (
+          <button
+            onClick={handleOpenAddModal}
+            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer"
+          >
+            <UserPlus size={16} />
+            <span>Add User</span>
+          </button>
+        )}
       </div>
 
       {/* Filter Bar */}
@@ -208,7 +308,7 @@ export default function Users() {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 focus:outline-none"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 focus:outline-none cursor-pointer"
           >
             <option value="">All Roles</option>
             <option value="super_admin">Super Admin</option>
@@ -220,7 +320,7 @@ export default function Users() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 focus:outline-none"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 focus:outline-none cursor-pointer"
           >
             <option value="">All Statuses</option>
             <option value="active">Active</option>
@@ -265,108 +365,173 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {users.map((u) => (
-                  <tr key={u._id} className="hover:bg-slate-50/80 transition">
-                    <td className="p-4 font-semibold text-slate-900 text-sm">
-                      {u.name}
-                    </td>
+                {users.map((u) => {
+                  const isSelf = loggedInUserId && loggedInUserId.toString() === u._id.toString();
 
-                    <td className="p-4">
-                      <span className="font-medium text-slate-800 block">{u.email}</span>
-                      <span className="text-slate-400 text-[11px] block">{u.phone || 'No phone'}</span>
-                    </td>
+                  return (
+                    <tr key={u._id} className="hover:bg-slate-50/80 transition">
+                      <td className="p-4 font-semibold text-slate-900 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span>{u.name}</span>
+                          {isSelf && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                              Logged-in User
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    <td className="p-4">
-                      <span className={`px-2.5 py-1 border text-[11px] font-medium rounded-lg uppercase ${getRoleBadgeClass(u.role)}`}>
-                        {u.role.replace('_', ' ')}
-                      </span>
-                    </td>
+                      <td className="p-4">
+                        <span className="font-medium text-slate-800 block">{u.email}</span>
+                        <span className="text-slate-400 text-[11px] block">{u.phone || 'No phone'}</span>
+                      </td>
 
-                    <td className="p-4">
-                      <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${
-                        u.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
-                      }`}>
-                        {u.status}
-                      </span>
-                    </td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-1 border text-[11px] font-medium rounded-lg uppercase ${getRoleBadgeClass(u.role)}`}>
+                          {u.role.replace('_', ' ')}
+                        </span>
+                      </td>
 
-                    <td className="p-4 font-medium text-slate-600">
-                      {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN') : 'Never'}
-                    </td>
+                      <td className="p-4">
+                        <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${
+                          u.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          {u.status}
+                        </span>
+                      </td>
 
-                    <td className="p-4 text-right space-x-2">
-                      <button
-                        onClick={() => handleOpenEditModal(u)}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1"
-                      >
-                        <Edit size={12} />
-                        <span>Edit</span>
-                      </button>
-                      {u.status === 'active' && (
-                        <button
-                          onClick={() => handleDeactivate(u)}
-                          className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1"
-                        >
-                          <UserX size={12} />
-                          <span>Deactivate</span>
-                        </button>
-                      )}
-                      {currentRole === 'super_admin' && u._id !== currentUser?.id && (
-                        <button
-                          onClick={() => handleDeleteUser(u)}
-                          className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition inline-flex items-center"
-                          title="Move User to Trash"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      <td className="p-4 font-medium text-slate-600">
+                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN') : 'Never'}
+                      </td>
+
+                      <td className="p-4 text-right">
+                        {/* Requirement: If logged-in user is Super Admin, leave Actions completely empty for their own row */}
+                        {isSelf ? null : (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Edit Button */}
+                            <button
+                              onClick={() => handleOpenEditModal(u)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                              title="Edit User Details"
+                            >
+                              <Edit size={12} />
+                              <span>Edit</span>
+                            </button>
+
+                            {/* Activate / Deactivate Toggle */}
+                            {u.status === 'active' ? (
+                              <button
+                                onClick={() => handleDeactivate(u)}
+                                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                                title="Deactivate Account"
+                              >
+                                <UserX size={12} />
+                                <span>Deactivate</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleActivateUser(u)}
+                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                                title="Activate Account"
+                              >
+                                <UserCheck size={12} />
+                                <span>Activate</span>
+                              </button>
+                            )}
+
+                            {/* Update Password Button */}
+                            <button
+                              onClick={() => handleOpenPasswordModal(u)}
+                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                              title="Update User Password"
+                            >
+                              <Key size={12} />
+                              <span>Password</span>
+                            </button>
+
+                            {/* Delete Button */}
+                            {currentRole === 'super_admin' && (
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition inline-flex items-center cursor-pointer"
+                                title="Move User to Trash"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {/* Mobile Stacked Cards */}
+          {/* Mobile Stacked Cards View */}
           <div className="md:hidden space-y-3">
-            {users.map((u) => (
-              <div key={u._id} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="font-semibold text-slate-900 text-sm">{u.name}</span>
-                    <p className="text-xs text-slate-500 font-normal">{u.email}</p>
+            {users.map((u) => {
+              const isSelf = loggedInUserId && loggedInUserId.toString() === u._id.toString();
+
+              return (
+                <div key={u._id} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
+                        {u.name}
+                        {isSelf && <span className="text-[10px] font-normal text-slate-400">(You)</span>}
+                      </span>
+                      <p className="text-xs text-slate-500 font-normal">{u.email}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${getRoleBadgeClass(u.role)}`}>
+                      {u.role.replace('_', ' ')}
+                    </span>
                   </div>
-                  <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${getRoleBadgeClass(u.role)}`}>
-                    {u.role.replace('_', ' ')}
-                  </span>
-                </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                  <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${
-                    u.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
-                  }`}>
-                    {u.status}
-                  </span>
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                    <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${
+                      u.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
+                    }`}>
+                      {u.status}
+                    </span>
 
-                  <div className="space-x-1 flex items-center">
-                    <button
-                      onClick={() => handleOpenEditModal(u)}
-                      className="px-2.5 py-1 bg-slate-100 text-slate-800 font-medium text-[10px] rounded-lg"
-                    >
-                      Edit
-                    </button>
-                    {u.status === 'active' && (
-                      <button
-                        onClick={() => handleDeactivate(u)}
-                        className="px-2.5 py-1 bg-rose-50 text-rose-700 font-medium text-[10px] rounded-lg"
-                      >
-                        Deactivate
-                      </button>
+                    {/* Actions on Mobile */}
+                    {!isSelf && (
+                      <div className="space-x-1 flex items-center flex-wrap gap-1">
+                        <button
+                          onClick={() => handleOpenEditModal(u)}
+                          className="px-2 py-1 bg-slate-100 text-slate-800 font-medium text-[10px] rounded-lg"
+                        >
+                          Edit
+                        </button>
+                        {u.status === 'active' ? (
+                          <button
+                            onClick={() => handleDeactivate(u)}
+                            className="px-2 py-1 bg-rose-50 text-rose-700 font-medium text-[10px] rounded-lg"
+                          >
+                            Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleActivateUser(u)}
+                            className="px-2 py-1 bg-emerald-50 text-emerald-700 font-medium text-[10px] rounded-lg"
+                          >
+                            Activate
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleOpenPasswordModal(u)}
+                          className="px-2 py-1 bg-blue-50 text-blue-700 font-medium text-[10px] rounded-lg"
+                        >
+                          Password
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -379,14 +544,14 @@ export default function Users() {
               <h3 className="font-semibold text-slate-900 text-sm">
                 {isEdit ? 'Edit User Details' : 'Create New User Account'}
               </h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+              <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleFormSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Full Name</label>
+                <label className="block font-medium text-slate-700 mb-1">Full Name *</label>
                 <input
                   type="text"
                   required
@@ -398,7 +563,7 @@ export default function Users() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Email Address</label>
+                <label className="block font-medium text-slate-700 mb-1">Email Address *</label>
                 <input
                   type="email"
                   required
@@ -421,21 +586,21 @@ export default function Users() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Role Privilege</label>
+                <label className="block font-medium text-slate-700 mb-1">Role Privilege *</label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 cursor-pointer"
                 >
-                  <option value="caller">Caller (Sales Rep)</option>
-                  <option value="manager">Manager</option>
-                  <option value="super_admin">Super Admin</option>
+                  <option value="caller">Caller (Tele Executive)</option>
+                  <option value="manager">Manager (Sales Team Lead)</option>
+                  <option value="super_admin">Super Admin (System Administrator)</option>
                 </select>
               </div>
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">
-                  {isEdit ? 'New Password (leave blank to keep current)' : 'Account Password'}
+                  {isEdit ? 'New Password (optional - leave blank to keep current)' : 'Account Password *'}
                 </label>
                 <input
                   type="password"
@@ -451,16 +616,96 @@ export default function Users() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium shadow-xs disabled:opacity-50"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium shadow-xs disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? 'Saving...' : isEdit ? 'Update User' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Update Password Dedicated Modal */}
+      {showPasswordModal && passwordUser && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <Key size={16} className="text-blue-600" />
+                <span>Update Password for {passwordUser.name}</span>
+              </h3>
+              <button
+                onClick={() => { setShowPasswordModal(false); setPasswordUser(null); }}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 font-normal">
+              Target Account: <strong className="text-slate-900">{passwordUser.email}</strong>
+            </p>
+
+            <form onSubmit={handlePasswordSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">New Password *</label>
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3 text-slate-400" size={16} />
+                  <input
+                    type={showPasswordText ? 'text' : 'password'}
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min 6 characters"
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordText(!showPasswordText)}
+                    className="absolute right-3 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Confirm New Password *</label>
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3 text-slate-400" size={16} />
+                  <input
+                    type={showPasswordText ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowPasswordModal(false); setPasswordUser(null); }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingPassword}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {isUpdatingPassword ? 'Updating...' : 'Update Password'}
                 </button>
               </div>
             </form>
@@ -476,7 +721,7 @@ export default function Users() {
               <h3 className="text-base font-semibold text-slate-900">Reassignment Required</h3>
               <button
                 onClick={() => { setDeactivateTargetUser(null); setOpenItemsData(null); }}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -488,7 +733,6 @@ export default function Users() {
 
             <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs space-y-1">
               <p className="font-semibold text-amber-900">Open Leads: {openItemsData.openLeadsCount}</p>
-              <p className="font-semibold text-amber-900">Assigned Customers: {openItemsData.assignedCustomersCount}</p>
               <p className="font-semibold text-amber-900">Open Follow-ups: {openItemsData.openFollowupsCount}</p>
             </div>
 
@@ -499,7 +743,7 @@ export default function Users() {
                   required
                   value={reassignTo}
                   onChange={(e) => setReassignTo(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 cursor-pointer"
                 >
                   <option value="">Select active executive caller...</option>
                   {users
@@ -517,14 +761,14 @@ export default function Users() {
                 <button
                   type="button"
                   onClick={() => { setDeactivateTargetUser(null); setOpenItemsData(null); }}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-medium"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingReassign || !reassignTo}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium shadow-xs disabled:opacity-50"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium shadow-xs disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmittingReassign ? 'Processing...' : 'Reassign & Deactivate'}
                 </button>

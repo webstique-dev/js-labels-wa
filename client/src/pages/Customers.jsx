@@ -23,10 +23,21 @@ export default function Customers() {
       setLoading(true);
       const url = search ? `/customers?search=${encodeURIComponent(search)}` : '/customers';
       const res = await api.get(url);
-      setCustomers(res.data || []);
+
+      // Root Cause Fix: Backend GET /api/customers returns object { customers: [...], total, page, pages }
+      // Extract array safely whether API returns array directly or object wrapper { customers: [...] }
+      let customerList = [];
+      if (Array.isArray(res.data)) {
+        customerList = res.data;
+      } else if (res.data && Array.isArray(res.data.customers)) {
+        customerList = res.data.customers;
+      }
+
+      setCustomers(customerList);
     } catch (err) {
       console.error('Error fetching customers:', err);
       notify.error(err.response?.data?.message || 'Failed to load customer directory');
+      setCustomers([]);
     } finally {
       setLoading(false);
     }
@@ -73,6 +84,9 @@ export default function Customers() {
     return name.substring(0, 2).toUpperCase();
   };
 
+  // Defensive array guard
+  const safeCustomers = Array.isArray(customers) ? customers : [];
+
   return (
     <div className="space-y-6 pb-12">
       {/* Header & Search Bar */}
@@ -104,7 +118,7 @@ export default function Customers() {
             <p className="text-slate-500 text-xs font-medium">Loading Customer Accounts...</p>
           </div>
         </div>
-      ) : customers.length === 0 ? (
+      ) : safeCustomers.length === 0 ? (
         <div className="py-20 text-center bg-white rounded-2xl border border-slate-200/80 space-y-3">
           <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
             <Users size={24} />
@@ -130,7 +144,7 @@ export default function Customers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {customers.map((c) => (
+                {safeCustomers.map((c) => (
                   <tr
                     key={c._id}
                     onClick={() => navigate(`/customers/${c._id}`)}
@@ -223,7 +237,7 @@ export default function Customers() {
 
           {/* Mobile Stacked Card View */}
           <div className="md:hidden space-y-3">
-            {customers.map((c) => (
+            {safeCustomers.map((c) => (
               <div
                 key={c._id}
                 onClick={() => navigate(`/customers/${c._id}`)}

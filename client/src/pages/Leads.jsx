@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import api from '../api/axios';
@@ -18,15 +18,67 @@ import {
   Mail,
   UserCheck,
   AlertTriangle,
-  X
+  X,
+  UserPlus,
+  PhoneCall,
+  Clock,
+  FileText,
+  XCircle,
+  MoreVertical,
+  MoreHorizontal,
+  SlidersHorizontal,
+  Eye,
+  Calendar,
+  User,
+  CheckCircle2
 } from 'lucide-react';
 
 const COLUMNS = [
-  { id: 'new', title: 'New', color: 'border-t-blue-500', headerBg: 'bg-blue-500/10 text-blue-700', badgeClass: 'bg-blue-100 text-blue-800' },
-  { id: 'contacted', title: 'Contacted', color: 'border-t-purple-500', headerBg: 'bg-purple-500/10 text-purple-700', badgeClass: 'bg-purple-100 text-purple-800' },
-  { id: 'follow_up', title: 'Follow-up', color: 'border-t-amber-500', headerBg: 'bg-amber-500/10 text-amber-700', badgeClass: 'bg-amber-100 text-amber-800' },
-  { id: 'won', title: 'Order Received', color: 'border-t-emerald-500', headerBg: 'bg-emerald-500/10 text-emerald-700', badgeClass: 'bg-emerald-100 text-emerald-800' },
-  { id: 'cancelled', title: 'Cancelled', color: 'border-t-rose-500', headerBg: 'bg-rose-500/10 text-rose-700', badgeClass: 'bg-rose-100 text-rose-800' }
+  {
+    id: 'new',
+    title: 'New',
+    icon: UserPlus,
+    iconBg: 'bg-blue-50 text-blue-600',
+    avatarBg: 'bg-blue-100 text-blue-700',
+    color: 'border-t-blue-500',
+    badgeClass: 'bg-blue-100 text-blue-800'
+  },
+  {
+    id: 'contacted',
+    title: 'Contacted',
+    icon: PhoneCall,
+    iconBg: 'bg-emerald-50 text-emerald-600',
+    avatarBg: 'bg-emerald-100 text-emerald-700',
+    color: 'border-t-emerald-500',
+    badgeClass: 'bg-emerald-100 text-emerald-800'
+  },
+  {
+    id: 'follow_up',
+    title: 'Follow-up',
+    icon: Clock,
+    iconBg: 'bg-amber-50 text-amber-600',
+    avatarBg: 'bg-amber-100 text-amber-700',
+    color: 'border-t-amber-500',
+    badgeClass: 'bg-amber-100 text-amber-800'
+  },
+  {
+    id: 'won',
+    title: 'Order Received',
+    icon: FileText,
+    iconBg: 'bg-purple-50 text-purple-700',
+    avatarBg: 'bg-purple-100 text-purple-700',
+    color: 'border-t-purple-500',
+    badgeClass: 'bg-purple-100 text-purple-800'
+  },
+  {
+    id: 'cancelled',
+    title: 'Cancelled',
+    icon: XCircle,
+    iconBg: 'bg-rose-50 text-rose-600',
+    avatarBg: 'bg-rose-100 text-rose-700',
+    color: 'border-t-rose-500',
+    badgeClass: 'bg-rose-100 text-rose-800'
+  }
 ];
 
 const SOURCE_LABELS = {
@@ -34,7 +86,10 @@ const SOURCE_LABELS = {
   referral: 'Referral',
   walk_in: 'Walk-in',
   google_ads: 'Google Ads',
-  tele_caller: 'Tele-caller'
+  tele_caller: 'Tele-caller',
+  tele_caller_1: 'Tele Caller 1',
+  tele_caller_2: 'Tele Caller 2',
+  tele_caller_3: 'Tele Caller 3'
 };
 
 const getInitials = (name) => {
@@ -44,16 +99,38 @@ const getInitials = (name) => {
   return name.substring(0, 2).toUpperCase();
 };
 
-const getRelativeTime = (dateString) => {
-  if (!dateString) return 'Recently';
+const formatLeadTime = (dateString) => {
+  if (!dateString) return 'Just now';
   const date = new Date(dateString);
   const now = new Date();
-  const diffInSeconds = Math.floor((now - date) / 1000);
+  const diffInMinutes = Math.floor((now - date) / (1000 * 60));
 
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  if (diffInMinutes < 1) return 'Just now';
+  if (diffInMinutes < 60) return `${diffInMinutes} mins ago`;
+  if (diffInMinutes < 180) return `${Math.floor(diffInMinutes / 60)} hrs ago`;
+
+  const isToday = date.toDateString() === now.toDateString();
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  if (isToday) return `Today, ${timeStr}`;
+  if (isYesterday) return `Yesterday, ${timeStr}`;
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+};
+
+const calculateColumnTotal = (columnLeads) => {
+  const sum = columnLeads.reduce((acc, lead) => {
+    const val = lead.orderAmount || lead.estimatedValue || lead.amount || 25000;
+    return acc + val;
+  }, 0);
+
+  if (sum >= 10000000) return `₹ ${(sum / 10000000).toFixed(1)} Cr`;
+  if (sum >= 100000) return `₹ ${(sum / 100000).toFixed(1)} Lakhs`;
+  if (sum >= 1000) return `₹ ${(sum / 1000).toFixed(1)} K`;
+  return `₹ ${sum}`;
 };
 
 export default function Leads() {
@@ -74,6 +151,7 @@ export default function Leads() {
   const [selectedPriority, setSelectedPriority] = useState('');
   const [selectedExecutive, setSelectedExecutive] = useState('');
   const [activeStageTab, setActiveStageTab] = useState('all');
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -84,6 +162,7 @@ export default function Leads() {
     email: '',
     source: 'website',
     priority: 'medium',
+    status: 'new',
     assignedTo: ''
   });
 
@@ -243,6 +322,21 @@ export default function Leads() {
     }
   };
 
+  // Open Add Lead Modal with Target Stage
+  const openAddLeadForStage = (stageId = 'new') => {
+    setNewLeadForm({
+      name: '',
+      company: '',
+      phone: '',
+      email: '',
+      source: 'website',
+      priority: 'medium',
+      status: stageId,
+      assignedTo: ''
+    });
+    setIsAddModalOpen(true);
+  };
+
   // Submit Add Lead Form
   const handleAddLeadSubmit = async (e) => {
     e.preventDefault();
@@ -250,15 +344,6 @@ export default function Leads() {
       await api.post('/leads', newLeadForm);
       notify.success('Lead created successfully!');
       setIsAddModalOpen(false);
-      setNewLeadForm({
-        name: '',
-        company: '',
-        phone: '',
-        email: '',
-        source: 'website',
-        priority: 'medium',
-        assignedTo: ''
-      });
       fetchLeads();
     } catch (err) {
       notify.error(err.response?.data?.message || 'Failed to create lead');
@@ -299,126 +384,41 @@ export default function Leads() {
     return true;
   });
 
-  // Calculate Pipeline Metrics
-  const totalCount = leads.length;
-  const newCount = leads.filter(l => l.status === 'new').length;
-  const contactedCount = leads.filter(l => l.status === 'contacted').length;
-  const followUpCount = leads.filter(l => l.status === 'follow_up').length;
-  const wonCount = leads.filter(l => l.status === 'won').length;
-  const cancelledCount = leads.filter(l => l.status === 'cancelled').length;
-
   return (
     <div className="space-y-6 pb-12">
-      {/* Header Bar */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center font-semibold text-sm shadow-md shadow-red-600/30">
-              LD
-            </span>
-            Leads Management & Pipeline
-          </h1>
-          <p className="text-slate-500 text-xs sm:text-sm font-medium mt-1">
-            Track inquiries, update stages, and convert leads into active customer orders
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* View Mode Toggle */}
-          <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-            <button
-              onClick={() => setViewMode('kanban')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                viewMode === 'kanban'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Kanban size={14} />
-              <span>Kanban</span>
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                viewMode === 'grid'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <LayoutGrid size={14} />
-              <span>Grid / Cards</span>
-            </button>
+      
+      {/* Reference UI Top Header Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/50 backdrop-blur-xs p-2 rounded-2xl">
+        
+        {/* Left: Optional Title / Search Input */}
+        <div className="flex items-center gap-3 flex-1">
+          <div className="relative w-full max-w-sm">
+            <Search size={16} className="text-slate-400 absolute left-3.5 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search leads..."
+              className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-semibold"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
-
-          {/* Add Lead Button */}
-          {canCreate && (
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md shadow-red-600/20 transition flex items-center gap-2"
-            >
-              <Plus size={16} />
-              <span>New Lead</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Summary KPI Pills */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Total Leads</span>
-          <span className="text-xl font-semibold text-slate-900">{totalCount}</span>
-        </div>
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-medium text-blue-500 uppercase tracking-wider block">New</span>
-          <span className="text-xl font-semibold text-blue-700">{newCount}</span>
-        </div>
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-medium text-purple-500 uppercase tracking-wider block">Contacted</span>
-          <span className="text-xl font-semibold text-purple-700">{contactedCount}</span>
-        </div>
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-medium text-amber-500 uppercase tracking-wider block">Follow-up</span>
-          <span className="text-xl font-semibold text-amber-700">{followUpCount}</span>
-        </div>
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center">
-          <span className="text-[11px] font-medium text-emerald-500 uppercase tracking-wider block">Won</span>
-          <span className="text-xl font-semibold text-emerald-700">{wonCount}</span>
-        </div>
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs text-center col-span-2 sm:col-span-1">
-          <span className="text-[11px] font-medium text-rose-500 uppercase tracking-wider block">Cancelled</span>
-          <span className="text-xl font-semibold text-rose-700">{cancelledCount}</span>
-        </div>
-      </div>
-
-      {/* Filter & Search Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* Real-time Search */}
-        <div className="relative flex-1">
-          <Search size={16} className="text-slate-400 absolute left-3.5 top-3" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by lead name, company, phone, email..."
-            className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
-            >
-              <X size={14} />
-            </button>
-          )}
         </div>
 
-        {/* Dropdown Filters */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Right Action Controls Matching Reference Design */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Source Dropdown */}
           <select
             value={selectedSource}
             onChange={(e) => setSelectedSource(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+            className="px-3.5 py-2 bg-white border border-slate-200/90 rounded-xl text-xs font-medium text-slate-700 shadow-2xs focus:outline-none cursor-pointer"
           >
             <option value="">All Sources</option>
             <option value="website">Website</option>
@@ -428,114 +428,153 @@ export default function Leads() {
             <option value="tele_caller">Tele-caller</option>
           </select>
 
-          <select
-            value={selectedPriority}
-            onChange={(e) => setSelectedPriority(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-          >
-            <option value="">All Priorities</option>
-            <option value="high">High Priority</option>
-            <option value="medium">Medium Priority</option>
-            <option value="low">Low Priority</option>
-          </select>
-
+          {/* Sales Executive Dropdown */}
           {isManagerOrAdmin && (
             <select
               value={selectedExecutive}
               onChange={(e) => setSelectedExecutive(e.target.value)}
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="px-3.5 py-2 bg-white border border-slate-200/90 rounded-xl text-xs font-medium text-slate-700 shadow-2xs focus:outline-none cursor-pointer"
             >
-              <option value="">All Executives</option>
+              <option value="">All Sales Executives</option>
               {usersList.map(u => (
                 <option key={u._id} value={u._id}>
-                  {u.name} ({u.role})
+                  {u.name}
                 </option>
               ))}
             </select>
           )}
+
+          {/* Filters Toggle Button */}
+          <button
+            onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+            className={`px-3.5 py-2 bg-white border border-slate-200/90 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium transition shadow-2xs flex items-center gap-1.5 cursor-pointer ${
+              showFiltersPanel ? 'ring-2 ring-red-500/20 border-red-500' : ''
+            }`}
+          >
+            <SlidersHorizontal size={14} className="text-slate-500" />
+            <span>Filters</span>
+          </button>
+
+          {/* Add Lead Red Button */}
+          {canCreate && (
+            <button
+              onClick={() => openAddLeadForStage('new')}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Add Lead</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Stage Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200 overflow-x-auto scrollbar-hide pb-0.5">
-        <button
-          onClick={() => setActiveStageTab('all')}
-          className={`px-3.5 py-2 rounded-t-xl text-xs font-medium transition whitespace-nowrap ${
-            activeStageTab === 'all'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-          }`}
-        >
-          All Stages ({filteredLeads.length})
-        </button>
-        {COLUMNS.map((col) => {
-          const cnt = leads.filter(l => l.status === col.id).length;
-          return (
-            <button
-              key={col.id}
-              onClick={() => setActiveStageTab(col.id)}
-              className={`px-3.5 py-2 rounded-t-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
-                activeStageTab === col.id
-                  ? 'bg-red-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+      {/* Expanded Filter Panel */}
+      {showFiltersPanel && (
+        <div className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-sm flex flex-wrap items-center gap-4 text-xs">
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Priority Filter</label>
+            <select
+              value={selectedPriority}
+              onChange={(e) => setSelectedPriority(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
             >
-              <span>{col.title}</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold ${
-                activeStageTab === col.id ? 'bg-white/20 text-white' : col.badgeClass
-              }`}>
-                {cnt}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+              <option value="">All Priorities</option>
+              <option value="high">High Priority</option>
+              <option value="medium">Medium Priority</option>
+              <option value="low">Low Priority</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">View Layout</label>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                  viewMode === 'kanban' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
+                }`}
+              >
+                Kanban Board
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                  viewMode === 'grid' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
+                }`}
+              >
+                Grid View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Board View */}
       {loading ? (
         <div className="min-h-[400px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 text-xs font-semibold">Loading Lead Pipeline...</p>
+            <p className="text-slate-500 text-xs font-medium">Loading Lead Pipeline...</p>
           </div>
         </div>
       ) : viewMode === 'kanban' ? (
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-4 items-start overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-4">
-            {COLUMNS.filter(c => activeStageTab === 'all' || activeStageTab === c.id).map((column) => {
+          <div className="flex md:grid md:grid-cols-5 lg:grid-cols-5 gap-4 items-start overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-4">
+            {COLUMNS.map((column) => {
               const columnLeads = filteredLeads.filter(l => l.status === column.id);
+              const columnTotalStr = calculateColumnTotal(columnLeads);
+              const IconComp = column.icon;
 
               return (
                 <div
                   key={column.id}
-                  className={`bg-slate-100/90 rounded-2xl border border-slate-200/80 border-t-4 ${column.color} flex flex-col max-h-[calc(100vh-250px)] min-w-[85vw] sm:min-w-[320px] md:min-w-0 snap-center flex-shrink-0 md:flex-shrink`}
+                  className="bg-white/70 rounded-2xl border border-slate-200/80 shadow-2xs p-3 flex flex-col max-h-[calc(100vh-180px)] min-w-[85vw] sm:min-w-[300px] md:min-w-0 snap-center flex-shrink-0 md:flex-shrink"
                 >
-                  <div className="p-3.5 border-b border-slate-200/60 flex items-center justify-between bg-white rounded-t-xl">
-                    <h3 className="font-semibold text-slate-800 text-sm">{column.title}</h3>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${column.headerBg}`}>
-                      {columnLeads.length}
-                    </span>
+                  {/* Column Header */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/60 shadow-2xs flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${column.iconBg}`}>
+                        <IconComp size={18} />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900 text-sm leading-tight">
+                          {column.title} ({columnLeads.length})
+                        </h3>
+                        <span className="text-xs text-slate-500 font-medium block">
+                          {columnTotalStr}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
                   </div>
 
+                  {/* Droppable Area */}
                   <Droppable droppableId={column.id}>
                     {(provided, snapshot) => (
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`p-3 space-y-3 overflow-y-auto scrollbar-hide flex-1 min-h-[320px] transition-colors ${
-                          snapshot.isDraggingOver ? 'bg-slate-200/60' : ''
+                        className={`space-y-3 overflow-y-auto scrollbar-hide flex-1 min-h-[340px] p-1 transition-colors ${
+                          snapshot.isDraggingOver ? 'bg-slate-100/80 rounded-xl' : ''
                         }`}
                       >
                         {columnLeads.length === 0 ? (
-                          <div className="py-12 text-center text-slate-400 text-xs font-medium border-2 border-dashed border-slate-200 rounded-xl">
+                          <div className="py-12 text-center text-slate-400 text-xs font-normal border border-dashed border-slate-200 rounded-xl">
                             No leads in this stage
                           </div>
                         ) : (
                           columnLeads.map((lead, index) => (
                             <Draggable key={lead._id} draggableId={lead._id} index={index}>
                               {(provided, snapshot) => (
-                                <LeadCard
+                                <KanbanLeadCard
                                   lead={lead}
+                                  column={column}
                                   provided={provided}
                                   snapshot={snapshot}
                                   isManagerOrAdmin={isManagerOrAdmin}
@@ -558,6 +597,19 @@ export default function Leads() {
                       </div>
                     )}
                   </Droppable>
+
+                  {/* Bottom + Add Lead Action */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => openAddLeadForStage(column.id)}
+                      className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-semibold text-blue-600 hover:text-blue-700 transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                    >
+                      <Plus size={14} />
+                      <span>Add Lead</span>
+                    </button>
+                  </div>
+
                 </div>
               );
             })}
@@ -567,26 +619,30 @@ export default function Leads() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredLeads.length === 0 ? (
             <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-slate-200">
-              <p className="text-slate-400 font-bold text-sm">No leads match your current search or filters.</p>
+              <p className="text-slate-400 font-semibold text-sm">No leads match your current search or filters.</p>
             </div>
           ) : (
-            filteredLeads.map((lead) => (
-              <LeadCard
-                key={lead._id}
-                lead={lead}
-                isManagerOrAdmin={isManagerOrAdmin}
-                canDelete={canDelete}
-                onDelete={() => handleDeleteLead(lead._id, lead.name)}
-                onReassign={() => {
-                  setReassignModalLead(lead);
-                  setReassignTargetUser(lead.assignedTo?._id || '');
-                }}
-                onLogActivity={(type) => {
-                  setActiveActivityModal({ leadId: lead._id, leadName: lead.name, type });
-                  setActivityNote('');
-                }}
-              />
-            ))
+            filteredLeads.map((lead) => {
+              const col = COLUMNS.find(c => c.id === lead.status) || COLUMNS[0];
+              return (
+                <KanbanLeadCard
+                  key={lead._id}
+                  lead={lead}
+                  column={col}
+                  isManagerOrAdmin={isManagerOrAdmin}
+                  canDelete={canDelete}
+                  onDelete={() => handleDeleteLead(lead._id, lead.name)}
+                  onReassign={() => {
+                    setReassignModalLead(lead);
+                    setReassignTargetUser(lead.assignedTo?._id || '');
+                  }}
+                  onLogActivity={(type) => {
+                    setActiveActivityModal({ leadId: lead._id, leadName: lead.name, type });
+                    setActivityNote('');
+                  }}
+                />
+              );
+            })
           )}
         </div>
       )}
@@ -596,41 +652,43 @@ export default function Leads() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Reassign Lead</h3>
+              <h3 className="text-base font-semibold text-slate-900">Reassign Lead</h3>
               <button onClick={() => setReassignModalLead(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
-            <p className="text-xs text-slate-500">
-              Select new sales executive for lead: <strong className="text-slate-800">{reassignModalLead.name}</strong>
-            </p>
+
             <form onSubmit={handleReassignSubmit} className="space-y-4">
-              <select
-                required
-                value={reassignTargetUser}
-                onChange={(e) => setReassignTargetUser(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-              >
-                <option value="" disabled>Select Executive</option>
-                {usersList.map(u => (
-                  <option key={u._id} value={u._id}>
-                    {u.name} ({u.role})
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Select Executive Caller</label>
+                <select
+                  required
+                  value={reassignTargetUser}
+                  onChange={(e) => setReassignTargetUser(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
+                >
+                  <option value="" disabled>Select Executive</option>
+                  {usersList.map(u => (
+                    <option key={u._id} value={u._id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setReassignModalLead(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs"
                 >
-                  Reassign Lead
+                  Confirm Reassign
                 </button>
               </div>
             </form>
@@ -638,15 +696,21 @@ export default function Leads() {
         </div>
       )}
 
-      {/* Cancel Reason Modal */}
+      {/* Cancel Lead Reason Modal */}
       {pendingCancelMove && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide">
-            <div className="flex items-center gap-3 text-rose-600">
-              <AlertTriangle size={20} />
-              <h3 className="text-lg font-bold text-slate-900">Lead Cancellation Reason</h3>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-semibold text-rose-600 flex items-center gap-2">
+                <AlertTriangle size={18} />
+                <span>Mark Lead as Cancelled</span>
+              </h3>
+              <button onClick={() => setPendingCancelMove(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
             </div>
-            <p className="text-xs text-slate-500">
+
+            <p className="text-xs text-slate-600 font-normal">
               Please enter the reason for marking lead <strong className="text-slate-800">{pendingCancelMove.lead?.name}</strong> as cancelled.
             </p>
             <textarea
@@ -655,20 +719,20 @@ export default function Leads() {
               value={cancelReasonInput}
               onChange={(e) => setCancelReasonInput(e.target.value)}
               placeholder="e.g. Budget constraints, selected competitor..."
-              className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+              className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-rose-500"
             />
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setPendingCancelMove(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
               >
                 Cancel Move
               </button>
               <button
                 type="button"
                 onClick={confirmCancelMove}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md transition"
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs"
               >
                 Submit & Cancel Lead
               </button>
@@ -680,9 +744,9 @@ export default function Leads() {
       {/* Add Lead Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto scrollbar-hide animate-scale-up">
+          <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto scrollbar-hide">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-red-600"></span>
                 Add New Lead
               </h3>
@@ -691,9 +755,9 @@ export default function Leads() {
               </button>
             </div>
 
-            <form onSubmit={handleAddLeadSubmit} className="space-y-4">
+            <form onSubmit={handleAddLeadSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block font-medium text-slate-700 mb-1">
                   Lead Name *
                 </label>
                 <input
@@ -702,26 +766,26 @@ export default function Leads() {
                   value={newLeadForm.name}
                   onChange={(e) => setNewLeadForm({ ...newLeadForm, name: e.target.value })}
                   placeholder="e.g. Ramesh Kumar"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block font-medium text-slate-700 mb-1">
                   Company Name
                 </label>
                 <input
                   type="text"
                   value={newLeadForm.company}
                   onChange={(e) => setNewLeadForm({ ...newLeadForm, company: e.target.value })}
-                  placeholder="e.g. Acme Printing Ltd"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="e.g. Apex Traders Pvt. Ltd."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="block font-medium text-slate-700 mb-1">
                     Phone Number *
                   </label>
                   <input
@@ -730,32 +794,32 @@ export default function Leads() {
                     value={newLeadForm.phone}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, phone: e.target.value })}
                     placeholder="+91 9876543210"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="block font-medium text-slate-700 mb-1">
                     Email Address
                   </label>
                   <input
                     type="email"
                     value={newLeadForm.email}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, email: e.target.value })}
-                    placeholder="ramesh@acme.com"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="ramesh@apex.com"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="block font-medium text-slate-700 mb-1">
                     Source
                   </label>
                   <select
                     value={newLeadForm.source}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, source: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
                   >
                     <option value="website">Website</option>
                     <option value="referral">Referral</option>
@@ -765,13 +829,13 @@ export default function Leads() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="block font-medium text-slate-700 mb-1">
                     Priority
                   </label>
                   <select
                     value={newLeadForm.priority}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, priority: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
                   >
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
@@ -782,14 +846,14 @@ export default function Leads() {
 
               {isManagerOrAdmin && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="block font-medium text-slate-700 mb-1">
                     Assign Executive *
                   </label>
                   <select
                     required
                     value={newLeadForm.assignedTo}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, assignedTo: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
                   >
                     <option value="" disabled>Select Executive</option>
                     {usersList.map(u => (
@@ -805,13 +869,13 @@ export default function Leads() {
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs"
                 >
                   Save Lead
                 </button>
@@ -826,7 +890,7 @@ export default function Leads() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900 capitalize">
+              <h3 className="text-base font-semibold text-slate-900 capitalize">
                 Log {activeActivityModal.type} Note
               </h3>
               <button onClick={() => setActiveActivityModal(null)} className="text-slate-400 hover:text-slate-600">
@@ -834,7 +898,7 @@ export default function Leads() {
               </button>
             </div>
 
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 font-normal">
               Record a quick note for lead: <strong className="text-slate-800">{activeActivityModal.leadName}</strong>
             </p>
 
@@ -845,20 +909,20 @@ export default function Leads() {
                 value={activityNote}
                 onChange={(e) => setActivityNote(e.target.value)}
                 placeholder={`Describe the outcome of your ${activeActivityModal.type}...`}
-                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
               />
 
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveActivityModal(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs"
                 >
                   Log Activity
                 </button>
@@ -883,142 +947,230 @@ export default function Leads() {
   );
 }
 
-function LeadCard({ lead, provided, snapshot, isManagerOrAdmin, canDelete, onDelete, onReassign, onLogActivity }) {
+// Kanban Lead Card matching exact reference design
+function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, canDelete, onDelete, onReassign, onLogActivity }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const getPriorityColorClass = (p) => {
+    switch (p) {
+      case 'high':
+        return 'text-rose-600 font-semibold';
+      case 'medium':
+        return 'text-amber-600 font-semibold';
+      default:
+        return 'text-emerald-600 font-semibold';
+    }
+  };
+
+  const isFollowUpStage = lead.status === 'follow_up';
+  const isWonStage = lead.status === 'won';
+
   return (
     <div
       ref={provided?.innerRef}
       {...(provided?.draggableProps || {})}
       {...(provided?.dragHandleProps || {})}
-      className={`bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-md transition space-y-3 relative group ${
+      className={`bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-md transition space-y-3 relative group ${
         snapshot?.isDragging ? 'shadow-2xl ring-2 ring-red-500 rotate-1 z-30' : ''
       }`}
     >
+      {/* Lead Card Header: Avatar Initials + Lead Name + Company */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-xs">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold text-xs flex-shrink-0 shadow-2xs ${column.avatarBg}`}>
             {getInitials(lead.name)}
           </div>
           <div className="min-w-0">
-            <h4 className="font-bold text-slate-900 text-sm leading-tight truncate">{lead.name}</h4>
-            <p className="text-slate-500 text-xs truncate">{lead.company || 'Individual Lead'}</p>
+            <h4 className="font-semibold text-slate-900 text-sm leading-snug truncate">
+              {lead.name}
+            </h4>
+            <p className="text-slate-500 text-xs truncate font-normal mt-0.5">
+              {lead.company || 'Individual Prospect'}
+            </p>
           </div>
         </div>
+      </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <Link
-            to={`/leads/${lead._id}/followup`}
-            onClick={(e) => e.stopPropagation()}
-            title="Open Follow-up / Lead Profile"
-            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-          >
-            <ArrowRight size={16} />
-          </Link>
-          {canDelete && (
-            <button
-              type="button"
-              title="Move to Trash"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-            >
-              <Trash2 size={16} />
-            </button>
-          )}
+      {/* Source & Priority Line: Source: Website • Priority: High */}
+      <div className="text-xs text-slate-500 font-normal">
+        <span>Source: {SOURCE_LABELS[lead.source] || lead.source || 'Website'}</span>
+        <span className="mx-1.5">•</span>
+        <span>Priority: </span>
+        <span className={getPriorityColorClass(lead.priority)}>
+          {lead.priority ? lead.priority.charAt(0).toUpperCase() + lead.priority.slice(1) : 'Medium'}
+        </span>
+      </div>
+
+      {/* Follow-up Today Badge if in Follow-up Column */}
+      {isFollowUpStage && (
+        <div className="flex items-center gap-1.5 text-xs text-rose-600 font-medium pt-0.5">
+          <Calendar size={14} className="text-rose-500" />
+          <span>Follow-up today</span>
         </div>
-      </div>
+      )}
 
-      <div className="space-y-1 text-xs text-slate-600 pt-0.5">
-        {lead.phone && (
-          <div className="flex items-center gap-1.5">
-            <Phone size={14} className="text-slate-400 flex-shrink-0" />
-            <span className="font-semibold">{lead.phone}</span>
-          </div>
-        )}
-        {lead.email && (
-          <div className="flex items-center gap-1.5 truncate">
-            <Mail size={14} className="text-slate-400 flex-shrink-0" />
-            <span className="truncate">{lead.email}</span>
-          </div>
-        )}
-      </div>
+      {/* Order Received Green Badge if in Order Received Column */}
+      {isWonStage && (
+        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-200/60 rounded-md text-[11px] font-medium">
+          <CheckCircle2 size={12} className="text-emerald-500" />
+          <span>Order Received</span>
+        </div>
+      )}
 
-      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-        <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold rounded-md uppercase">
-          {SOURCE_LABELS[lead.source] || lead.source}
-        </span>
-        <span
-          className={`px-2 py-0.5 border text-[10px] font-bold rounded-md uppercase ${
-            lead.priority === 'high'
-              ? 'bg-rose-50 text-rose-700 border-rose-200'
-              : lead.priority === 'medium'
-              ? 'bg-amber-50 text-amber-700 border-amber-200'
-              : 'bg-slate-100 text-slate-600 border-slate-200'
-          }`}
-        >
-          {lead.priority} priority
-        </span>
-        {lead.assignedTo?.name && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isManagerOrAdmin) onReassign();
-            }}
-            title={isManagerOrAdmin ? "Click to reassign" : "Assigned executive"}
-            className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-md uppercase flex items-center gap-1 hover:bg-blue-100 transition"
-          >
-            <UserCheck size={12} />
-            <span>{lead.assignedTo.name}</span>
-          </button>
-        )}
-      </div>
-
+      {/* Cancelled Reason Box if Cancelled */}
       {lead.status === 'cancelled' && lead.cancelReason && (
         <p className="text-[11px] text-rose-700 bg-rose-50/80 p-2 rounded-lg italic border border-rose-100">
           "{lead.cancelReason}"
         </p>
       )}
 
+      {/* Footer Row: Timestamp + Quick Interaction Icons */}
       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-        <span title="Last updated timestamp">{getRelativeTime(lead.updatedAt)}</span>
-        <div className="flex items-center gap-1">
+        <span className="font-normal text-slate-400" title="Time relative">
+          {formatLeadTime(lead.createdAt || lead.updatedAt)}
+        </span>
+
+        {/* Action Buttons based on stage */}
+        <div className="flex items-center gap-1.5" ref={menuRef}>
+          {/* Quick Contact Options for Follow-up or Standard Cards */}
+          {(isFollowUpStage || lead.status === 'contacted' || lead.status === 'new') && (
+            <>
+              <button
+                type="button"
+                title="Call Lead"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLogActivity('call');
+                }}
+                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+              >
+                <Phone size={14} />
+              </button>
+
+              <button
+                type="button"
+                title="WhatsApp Lead"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLogActivity('whatsapp');
+                }}
+                className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+              >
+                <MessageSquare size={14} />
+              </button>
+
+              <button
+                type="button"
+                title="Email Lead"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLogActivity('email');
+                }}
+                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+              >
+                <Mail size={14} />
+              </button>
+            </>
+          )}
+
+          {/* Quick View & Order Icons for Order Received Stage */}
+          {isWonStage && (
+            <>
+              <Link
+                to={`/leads/${lead._id}/followup`}
+                onClick={(e) => e.stopPropagation()}
+                title="View Lead 360"
+                className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+              >
+                <Eye size={14} />
+              </Link>
+              <Link
+                to="/orders"
+                onClick={(e) => e.stopPropagation()}
+                title="View Orders"
+                className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition"
+              >
+                <FileText size={14} />
+              </Link>
+            </>
+          )}
+
+          {/* User Assign Icon */}
           <button
             type="button"
-            title="Log Phone Call"
+            title={lead.assignedTo?.name ? `Assigned to ${lead.assignedTo.name}` : "Assign Executive"}
             onClick={(e) => {
               e.stopPropagation();
-              onLogActivity('call');
+              if (isManagerOrAdmin) onReassign();
             }}
-            className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition"
+            className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
           >
-            <Phone size={14} />
+            <User size={14} />
           </button>
 
-          <button
-            type="button"
-            title="Log WhatsApp Message"
-            onClick={(e) => {
-              e.stopPropagation();
-              onLogActivity('whatsapp');
-            }}
-            className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-md transition"
-          >
-            <MessageSquare size={14} />
-          </button>
+          {/* 3-dots Menu Button */}
+          <div className="relative">
+            <button
+              type="button"
+              title="More Options"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+              className="p-1 text-slate-400 hover:text-slate-800 rounded-lg transition"
+            >
+              <MoreHorizontal size={14} />
+            </button>
 
-          <button
-            type="button"
-            title="Log Email"
-            onClick={(e) => {
-              e.stopPropagation();
-              onLogActivity('email');
-            }}
-            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition"
-          >
-            <Mail size={14} />
-          </button>
+            {showMenu && (
+              <div className="absolute right-0 bottom-full mb-1 w-40 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 text-xs py-1 animate-scale-up">
+                <Link
+                  to={`/leads/${lead._id}/followup`}
+                  className="px-3 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
+                >
+                  <ArrowRight size={12} />
+                  <span>Open Workspace</span>
+                </Link>
+                {isManagerOrAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onReassign();
+                    }}
+                    className="w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
+                  >
+                    <UserCheck size={12} />
+                    <span>Reassign</span>
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onDelete();
+                    }}
+                    className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
+                  >
+                    <Trash2 size={12} />
+                    <span>Move to Trash</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

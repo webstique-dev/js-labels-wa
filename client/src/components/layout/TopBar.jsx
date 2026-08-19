@@ -45,7 +45,7 @@ export default function TopBar() {
   const confirm = useConfirm();
   const navigate = useNavigate();
 
-  // Dropdown States
+  // Dropdown Interactive States
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMessageOpen, setIsMessageOpen] = useState(false);
@@ -137,7 +137,7 @@ export default function TopBar() {
     }
   };
 
-  // Close dropdowns on click outside
+  // Close dropdowns automatically when clicking anywhere outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (searchRef.current && !searchRef.current.contains(event.target)) {
@@ -339,16 +339,7 @@ export default function TopBar() {
       <div className="flex items-center gap-2 sm:gap-3">
         
         {/* 1. Pending Messages & Reorder Reminders Icon */}
-        <div
-          className="relative"
-          ref={messageRef}
-          onMouseEnter={() => {
-            setIsMessageOpen(true);
-            setIsNotifOpen(false);
-            setIsProfileOpen(false);
-          }}
-          onMouseLeave={() => setIsMessageOpen(false)}
-        >
+        <div className="relative" ref={messageRef}>
           <button
             type="button"
             title="Messages & Reminders"
@@ -369,7 +360,7 @@ export default function TopBar() {
 
           {/* Messages & Reminders Dropdown with Smooth Transition */}
           <div
-            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right before:block before:absolute before:-top-2 before:left-0 before:right-0 before:h-2 ${
+            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${
               isMessageOpen
                 ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
                 : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
@@ -417,16 +408,7 @@ export default function TopBar() {
         </div>
 
         {/* 2. Notification Bell Icon (New Leads) */}
-        <div
-          className="relative"
-          ref={notifRef}
-          onMouseEnter={() => {
-            setIsNotifOpen(true);
-            setIsMessageOpen(false);
-            setIsProfileOpen(false);
-          }}
-          onMouseLeave={() => setIsNotifOpen(false)}
-        >
+        <div className="relative" ref={notifRef}>
           <button
             type="button"
             title="Lead Notifications"
@@ -447,7 +429,7 @@ export default function TopBar() {
 
           {/* Notifications Dropdown with Smooth Transition */}
           <div
-            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right before:block before:absolute before:-top-2 before:left-0 before:right-0 before:h-2 ${
+            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${
               isNotifOpen
                 ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
                 : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
@@ -501,16 +483,7 @@ export default function TopBar() {
         <div className="h-6 w-px bg-slate-200 mx-1"></div>
 
         {/* 3. Interactive Profile Menu Dropdown */}
-        <div
-          className="relative"
-          ref={profileRef}
-          onMouseEnter={() => {
-            setIsProfileOpen(true);
-            setIsNotifOpen(false);
-            setIsMessageOpen(false);
-          }}
-          onMouseLeave={() => setIsProfileOpen(false)}
-        >
+        <div className="relative" ref={profileRef}>
           <button
             onClick={() => {
               setIsProfileOpen(!isProfileOpen);
@@ -535,7 +508,7 @@ export default function TopBar() {
 
           {/* Profile Dropdown Menu with Smooth Transition */}
           <div
-            className={`absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right before:block before:absolute before:-top-2 before:left-0 before:right-0 before:h-2 ${
+            className={`absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${
               isProfileOpen
                 ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
                 : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
@@ -590,17 +563,6 @@ export default function TopBar() {
                 >
                   <SettingsIcon size={16} className="text-slate-400" />
                   <span>System Settings</span>
-                </Link>
-              )}
-
-              {role === 'super_admin' && (
-                <Link
-                  to="/trash"
-                  onClick={() => setIsProfileOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-xl transition"
-                >
-                  <Trash2 size={16} className="text-slate-400" />
-                  <span>System Trash</span>
                 </Link>
               )}
             </div>
