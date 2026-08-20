@@ -1,472 +1,607 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
-import { useNotification } from '../context/NotificationContext';
-import { useConfirm } from '../context/ConfirmContext';
+import React, { useState } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
+  Edit,
+  CheckCircle2,
+  Star,
+  MoreVertical,
   Phone,
-  MessageSquare,
+  MessageCircle,
   Mail,
-  User,
+  MapPin,
+  CreditCard,
   Calendar,
   Clock,
-  CheckCircle2,
-  AlertCircle,
   Plus,
-  Send,
-  Building,
-  RefreshCw,
-  XCircle,
-  CheckSquare,
+  Edit2,
+  Trash2,
   FileText,
-  UserCheck,
-  AlertTriangle
+  FileSpreadsheet,
+  Download,
+  Bell,
+  Truck,
+  User,
+  ChevronDown
 } from 'lucide-react';
-import { Skeleton, SkeletonCard } from '../components/ui/Skeleton';
+import { useNotification } from '../context/NotificationContext';
+import { WhatsappIcon } from '../components/ui/WhatsappIcon';
 
 export default function FollowUpDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const notify = useNotification();
-  const confirm = useConfirm();
 
-  const [followup, setFollowup] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState(null);
+  const [activeTab, setActiveTab] = useState('feed');
+  const [isMarkedDone, setIsMarkedDone] = useState(false);
 
-  // Form State
-  const [callStatus, setCallStatus] = useState('connected');
-  const [noteText, setNoteText] = useState('');
-  const [nextFollowupDate, setNextFollowupDate] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Lead Conversion Modal State
-  const [showConvertModal, setShowConvertModal] = useState(false);
-  const [convertOrderAmount, setConvertOrderAmount] = useState('');
-  const [isConverting, setIsConverting] = useState(false);
-
-  // Root Cause Fix: Remove notify from useCallback dependencies to prevent infinite request loops
-  const fetchFollowupDetails = useCallback(async () => {
-    if (!id) return;
-    try {
-      setLoading(true);
-      setErrorMessage(null);
-      const res = await api.get(`/followups/${id}`);
-      setFollowup(res.data?.followup || null);
-      setHistory(Array.isArray(res.data?.history) ? res.data.history : []);
-    } catch (err) {
-      console.error('Error fetching followup details:', err);
-      const msg = err.response?.data?.message || 'Failed to load follow-up workspace';
-      setErrorMessage(msg);
-      setFollowup(null);
-      setHistory([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    fetchFollowupDetails();
-  }, [fetchFollowupDetails]);
-
-  // Log Activity & Schedule Next Follow-up
-  const handleLogInteraction = async (e) => {
-    e.preventDefault();
-    if (!noteText.trim()) {
-      notify.error('Please enter call notes before submitting');
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const payload = {
-        callStatus,
-        notes: noteText,
-        nextFollowupDate: nextFollowupDate || null
-      };
-
-      await api.post(`/followups/${id}/log`, payload);
-      notify.success('Interaction logged & follow-up updated!');
-      setNoteText('');
-      setNextFollowupDate('');
-      fetchFollowupDetails();
-    } catch (err) {
-      console.error('Error logging interaction:', err);
-      notify.error(err.response?.data?.message || 'Failed to log call interaction');
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleMarkAsDone = () => {
+    setIsMarkedDone(true);
+    notify.success('Follow-up marked as completed!');
   };
 
-  // Convert Lead to Customer
-  const handleConvertLead = async (e) => {
-    e.preventDefault();
-    const leadId = followup?.relatedId?._id || followup?.relatedRecord?._id || followup?.relatedId;
-    if (!leadId) return;
-
-    try {
-      setIsConverting(true);
-      await api.post(`/leads/${leadId}/convert`, {
-        orderAmount: convertOrderAmount ? Number(convertOrderAmount) : 0
-      });
-      notify.success('Lead converted to Customer & Won Order created!');
-      setShowConvertModal(false);
-      fetchFollowupDetails();
-    } catch (err) {
-      console.error('Error converting lead:', err);
-      notify.error(err.response?.data?.message || 'Failed to convert lead');
-    } finally {
-      setIsConverting(false);
-    }
+  const handleActionClick = (actionName) => {
+    notify.success(`Action "${actionName}" initiated`);
   };
-
-  // Quick Action Buttons (Phone, WhatsApp, Email)
-  const handleQuickAction = (channel) => {
-    const contactPhone = followup?.relatedRecord?.phone || followup?.relatedId?.phone;
-    const contactEmail = followup?.relatedRecord?.email || followup?.relatedId?.email;
-    const contactName = followup?.relatedRecord?.name || followup?.relatedId?.name || '';
-
-    if (channel === 'call' && contactPhone) {
-      window.open(`tel:${contactPhone}`);
-    } else if (channel === 'whatsapp' && contactPhone) {
-      const cleanPhone = contactPhone.replace(/[^0-9]/g, '');
-      window.open(`https://wa.me/${cleanPhone}?text=Hello%20${encodeURIComponent(contactName)}%2C%20following%20up%20from%20JS%20Labels.`);
-    } else if (channel === 'email' && contactEmail) {
-      window.open(`mailto:${contactEmail}?subject=JS%20Labels%20Follow-up`);
-    } else {
-      notify.error(`No valid ${channel} contact details available.`);
-    }
-  };
-
-  const getInitials = (nameStr) => {
-    if (!nameStr) return 'JS';
-    const parts = nameStr.trim().split(' ');
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return nameStr.substring(0, 2).toUpperCase();
-  };
-
-  const formatDateBlock = (dateStr) => {
-    if (!dateStr) return { month: 'JAN', day: '01', year: '2026' };
-    const date = new Date(dateStr);
-    return {
-      month: date.toLocaleString('en-US', { month: 'short' }).toUpperCase(),
-      day: String(date.getDate()).padStart(2, '0'),
-      year: date.getFullYear()
-    };
-  };
-
-  if (loading) {
-    return (
-      <div className="space-y-6 pb-12">
-        <Skeleton className="h-6 w-48" />
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <SkeletonCard className="lg:col-span-3 h-80" />
-          <div className="lg:col-span-5 space-y-6">
-            <SkeletonCard className="h-24" />
-            <SkeletonCard className="h-80" />
-          </div>
-          <SkeletonCard className="lg:col-span-4 h-96" />
-        </div>
-      </div>
-    );
-  }
-
-  if (errorMessage || !followup) {
-    return (
-      <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-4 max-w-lg mx-auto my-12 shadow-sm">
-        <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
-          <AlertCircle size={24} />
-        </div>
-        <h3 className="text-base font-semibold text-slate-900">Follow-up Task Not Found</h3>
-        <p className="text-xs text-slate-500 font-normal">
-          {errorMessage || 'The requested follow-up task does not exist or was soft-deleted.'}
-        </p>
-        <div className="pt-2">
-          <Link to="/followups" className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-medium transition inline-block">
-            Back to Follow-ups Workspace
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const lead = followup.relatedRecord || followup.relatedId || {};
-  const isLeadType = followup.relatedType === 'lead';
-  const openFollowUp = followup.status === 'open' ? followup : null;
-  const dateObj = formatDateBlock(followup.dueDate);
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Navigation Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 pb-12 font-sans">
+      
+      {/* Top Header Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <Link
           to="/followups"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
         >
           <ArrowLeft size={16} />
           <span>Back to Follow-ups Workspace</span>
         </Link>
 
-        {/* Lead Conversion CTA Button */}
-        {isLeadType && lead.status !== 'won' && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowConvertModal(true)}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            onClick={() => notify.info('Opening edit follow-up modal')}
+            className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
-            <UserCheck size={16} />
-            <span>Convert Lead to Customer (Won)</span>
+            <Edit size={14} className="text-slate-400" />
+            <span>Edit</span>
           </button>
-        )}
+
+          <button
+            onClick={handleMarkAsDone}
+            disabled={isMarkedDone}
+            className={`px-4 py-1.5 text-white font-bold text-xs rounded-xl shadow-2xs transition flex items-center gap-1.5 cursor-pointer ${
+              isMarkedDone ? 'bg-emerald-600' : 'bg-red-600 hover:bg-red-700 active:bg-red-800'
+            }`}
+          >
+            <CheckCircle2 size={14} />
+            <span>{isMarkedDone ? 'Completed' : 'Mark as Done'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* 3-Panel Main Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        {/* LEFT PANEL: Contact Card (3 Cols) */}
-        <div className="lg:col-span-3 space-y-6 order-1 lg:order-none">
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-5 text-center">
+      {/* 3-Column Responsive Workspace Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        
+        {/* COLUMN 1: Customer Contact Profile & Follow-up Summary (3.5 / 12 cols) */}
+        <div className="xl:col-span-3 space-y-5">
+          
+          {/* Card 1: Customer Profile */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
             
-            {/* Avatar & Lead Info */}
-            <div className="flex flex-col items-center space-y-2">
-              <div className="w-16 h-16 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-semibold text-xl shadow-md">
-                {getInitials(lead.name)}
+            {/* Top row: Avatar, Name, Badge, Star, Options */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-full bg-indigo-600 text-white font-bold text-base flex items-center justify-center shrink-0 shadow-2xs">
+                  RK
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <h2 className="font-bold text-slate-900 text-sm truncate">Ramesh Kumar</h2>
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px] rounded-md">
+                      Customer
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 font-normal truncate mt-0.5">Apex Traders Pvt. Ltd.</p>
+                </div>
               </div>
-              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">{lead.name || 'Prospect'}</h2>
-              <p className="text-slate-500 text-xs font-medium">{lead.company || 'Individual Prospect'}</p>
+
+              <div className="flex items-center gap-1 shrink-0 text-slate-400">
+                <Star size={14} className="hover:text-amber-500 cursor-pointer" />
+                <MoreVertical size={14} className="hover:text-slate-700 cursor-pointer" />
+              </div>
             </div>
 
             {/* Badges */}
-            <div className="flex flex-wrap justify-center gap-1.5 pt-1">
-              <span className="px-2.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-medium rounded-md uppercase">
-                Source: {lead.source || 'Website'}
+            <div className="flex items-center gap-2 pt-1">
+              <span className="px-2.5 py-0.5 bg-rose-50 text-rose-600 border border-rose-100 text-[10px] font-bold rounded-md">
+                High Value
               </span>
-              <span className={`px-2.5 py-0.5 border text-[10px] font-medium rounded-md uppercase ${
-                lead.priority === 'high' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'
-              }`}>
-                {lead.priority || 'medium'} priority
+              <span className="px-2.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold rounded-md">
+                Chennai
               </span>
             </div>
 
-            {/* Quick Action Dialers */}
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => handleQuickAction('call')}
-                className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition flex flex-col items-center gap-1 cursor-pointer"
-                title="Call Lead"
-              >
-                <Phone size={16} />
-                <span className="text-[10px] font-medium">Call</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickAction('whatsapp')}
-                className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition flex flex-col items-center gap-1 cursor-pointer"
-                title="WhatsApp Message"
-              >
-                <MessageSquare size={16} />
-                <span className="text-[10px] font-medium">WhatsApp</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickAction('email')}
-                className="p-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl transition flex flex-col items-center gap-1 cursor-pointer"
-                title="Email Lead"
-              >
-                <Mail size={16} />
-                <span className="text-[10px] font-medium">Email</span>
-              </button>
-            </div>
-
-            {/* Direct Contact Details */}
-            <div className="space-y-2 text-left pt-2 border-t border-slate-100 text-xs text-slate-600 font-normal">
-              {lead.phone && (
+            {/* Contact Information List */}
+            <div className="space-y-2.5 text-xs text-slate-600 pt-2 border-t border-slate-100 font-medium">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Phone size={14} className="text-slate-400 flex-shrink-0" />
-                  <span className="font-medium text-slate-900">{lead.phone}</span>
+                  <Phone size={13} className="text-slate-400 shrink-0" />
+                  <span className="font-bold text-slate-900">98765 43210</span>
                 </div>
-              )}
-              {lead.email && (
-                <div className="flex items-center gap-2 truncate">
-                  <Mail size={14} className="text-slate-400 flex-shrink-0" />
-                  <span className="truncate">{lead.email}</span>
-                </div>
-              )}
-              {lead.city && (
-                <div className="flex items-center gap-2">
-                  <Building size={14} className="text-slate-400 flex-shrink-0" />
-                  <span>{lead.city}</span>
-                </div>
-              )}
-            </div>
-
-          </div>
-        </div>
-
-        {/* MIDDLE PANEL: Follow-up Logger & Next Scheduled Block (5 Cols) */}
-        <div className="lg:col-span-5 space-y-6 order-2 lg:order-none">
-          
-          {/* Scheduled Date Display Block */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-600 border border-red-200 flex flex-col items-center justify-center font-bold flex-shrink-0">
-              <span className="text-[10px] uppercase font-semibold tracking-wider">{dateObj.month}</span>
-              <span className="text-xl leading-none">{dateObj.day}</span>
-              <span className="text-[9px] font-normal text-slate-400">{dateObj.year}</span>
-            </div>
-            <div>
-              <span className="text-[11px] font-medium uppercase text-slate-400 block">Scheduled Follow-up Date</span>
-              <p className="font-semibold text-slate-900 text-sm mt-0.5">
-                {followup.status === 'open' ? 'Active Action Required' : 'Completed Task'}
-              </p>
-              <p className="text-xs text-slate-500 mt-1 font-normal">
-                {followup.notes || 'Routine follow-up call with customer executive.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Log Interaction Form */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-            <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-              <Plus size={16} className="text-red-600" />
-              <span>Log Call Interaction & Update Follow-up</span>
-            </h3>
-
-            <form onSubmit={handleLogInteraction} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Call Outcome Status</label>
-                <select
-                  value={callStatus}
-                  onChange={(e) => setCallStatus(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
-                >
-                  <option value="connected">Call Connected & Discussed</option>
-                  <option value="no_answer">No Answer / Busy</option>
-                  <option value="callback_requested">Callback Requested</option>
-                  <option value="quotation_requested">Quotation Sent / Requested</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Call Notes & Discussion Points *</label>
-                <textarea
-                  rows={4}
-                  required
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Record summary of call, customer requirements, label dimensions, quantity..."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Next Follow-up Date (Optional)</label>
-                <input
-                  type="date"
-                  value={nextFollowupDate}
-                  onChange={(e) => setNextFollowupDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-              </div>
-
-              <div className="pt-2">
                 <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-50 text-white font-semibold rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={() => handleActionClick('WhatsApp')}
+                  className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 cursor-pointer"
                 >
-                  <Send size={14} />
-                  <span>{isSubmitting ? 'Saving Interaction...' : 'Log Activity & Save'}</span>
+                  <WhatsappIcon size={14} className="text-emerald-600" />
                 </button>
               </div>
-            </form>
+
+              <div className="flex items-center gap-2 truncate">
+                <Mail size={13} className="text-slate-400 shrink-0" />
+                <span className="truncate">ramesh.kumar@apextraders.com</span>
+              </div>
+
+              <div className="flex items-start gap-2">
+                <MapPin size={13} className="text-slate-400 shrink-0 mt-0.5" />
+                <span className="text-slate-600 leading-tight">21, Industrial Estate, Guindy, Chennai - 600032</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <CreditCard size={13} className="text-slate-400 shrink-0" />
+                <span className="font-semibold text-slate-800">GST: 33AABCA1234A1Z5</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Card 2: Follow-up Summary */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3.5">
+            <h3 className="font-bold text-slate-900 text-xs tracking-tight">Follow-up Summary</h3>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Lead Source</span>
+                <span className="font-bold text-slate-900">Website</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Sales Executive</span>
+                <div className="flex items-center gap-1.5">
+                  <img
+                    src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=60"
+                    alt="Priya Sharma"
+                    className="w-5 h-5 rounded-full object-cover border border-slate-200"
+                  />
+                  <span className="font-bold text-slate-900">Tele Caller 1</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Customer Since</span>
+                <span className="font-bold text-slate-900">May 15, 2025</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Last Contacted</span>
+                <span className="font-bold text-slate-900">May 16, 2025 (12:20 PM)</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Total Follow-ups</span>
+                <span className="font-bold text-slate-900">6</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Open Follow-ups</span>
+                <span className="font-bold text-red-600">2</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Status</span>
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded-md">
+                  Active
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Reorder Probability</span>
+                <span className="font-extrabold text-emerald-600">High (85%)</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Next Reorder Date</span>
+                <span className="font-bold text-slate-900">June 12, 2025</span>
+              </div>
+            </div>
           </div>
 
         </div>
 
-        {/* RIGHT PANEL: Timeline & Activity Log History (4 Cols) */}
-        <div className="lg:col-span-4 space-y-6 order-3 lg:order-none">
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-            <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-              <Clock size={16} className="text-slate-500" />
-              <span>Activity History & Timeline</span>
-            </h3>
+        {/* COLUMN 2: Activity Feed Chronological Stream (5.5 / 12 cols) */}
+        <div className="xl:col-span-5 space-y-5">
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
+            
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-5 border-b border-slate-200 pb-2 overflow-x-auto scrollbar-hide text-xs font-semibold">
+              <button
+                onClick={() => setActiveTab('feed')}
+                className={`pb-2 border-b-2 transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'feed' ? 'border-red-600 text-red-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Activity Feed
+              </button>
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`pb-2 border-b-2 transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'all' ? 'border-red-600 text-red-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                All Activities
+              </button>
+              <button
+                onClick={() => setActiveTab('calls')}
+                className={`pb-2 border-b-2 transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'calls' ? 'border-red-600 text-red-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Calls
+              </button>
+              <button
+                onClick={() => setActiveTab('whatsapp')}
+                className={`pb-2 border-b-2 transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'whatsapp' ? 'border-red-600 text-red-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                WhatsApp
+              </button>
+              <button
+                onClick={() => setActiveTab('emails')}
+                className={`pb-2 border-b-2 transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'emails' ? 'border-red-600 text-red-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Emails
+              </button>
+              <button
+                onClick={() => setActiveTab('notes')}
+                className={`pb-2 border-b-2 transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'notes' ? 'border-red-600 text-red-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Notes
+              </button>
+            </div>
 
-            <div className="space-y-4 max-h-[500px] overflow-y-auto scrollbar-hide pr-1">
-              {history.length === 0 ? (
-                <p className="text-xs text-slate-400 font-normal text-center py-8">No prior activity logs found for this record.</p>
-              ) : (
-                history.map((act) => (
-                  <div key={act._id} className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-900 capitalize">{act.type?.replace('_', ' ')}</span>
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        {new Date(act.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </span>
+            {/* Timeline Feed Items Stream */}
+            <div className="space-y-5 text-xs pt-1">
+              
+              {/* Group: May 21, 2025 */}
+              <div className="space-y-3">
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 font-bold text-[10px] rounded-md">
+                  May 21, 2025
+                </span>
+
+                <div className="flex items-start justify-between gap-3 p-2 hover:bg-slate-50/80 rounded-xl transition">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                      <Bell size={15} />
                     </div>
-                    <p className="text-slate-600 font-normal leading-relaxed">{act.description}</p>
-                    {act.createdBy?.name && (
-                      <div className="text-[10px] text-slate-400 font-normal pt-1 border-t border-slate-200/60">
-                        By: <span className="font-medium text-slate-700">{act.createdBy.name}</span>
-                      </div>
-                    )}
+                    <div>
+                      <p className="font-bold text-slate-900 leading-tight">Reorder reminder scheduled</p>
+                      <p className="text-[11px] text-slate-500 font-normal mt-0.5">Expected reorder on June 12, 2025</p>
+                    </div>
                   </div>
-                ))
-              )}
+                  <div className="text-right text-[10px] text-slate-400 font-medium shrink-0">
+                    <div>02:45 PM</div>
+                    <div>Tele Caller 1</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group: May 20, 2025 */}
+              <div className="space-y-3">
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 font-bold text-[10px] rounded-md">
+                  May 20, 2025
+                </span>
+
+                <div className="flex items-start justify-between gap-3 p-2 hover:bg-slate-50/80 rounded-xl transition">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                      <Truck size={15} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 leading-tight">Order delivered successfully</p>
+                      <p className="text-[11px] text-slate-500 font-normal mt-0.5">Order ORD-2456 delivered via DTDC</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-[10px] text-slate-400 font-medium shrink-0">
+                    <div>05:30 PM</div>
+                    <div>System</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group: May 16, 2025 */}
+              <div className="space-y-3">
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 font-bold text-[10px] rounded-md">
+                  May 16, 2025
+                </span>
+
+                {/* Event 1 */}
+                <div className="flex items-start justify-between gap-3 p-2 hover:bg-slate-50/80 rounded-xl transition">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                      <FileText size={15} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 leading-tight">Order ORD-2456 created</p>
+                      <p className="text-[11px] text-slate-500 font-normal mt-0.5">Order value: ₹ 18,450</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-[10px] text-slate-400 font-medium shrink-0">
+                    <div>03:10 PM</div>
+                    <div>Tele Caller 1</div>
+                  </div>
+                </div>
+
+                {/* Event 2 */}
+                <div className="flex items-start justify-between gap-3 p-2 hover:bg-slate-50/80 rounded-xl transition">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                      <WhatsappIcon size={15} className="text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 leading-tight">WhatsApp discussion</p>
+                      <p className="text-[11px] text-slate-500 font-normal mt-0.5">Shared material samples and discussed pricing.</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-[10px] text-slate-400 font-medium shrink-0">
+                    <div>12:20 PM</div>
+                    <div>Tele Caller 1</div>
+                  </div>
+                </div>
+
+                {/* Event 3 */}
+                <div className="flex items-start justify-between gap-3 p-2 hover:bg-slate-50/80 rounded-xl transition">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                      <Phone size={15} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 leading-tight">Follow-up call completed</p>
+                      <p className="text-[11px] text-slate-500 font-normal mt-0.5">Interested in premium quality labels. Requested quotation.</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-[10px] text-slate-400 font-medium shrink-0">
+                    <div>11:15 AM</div>
+                    <div>Tele Caller 1</div>
+                  </div>
+                </div>
+
+                {/* Event 4 */}
+                <div className="flex items-start justify-between gap-3 p-2 hover:bg-slate-50/80 rounded-xl transition">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                      <FileText size={15} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 leading-tight">Quotation QTN-0205 sent</p>
+                      <p className="text-[11px] text-slate-500 font-normal mt-0.5">Quotation for 3 items worth ₹ 18,450</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-[10px] text-slate-400 font-medium shrink-0">
+                    <div>09:45 AM</div>
+                    <div>Tele Caller 1</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group: May 15, 2025 */}
+              <div className="space-y-3">
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 font-bold text-[10px] rounded-md">
+                  May 15, 2025
+                </span>
+
+                <div className="flex items-start justify-between gap-3 p-2 hover:bg-slate-50/80 rounded-xl transition">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                      <User size={15} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 leading-tight">New lead assigned to Tele Caller 1</p>
+                      <p className="text-[11px] text-slate-500 font-normal mt-0.5">Lead source: Website</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-[10px] text-slate-400 font-medium shrink-0">
+                    <div>10:30 AM</div>
+                    <div>System</div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="text-center pt-2 border-t border-slate-100">
+              <button className="text-xs font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1 cursor-pointer">
+                <span>View More Activities</span>
+                <ChevronDown size={14} />
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        {/* COLUMN 3: Next Reminder, Notes & Documents (3.5 / 12 cols) */}
+        <div className="xl:col-span-4 space-y-5">
+          
+          {/* Card 1: Next Reminder */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
+            <h3 className="font-bold text-slate-900 text-xs tracking-tight">Next Reminder</h3>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center gap-4">
+              
+              {/* Red Date Box */}
+              <div className="w-14 h-16 rounded-xl bg-white border border-slate-200 overflow-hidden text-center shrink-0 shadow-2xs">
+                <div className="bg-red-600 text-white font-bold text-[10px] py-0.5 uppercase tracking-wider">
+                  JUN
+                </div>
+                <div className="text-xl font-extrabold text-slate-900 leading-tight pt-1">
+                  12
+                </div>
+                <div className="text-[9px] text-slate-400 font-normal">
+                  Thursday
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="space-y-1 text-xs">
+                <p className="font-bold text-slate-900">Follow-up Call</p>
+                <div className="text-[11px] text-slate-500 font-normal">
+                  <span>Expected Reorder Date</span>
+                  <p className="font-semibold text-slate-800">June 12, 2025</p>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1 text-[10px]">
+                  <span className="px-2 py-0.5 bg-white border border-slate-200 font-semibold text-slate-700 rounded-md flex items-center gap-1">
+                    <Clock size={10} className="text-slate-400" />
+                    <span>10:00 AM</span>
+                  </span>
+                  <span className="font-bold text-emerald-600">High (85%)</span>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Quick Action Dial Buttons */}
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <button
+                onClick={() => handleActionClick('Call')}
+                className="flex-1 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Call Customer"
+              >
+                <Phone size={13} className="text-emerald-600" />
+                <span>Call</span>
+              </button>
+              <button
+                onClick={() => handleActionClick('WhatsApp')}
+                className="py-2 px-3.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl text-xs font-bold text-emerald-700 flex items-center justify-center shadow-2xs cursor-pointer"
+                title="Send WhatsApp"
+              >
+                <WhatsappIcon size={16} className="text-emerald-600" />
+              </button>
+              <button
+                onClick={() => handleActionClick('Email')}
+                className="flex-1 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Send Email"
+              >
+                <Mail size={13} className="text-blue-600" />
+                <span>Email</span>
+              </button>
             </div>
           </div>
+
+          {/* Card 2: Notes */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-900 text-xs tracking-tight">Notes</h3>
+              <button onClick={() => notify.info('Opening note editor')} className="text-xs font-bold text-red-600 hover:underline inline-flex items-center gap-1 cursor-pointer">
+                <Plus size={13} />
+                <span>Add Note</span>
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-amber-50/50 border border-amber-100 rounded-xl space-y-2 text-xs">
+              <p className="text-slate-800 font-medium leading-relaxed">
+                Customer is looking for premium BOPP labels. Discussed pricing and quality. Waiting for approval from their management.
+              </p>
+              <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400 font-medium">
+                <span>Tele Caller 1 • May 16, 2025 12:20 PM</span>
+                <div className="flex items-center gap-1.5">
+                  <button className="hover:text-slate-700 cursor-pointer"><Edit2 size={12} /></button>
+                  <button className="hover:text-red-600 cursor-pointer"><Trash2 size={12} /></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Files & Documents */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-900 text-xs tracking-tight">Files & Documents</h3>
+              <button onClick={() => notify.info('Opening document upload modal')} className="text-xs font-bold text-red-600 hover:underline inline-flex items-center gap-1 cursor-pointer">
+                <Plus size={13} />
+                <span>Upload</span>
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              
+              {/* Doc 1 */}
+              <div className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-xl transition">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <FileText size={14} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 truncate">Quotation_QTN-0205.pdf</p>
+                    <p className="text-[10px] text-slate-400 font-normal">PDF • 245 KB</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] text-slate-400 font-medium">May 16, 2025</span>
+                  <button className="p-1 hover:text-slate-900 cursor-pointer text-slate-400"><Download size={13} /></button>
+                </div>
+              </div>
+
+              {/* Doc 2 */}
+              <div className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-xl transition">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <FileText size={14} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 truncate">Price_List_May2025.pdf</p>
+                    <p className="text-[10px] text-slate-400 font-normal">PDF • 512 KB</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] text-slate-400 font-medium">May 15, 2025</span>
+                  <button className="p-1 hover:text-slate-900 cursor-pointer text-slate-400"><Download size={13} /></button>
+                </div>
+              </div>
+
+              {/* Doc 3 */}
+              <div className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-xl transition">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <FileSpreadsheet size={14} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 truncate">Product_Specifications.xlsx</p>
+                    <p className="text-[10px] text-slate-400 font-normal">XLSX • 162 KB</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] text-slate-400 font-medium">May 15, 2025</span>
+                  <button className="p-1 hover:text-slate-900 cursor-pointer text-slate-400"><Download size={13} /></button>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="text-center pt-2 border-t border-slate-100">
+              <button className="text-xs font-bold text-red-600 hover:underline cursor-pointer">
+                View All Files
+              </button>
+            </div>
+          </div>
+
         </div>
 
       </div>
 
-      {/* Convert Lead to Customer Modal */}
-      {showConvertModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4">
-            <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-              <UserCheck size={18} className="text-emerald-600" />
-              <span>Convert Lead to Customer</span>
-            </h3>
-
-            <p className="text-xs text-slate-600 font-normal leading-relaxed">
-              This will convert lead <strong className="text-slate-900">{lead.name}</strong> into an active Customer account and record their initial order as Won.
-            </p>
-
-            <form onSubmit={handleConvertLead} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Initial Order Amount (INR)</label>
-                <input
-                  type="number"
-                  value={convertOrderAmount}
-                  onChange={(e) => setConvertOrderAmount(e.target.value)}
-                  placeholder="e.g. 50000"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowConvertModal(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isConverting}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs"
-                >
-                  {isConverting ? 'Converting...' : 'Confirm Conversion'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+

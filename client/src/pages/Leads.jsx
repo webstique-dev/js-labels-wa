@@ -205,10 +205,10 @@ export default function Leads() {
   const fetchUsers = async () => {
     if (!isManagerOrAdmin) return;
     try {
-      const res = await api.get('/users');
-      setUsersList(res.data || []);
+      const res = await api.get('/users?role=caller');
+      setUsersList(Array.isArray(res.data) ? res.data.filter(u => u.role === 'caller') : []);
     } catch (err) {
-      console.error('Error fetching users:', err);
+      console.error('Error fetching callers:', err);
     }
   };
 
@@ -436,8 +436,8 @@ export default function Leads() {
               onChange={(e) => setSelectedExecutive(e.target.value)}
               className="px-3.5 py-2 bg-white border border-slate-200/90 rounded-xl text-xs font-medium text-slate-700 shadow-2xs focus:outline-none cursor-pointer"
             >
-              <option value="">All Sales Executives</option>
-              {usersList.map(u => (
+              <option value="">All Executive Callers</option>
+              {usersList.filter(u => u.role === 'caller').map(u => (
                 <option key={u._id} value={u._id}>
                   {u.name}
                 </option>
@@ -693,8 +693,8 @@ export default function Leads() {
                   onChange={(e) => setReassignTargetUser(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
                 >
-                  <option value="" disabled>Select Executive</option>
-                  {usersList.map(u => (
+                  <option value="" disabled>Select Executive Caller</option>
+                  {usersList.filter(u => u.role === 'caller').map(u => (
                     <option key={u._id} value={u._id}>
                       {u.name} ({u.role})
                     </option>
@@ -881,8 +881,8 @@ export default function Leads() {
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, assignedTo: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
                   >
-                    <option value="" disabled>Select Executive</option>
-                    {usersList.map(u => (
+                    <option value="" disabled>Select Executive Caller</option>
+                    {usersList.filter(u => u.role === 'caller').map(u => (
                       <option key={u._id} value={u._id}>
                         {u.name} ({u.role})
                       </option>

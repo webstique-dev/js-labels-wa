@@ -7,7 +7,7 @@ const Escalation = require('../models/Escalation');
 const User = require('../models/User');
 
 const calcChange = (thisVal, lastVal) => {
-  if (lastVal === 0) return thisVal > 0 ? 100 : 0;
+  if (!lastVal || lastVal === 0) return thisVal > 0 ? 100 : 0;
   return Math.round(((thisVal - lastVal) / lastVal) * 100);
 };
 
@@ -51,7 +51,7 @@ const getDashboardSummary = async (req, res) => {
       totalLeads: { count: totalLeadsAllTime, change: leadsChange },
       convertedCustomers: { count: wonLeadsAllTime, change: wonChange },
       ordersDelivered: { count: deliveredAllTime, change: deliveredChange },
-      repeatOrders: { count: repeatCustCount, change: 12 }
+      repeatOrders: { count: repeatCustCount, change: 0 }
     });
   } catch (error) {
     console.error('Error fetching dashboard summary:', error);
@@ -74,8 +74,9 @@ const getDashboardFunnel = async (req, res) => {
     return res.json({
       leads: totalLeads,
       contacted: contacted,
-      followUp: Math.max(followUp, 1),
-      orderReceived: won
+      followUp: followUp,
+      orderReceived: won,
+      won: won
     });
   } catch (error) {
     console.error('Error fetching dashboard funnel:', error);
@@ -102,12 +103,12 @@ const getDashboardConversionTrend = async (req, res) => {
         Lead.countDocuments({ ...scope, status: 'won', createdAt: { $lte: dayEnd } })
       ]);
 
-      const rate = totalUpToDay > 0 ? Math.round((wonUpToDay / totalUpToDay) * 100) : (day * 3 + 10);
+      const rate = totalUpToDay > 0 ? Math.round((wonUpToDay / totalUpToDay) * 100) : 0;
 
       trend.push({
         day: `${monthLabel} ${day}`,
-        totalLeads: totalUpToDay || (day * 2),
-        wonLeads: wonUpToDay || Math.floor(day / 2),
+        totalLeads: totalUpToDay,
+        wonLeads: wonUpToDay,
         conversionRate: rate
       });
     }
@@ -179,8 +180,6 @@ const getDashboardAlerts = async (req, res) => {
       if (orders.length > 0) {
         const totalSpent = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
         reorderForecastAmount += Math.round(totalSpent / orders.length);
-      } else {
-        reorderForecastAmount += 15000; // Default estimate
       }
     }
 
@@ -242,3 +241,4 @@ module.exports = {
   getDashboardAlerts,
   getDashboardNeedsReview
 };
+

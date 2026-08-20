@@ -110,6 +110,14 @@ export default function App() {
                   }
                 />
                 <Route
+                  path="/followups/:id"
+                  element={
+                    <RoleGuard module="followups">
+                      <FollowUpDetails />
+                    </RoleGuard>
+                  }
+                />
+                <Route
                   path="/reminders"
                   element={
                     <RoleGuard module="reminders">

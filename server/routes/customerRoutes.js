@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getCustomers,
+  createCustomer,
   getCustomerById,
   getCustomerSummary,
   getCustomerOrders,
@@ -14,6 +15,7 @@ const { allowRoles } = require('../middleware/roles');
 const { applyOwnershipScope } = require('../middleware/scope');
 
 router.get('/', protect, applyOwnershipScope('salesExecutive'), getCustomers);
+router.post('/', protect, createCustomer);
 router.get('/trash', protect, allowRoles('super_admin'), (req, res, next) => { req.params.resource = 'customers'; next(); }, getTrash);
 router.get('/:id', protect, getCustomerById);
 router.get('/:id/summary', protect, getCustomerSummary);

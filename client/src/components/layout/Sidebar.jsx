@@ -6,7 +6,6 @@ import {
   UserPlus,
   Building2,
   ShoppingBag,
-  Tag,
   Calendar,
   Bell,
   BarChart3,
@@ -38,12 +37,6 @@ const NAV_ITEMS = [
     label: 'Orders',
     path: '/orders',
     icon: <ShoppingBag size={20} />
-  },
-  {
-    key: 'products',
-    label: 'Products',
-    path: '/products',
-    icon: <Tag size={20} />
   },
   {
     key: 'followups',

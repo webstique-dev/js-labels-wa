@@ -8,7 +8,6 @@ const TABS = [
   { key: 'orders', label: 'Orders' },
   { key: 'leads', label: 'Leads' },
   { key: 'customers', label: 'Customers' },
-  { key: 'products', label: 'Products' },
   { key: 'users', label: 'Users' },
   { key: 'followups', label: 'Follow-ups' }
 ];

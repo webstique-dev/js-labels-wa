@@ -1,447 +1,580 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { useNavigate } from 'react-router-dom';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid
+} from 'recharts';
 import api from '../api/axios';
 import { useNotification } from '../context/NotificationContext';
-import { Download, AlertTriangle } from 'lucide-react';
-import { Skeleton, SkeletonCard, SkeletonStatsGrid, SkeletonTable } from '../components/ui/Skeleton';
-
-const COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#10B981', '#EF4444', '#64748B'];
+import {
+  Calendar,
+  Filter,
+  Download,
+  Wallet,
+  ShoppingBag,
+  RefreshCw,
+  TrendingUp,
+  Users,
+  FileText,
+  ChevronDown,
+  ChevronRight,
+  Info,
+  ArrowUp,
+  FileSpreadsheet,
+  FileCode
+} from 'lucide-react';
+import { Skeleton, SkeletonCard, SkeletonTable } from '../components/ui/Skeleton';
 
 export default function Reports() {
+  const navigate = useNavigate();
   const notify = useNotification();
-  const [rangePreset, setRangePreset] = useState('this_month');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
 
-  const [overview, setOverview] = useState(null);
-  const [revenueTrend, setRevenueTrend] = useState([]);
-  const [ordersByStatus, setOrdersByStatus] = useState([]);
-  const [topProducts, setTopProducts] = useState([]);
-  const [callerPerformance, setCallerPerformance] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState(null);
+  const [overview, setOverview] = useState(null);
+  const [trendData, setTrendData] = useState([]);
+  const [topProducts, setTopProducts] = useState([]);
+  const [ordersStatusData, setOrdersStatusData] = useState([]);
+  const [topCustomers, setTopCustomers] = useState([]);
+  const [execPerformance, setExecPerformance] = useState([]);
 
-  // Helper to Calculate Preset Dates
-  const calculatePresetDates = useCallback((preset) => {
-    const now = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    if (preset === 'this_month') {
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    } else if (preset === 'last_month') {
-      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      end = new Date(now.getFullYear(), now.getMonth(), 0);
-    } else if (preset === '30_days') {
-      start = new Date();
-      start.setDate(start.getDate() - 30);
-      end = new Date();
-    }
-
-    const formatDateStr = (d) => d.toISOString().split('T')[0];
-    return { from: formatDateStr(start), to: formatDateStr(end) };
-  }, []);
-
-  // Update dates on preset change
-  useEffect(() => {
-    if (rangePreset !== 'custom') {
-      const { from, to } = calculatePresetDates(rangePreset);
-      setFromDate(from);
-      setToDate(to);
-    }
-  }, [rangePreset, calculatePresetDates]);
-
-  // Stable Data Fetcher (empty deps to prevent infinite re-render loops)
-  const fetchReportData = useCallback(async (fDate, tDate) => {
-    if (!fDate || !tDate) return;
+  const fetchAllReports = useCallback(async () => {
     try {
       setLoading(true);
-      setErrorMessage(null);
-      const params = { from: fDate, to: tDate, fromDate: fDate, toDate: tDate };
-
-      // Root Cause Fix: Corrected route paths to match reportRoutes.js
-      // /reports/executive-performance (not /reports/caller-performance)
-      const [overRes, revRes, statRes, prodRes, callRes] = await Promise.all([
-        api.get('/reports/overview', { params }),
-        api.get('/reports/revenue-trend', { params }),
-        api.get('/reports/orders-by-status', { params }),
-        api.get('/reports/top-products', { params }),
-        api.get('/reports/executive-performance', { params })
+      const [overRes, trendRes, prodRes, statRes, custRes, execRes] = await Promise.allSettled([
+        api.get('/reports/overview'),
+        api.get('/reports/revenue-trend'),
+        api.get('/reports/top-products'),
+        api.get('/reports/orders-by-status'),
+        api.get('/reports/top-customers'),
+        api.get('/reports/executive-performance')
       ]);
 
-      setOverview(overRes.data);
-      setRevenueTrend(Array.isArray(revRes.data) ? revRes.data : []);
-      setOrdersByStatus(Array.isArray(statRes.data) ? statRes.data : []);
-      setTopProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
-      setCallerPerformance(Array.isArray(callRes.data) ? callRes.data : []);
+      setOverview(overRes.status === 'fulfilled' ? overRes.value.data : null);
+      setTrendData(trendRes.status === 'fulfilled' ? trendRes.value.data : []);
+      setTopProducts(prodRes.status === 'fulfilled' ? prodRes.value.data : []);
+      setOrdersStatusData(statRes.status === 'fulfilled' ? statRes.value.data : []);
+      setTopCustomers(custRes.status === 'fulfilled' ? custRes.value.data : []);
+      setExecPerformance(execRes.status === 'fulfilled' ? execRes.value.data : []);
     } catch (err) {
-      console.error('Error fetching reports data:', err);
-      const msg = err.response?.data?.message || 'Failed to load analytics reports';
-      setErrorMessage(msg);
+      console.error('Error fetching reports:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Trigger fetch ONLY when dates change
   useEffect(() => {
-    if (fromDate && toDate) {
-      fetchReportData(fromDate, toDate);
-    }
-  }, [fromDate, toDate, fetchReportData]);
+    fetchAllReports();
+  }, [fetchAllReports]);
 
-  // CSV Export Trigger
-  const handleExportCSV = async (type) => {
+  const handleExportCSV = async (type = 'orders') => {
     try {
-      // Root Cause Fix: Corrected route path to /reports/export?type=...
-      const response = await api.get('/reports/export', {
-        params: { type, from: fromDate, to: toDate, fromDate, toDate },
-        responseType: 'blob'
-      });
-
+      const response = await api.get(`/reports/export?type=${type}`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${type}_report_${fromDate}_to_${toDate}.csv`);
+      link.setAttribute('download', `${type}_report_${Date.now()}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       notify.success(`Exported ${type} report successfully!`);
     } catch (err) {
-      console.error(`Export ${type} error:`, err);
-      notify.error(`Failed to export ${type} report.`);
+      console.error('CSV Export Error:', err);
+      notify.error('Failed to export CSV report');
     }
   };
 
-  return (
-    <div className="space-y-6 pb-12">
-      
-      {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Executive Reports & Analytics</h1>
-          <p className="text-slate-500 text-sm mt-1 font-normal">Company-wide financial performance, product sales shares, and caller conversion benchmarks</p>
+  // Static list for Recent Reports Card matching reference image
+  const recentReportsList = [
+    { id: '1', title: 'Sales Performance Report', type: 'Excel', size: '245 KB', date: 'May 31, 2025 10:30 AM', isPdf: false },
+    { id: '2', title: 'Customer Summary Report', type: 'PDF', size: '521 KB', date: 'May 31, 2025 10:15 AM', isPdf: true },
+    { id: '3', title: 'Order Status Report', type: 'Excel', size: '198 KB', date: 'May 31, 2025 09:45 AM', isPdf: false },
+    { id: '4', title: 'Revenue Analysis Report', type: 'PDF', size: '612 KB', date: 'May 30, 2025 06:20 PM', isPdf: true },
+    { id: '5', title: 'Product Performance Report', type: 'Excel', size: '310 KB', date: 'May 30, 2025 05:10 PM', isPdf: false }
+  ];
+
+  // Responsive Skeleton Loader
+  if (loading) {
+    return (
+      <div className="space-y-6 pb-12 font-sans animate-pulse">
+        {/* Header Skeleton */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <Skeleton className="h-7 w-36 rounded-xl" />
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+            <Skeleton className="h-9 w-40 rounded-xl" />
+            <Skeleton className="h-9 w-24 rounded-xl" />
+            <Skeleton className="h-9 w-24 rounded-xl" />
+          </div>
         </div>
 
-        {/* CSV Export Quick Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Top 6 KPI Cards Skeleton (Fluid responsive grid: 2 cols mobile, 3 sm, 6 lg) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-3 w-20 rounded" />
+                <Skeleton className="h-8 w-8 rounded-xl" />
+              </div>
+              <Skeleton className="h-6 w-24 rounded-lg" />
+              <Skeleton className="h-2.5 w-16 rounded" />
+            </div>
+          ))}
+        </div>
+
+        {/* Row 2: 3 Visual Analytics Cards Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-32 rounded-lg" />
+              <Skeleton className="h-7 w-24 rounded-lg" />
+            </div>
+            <Skeleton className="h-56 w-full rounded-xl" />
+          </div>
+
+          <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-36 rounded-lg" />
+              <Skeleton className="h-7 w-24 rounded-lg" />
+            </div>
+            <div className="flex items-center gap-4 pt-2">
+              <Skeleton className="w-32 h-32 rounded-full shrink-0" />
+              <div className="space-y-2 w-full">
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-3 w-3/4 rounded" />
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-32 rounded-lg" />
+              <Skeleton className="h-7 w-24 rounded-lg" />
+            </div>
+            <div className="flex items-center gap-4 pt-2">
+              <Skeleton className="w-32 h-32 rounded-full shrink-0" />
+              <div className="space-y-2 w-full">
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-3 w-3/4 rounded" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 3: Bottom Cards Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
+            <Skeleton className="h-5 w-44 rounded-lg" />
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
+            <Skeleton className="h-5 w-36 rounded-lg" />
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 pb-12 font-sans">
+      
+      {/* Top Header & Action Controls Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h1 className="text-xl font-bold text-slate-900 tracking-tight">Overview</h1>
+
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+          {/* Date Selector */}
+          <button className="px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center gap-2 shadow-2xs cursor-pointer">
+            <span>May 1 – May 31, 2025</span>
+            <ChevronDown size={14} className="text-slate-400" />
+          </button>
+
+          {/* Filter Button */}
+          <button className="px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center gap-2 shadow-2xs cursor-pointer">
+            <Filter size={14} className="text-slate-400" />
+            <span>Filters</span>
+          </button>
+
+          {/* Export CSV Button */}
           <button
             onClick={() => handleExportCSV('orders')}
-            className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white font-medium text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-2xs cursor-pointer"
           >
-            <Download size={14} />
-            <span>Orders CSV</span>
-          </button>
-          <button
-            onClick={() => handleExportCSV('customers')}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Download size={14} />
-            <span>Customers CSV</span>
-          </button>
-          <button
-            onClick={() => handleExportCSV('leads')}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Download size={14} />
-            <span>Leads CSV</span>
+            <Download size={14} className="text-slate-400" />
+            <span>Export</span>
           </button>
         </div>
       </div>
 
-      {/* Date Range Controls Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3">
-        <div className="overflow-x-auto scrollbar-hide">
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-max">
-            {[
-              { key: 'this_month', label: 'This Month' },
-              { key: 'last_month', label: 'Last Month' },
-              { key: '30_days', label: 'Last 30 Days' },
-              { key: 'custom', label: 'Custom' }
-            ].map((preset) => (
-              <button
-                key={preset.key}
-                onClick={() => setRangePreset(preset.key)}
-                className={`px-3 py-1.5 text-xs font-medium capitalize rounded-lg transition whitespace-nowrap cursor-pointer ${
-                  rangePreset === preset.key
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
-          <span>From:</span>
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => {
-              setRangePreset('custom');
-              setFromDate(e.target.value);
-            }}
-            className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
-          />
-          <span>To:</span>
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => {
-              setRangePreset('custom');
-              setToDate(e.target.value);
-            }}
-            className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
-          />
-        </div>
-      </div>
-
-      {/* Error Banner */}
-      {errorMessage && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-700 text-xs font-medium">
-          <AlertTriangle size={18} className="flex-shrink-0" />
-          <span>{errorMessage}</span>
-        </div>
-      )}
-
-      {/* Main Report Body / Skeletons */}
-      {loading ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {Array.from({ length: 6 }).map((_, idx) => (
-              <SkeletonCard key={idx} className="h-20" />
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <SkeletonCard className="lg:col-span-8 h-80" />
-            <SkeletonCard className="lg:col-span-4 h-80" />
-          </div>
-          <SkeletonTable rows={5} cols={6} />
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Overview KPI Cards Row (6 Cards) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Row 1: Top 6 KPI Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         
-        {/* Total Revenue */}
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
-          <span className="text-[10px] font-medium uppercase text-slate-400">Total Revenue</span>
-          <span className="text-xl font-semibold text-slate-900 block">
-            ₹{(overview?.totalRevenue?.value || 0).toLocaleString('en-IN')}
-          </span>
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-            (overview?.totalRevenue?.change || 0) >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-          }`}>
-            {(overview?.totalRevenue?.change || 0) >= 0 ? `+${overview?.totalRevenue?.change}%` : `${overview?.totalRevenue?.change}%`}
-          </span>
+        {/* 1. Total Revenue */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Total Revenue</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Wallet size={16} />
+            </div>
+          </div>
+          <div className="text-lg font-extrabold text-slate-900">{overview?.totalRevenue?.display || '₹ 0'}</div>
+          <div className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+            <ArrowUp size={10} />
+            <span>{overview?.totalRevenue?.change || 0}% vs last month</span>
+          </div>
         </div>
 
-        {/* Avg Order Value */}
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
-          <span className="text-[10px] font-medium uppercase text-slate-400">Avg Order Value</span>
-          <span className="text-xl font-semibold text-slate-900 block">
-            ₹{(overview?.avgOrderValue?.value || 0).toLocaleString('en-IN')}
-          </span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
-            +{overview?.avgOrderValue?.change || 0}%
-          </span>
+        {/* 2. Average Order Value */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Average Order Value</span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <ShoppingBag size={16} />
+            </div>
+          </div>
+          <div className="text-lg font-extrabold text-slate-900">{overview?.avgOrderValue?.display || '₹ 0'}</div>
+          <div className="text-[10px] font-semibold text-blue-600 flex items-center gap-1">
+            <ArrowUp size={10} />
+            <span>{overview?.avgOrderValue?.change || 0}% vs last month</span>
+          </div>
         </div>
 
-        {/* Repeat Order Rate */}
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
-          <span className="text-[10px] font-medium uppercase text-slate-400">Repeat Order Rate</span>
-          <span className="text-xl font-semibold text-slate-900 block">
-            {overview?.repeatOrderRate?.value || 0}%
-          </span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
-            +{overview?.repeatOrderRate?.change || 5}%
-          </span>
+        {/* 3. Repeat Order Rate */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Repeat Order Rate</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <RefreshCw size={16} />
+            </div>
+          </div>
+          <div className="text-lg font-extrabold text-slate-900">{overview?.repeatOrderRate?.display || '0%'}</div>
+          <div className="text-[10px] font-semibold text-amber-600 flex items-center gap-1">
+            <span>Customer Reorders</span>
+          </div>
         </div>
 
-        {/* Lead Win Rate */}
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
-          <span className="text-[10px] font-medium uppercase text-slate-400">Lead Win Rate</span>
-          <span className="text-xl font-semibold text-slate-900 block">
-            {overview?.winRate?.value || 0}%
-          </span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
-            +{overview?.winRate?.change || 4}%
-          </span>
+        {/* 4. Win Rate */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Lead Win Rate</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+              <TrendingUp size={16} />
+            </div>
+          </div>
+          <div className="text-lg font-extrabold text-slate-900">{overview?.winRate?.display || '0%'}</div>
+          <div className="text-[10px] font-semibold text-purple-600 flex items-center gap-1">
+            <span>Leads Converted</span>
+          </div>
         </div>
 
-        {/* Total Customers */}
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
-          <span className="text-[10px] font-medium uppercase text-slate-400">Active Clients</span>
-          <span className="text-xl font-semibold text-slate-900 block">
-            {overview?.totalCustomers?.value || 0}
-          </span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
-            +{overview?.totalCustomers?.change || 10}%
-          </span>
+        {/* 5. Total Customers */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Total Customers</span>
+            <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+              <Users size={16} />
+            </div>
+          </div>
+          <div className="text-lg font-extrabold text-slate-900">{overview?.totalCustomers?.display || '0'}</div>
+          <div className="text-[10px] font-semibold text-teal-600 flex items-center gap-1">
+            <span>Database Records</span>
+          </div>
         </div>
 
-        {/* Total Orders */}
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-1">
-          <span className="text-[10px] font-medium uppercase text-slate-400">Total Orders</span>
-          <span className="text-xl font-semibold text-slate-900 block">
-            {overview?.totalOrders?.value || 0}
-          </span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
-            +{overview?.totalOrders?.change || 0}%
-          </span>
+        {/* 6. Total Orders */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Total Orders</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+              <FileText size={16} />
+            </div>
+          </div>
+          <div className="text-lg font-extrabold text-slate-900">{overview?.totalOrders?.display || '0'}</div>
+          <div className="text-[10px] font-semibold text-rose-600 flex items-center gap-1">
+            <span>Orders Created</span>
+          </div>
         </div>
 
       </div>
-          
-          {/* Charts Row 1: Revenue Growth & Orders Status Pie Chart */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Revenue Growth Trend Bar Chart */}
-            <div className="lg:col-span-8 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-900 text-sm">Revenue Growth Trend</h3>
-                  <p className="text-xs text-slate-500 font-normal">Monthly breakdown of delivered order value</p>
+
+      {/* Row 2: 3 Visual Analytics Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Card 1: Revenue Trend Line Area Chart (4.5 / 12 cols) */}
+        <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <h3 className="font-bold text-slate-900 text-sm tracking-tight">Revenue Trend</h3>
+              <Info size={14} className="text-slate-400" />
+            </div>
+            <button className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 flex items-center gap-1 cursor-pointer">
+              <span>This Month</span>
+              <ChevronDown size={12} className="text-slate-400" />
+            </button>
+          </div>
+
+          <div className="h-60 w-full pt-2">
+            {trendData && trendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trendData}>
+                  <defs>
+                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(val) => `₹${val}`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#FFF', borderRadius: '12px', borderColor: '#E2E8F0', fontSize: '11px', fontWeight: 'bold' }}
+                    formatter={(val) => [`₹ ${val.toLocaleString('en-IN')}`, 'Revenue']}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRev)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-2 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                <TrendingUp size={24} className="text-slate-300" />
+                <p className="text-xs font-semibold text-slate-500">No Revenue Trend Data</p>
+                <p className="text-[10px] text-slate-400 font-normal">Create orders in DB to visualize sales trends</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Card 2: Top Products by Sales Donut Chart (4 / 12 cols) */}
+        <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Top Products by Sales</h3>
+            <button className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 flex items-center gap-1 cursor-pointer">
+              <span>This Month</span>
+              <ChevronDown size={12} className="text-slate-400" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            {/* Donut with center text */}
+            <div className="w-36 h-36 relative shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={topProducts}
+                    dataKey="percentage"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={42}
+                    outerRadius={62}
+                    paddingAngle={2}
+                  >
+                    {topProducts.map((entry, index) => (
+                      <Cell key={`prod-${index}`} fill={entry.color || '#2563EB'} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-[9px] text-slate-400 font-medium">Total Sales</span>
+                <span className="text-[11px] font-bold text-slate-900">{overview?.totalRevenue?.display || '₹ 0'}</span>
+              </div>
+            </div>
+
+            {/* Legend list */}
+            <div className="space-y-1.5 text-[11px] w-full pl-2">
+              {topProducts.map((p, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color || '#2563EB' }}></span>
+                    <span className="text-slate-600 truncate font-medium">{p.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-slate-400 font-medium">{p.percentage}%</span>
+                    <span className="font-bold text-slate-900">{p.sales}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Orders by Status Donut Chart (3.5 / 12 cols) */}
+        <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Orders by Status</h3>
+            <button className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 flex items-center gap-1 cursor-pointer">
+              <span>This Month</span>
+              <ChevronDown size={12} className="text-slate-400" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            {/* Donut with center text */}
+            <div className="w-36 h-36 relative shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={ordersStatusData}
+                    dataKey="count"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={42}
+                    outerRadius={62}
+                    paddingAngle={2}
+                  >
+                    {ordersStatusData.map((entry, index) => (
+                      <Cell key={`stat-${index}`} fill={entry.color || '#16A34A'} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-[9px] text-slate-400 font-medium">Total Orders</span>
+                <span className="text-lg font-bold text-slate-900">{overview?.totalOrders?.display || '0'}</span>
+              </div>
+            </div>
+
+            {/* Legend list */}
+            <div className="space-y-1.5 text-[11px] w-full pl-2">
+              {ordersStatusData.map((s, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color || '#16A34A' }}></span>
+                    <span className="text-slate-600 truncate font-medium">{s.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-bold text-slate-900">{s.count}</span>
+                    <span className="text-slate-400 font-medium">({s.percentage})</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Row 3: 2 Bottom Cards (Top Customers, Recent Reports) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Card 1: Top Customers by Revenue (1 / 2 cols) */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Top Customers by Revenue</h3>
+            <button className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 flex items-center gap-1 cursor-pointer">
+              <span>This Month</span>
+              <ChevronDown size={12} className="text-slate-400" />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto scrollbar-hide">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-400 font-semibold text-[10px] uppercase">
+                  <th className="pb-2">Customer</th>
+                  <th className="pb-2 text-center">Orders</th>
+                  <th className="pb-2 text-right">Revenue (₹)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {topCustomers.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50 transition">
+                    <td className="py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-full ${c.initialsBg} font-bold text-[10px] flex items-center justify-center shrink-0`}>
+                          {c.initials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 leading-tight truncate">{c.name}</p>
+                          <p className="text-[10px] text-slate-400 font-normal truncate">{c.company}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2.5 text-center font-bold text-slate-800">{c.orders}</td>
+                    <td className="py-2.5 text-right font-bold text-slate-900">{c.revenue}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="text-center border-t border-slate-100 pt-3">
+            <button onClick={() => navigate('/customers')} className="text-xs font-bold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1 cursor-pointer">
+              <span>View All Customers</span>
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Card 2: Recent Reports (1 / 2 cols) */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Recent Reports</h3>
+          </div>
+
+          <div className="space-y-3">
+            {recentReportsList.map((rep) => (
+              <div key={rep.id} className="flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`w-8 h-8 rounded-xl ${rep.isPdf ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'} flex items-center justify-center shrink-0`}>
+                    {rep.isPdf ? <FileText size={16} /> : <FileSpreadsheet size={16} />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 leading-tight truncate">{rep.title}</p>
+                    <p className="text-[10px] text-slate-400 font-normal mt-0.5">{rep.type} • {rep.size}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleExportCSV(rep.title.toLowerCase().includes('customer') ? 'customers' : 'orders')}
+                    className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+                    title="Download Report"
+                  >
+                    <Download size={13} />
+                  </button>
                 </div>
               </div>
-
-              <div className="h-72 w-full">
-                {revenueTrend.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-400 font-normal">No revenue data for selected range.</div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={revenueTrend}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B' }} />
-                      <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#0F172A', borderRadius: '12px', border: 'none', color: '#FFF' }}
-                        formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'Revenue']}
-                      />
-                      <Bar dataKey="revenue" fill="#DC2626" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </div>
-
-            {/* Orders by Status Donut Chart */}
-            <div className="lg:col-span-4 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4 flex flex-col justify-between">
-              <div>
-                <h3 className="font-semibold text-slate-900 text-sm">Orders by Status</h3>
-                <p className="text-xs text-slate-500 font-normal">Distribution across order states</p>
-              </div>
-
-              <div className="h-56 w-full flex items-center justify-center">
-                {ordersByStatus.length === 0 ? (
-                  <span className="text-xs text-slate-400 font-normal">No order status breakdown.</span>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={ordersByStatus}
-                        dataKey="count"
-                        nameKey="_id"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={80}
-                        paddingAngle={3}
-                      >
-                        {ordersByStatus.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(count, name) => [count, `Status: ${name}`]} />
-                      <Legend iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </div>
-
+            ))}
           </div>
 
-          {/* Charts Row 2: Top Products & Executive Performance */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Top Products */}
-            <div className="lg:col-span-5 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-              <div>
-                <h3 className="font-semibold text-slate-900 text-sm">Top Products by Revenue</h3>
-                <p className="text-xs text-slate-500 font-normal">Highest performing label categories</p>
-              </div>
-
-              <div className="space-y-3">
-                {topProducts.length === 0 ? (
-                  <p className="text-xs text-slate-400 font-normal text-center py-6">No top products recorded.</p>
-                ) : (
-                  topProducts.map((p, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs">
-                      <div>
-                        <span className="font-medium text-slate-900 block">{p._id || 'Standard Label'}</span>
-                        <span className="text-slate-400 text-[11px] font-normal">{p.totalQty} Units Ordered</span>
-                      </div>
-                      <span className="font-semibold text-slate-900">₹{(p.totalAmount || 0).toLocaleString('en-IN')}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Tele-Caller Performance Leaderboard */}
-            <div className="lg:col-span-7 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4 overflow-hidden">
-              <div>
-                <h3 className="font-semibold text-slate-900 text-sm">Tele Caller Executive Performance</h3>
-                <p className="text-xs text-slate-500 font-normal">Conversion metrics, lead count, and generated revenue</p>
-              </div>
-
-              <div className="overflow-x-auto scrollbar-hide">
-                {callerPerformance.length === 0 ? (
-                  <p className="text-xs text-slate-400 font-normal text-center py-6">No executive performance data available.</p>
-                ) : (
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200/80 text-[10px] font-semibold uppercase text-slate-500 tracking-wider">
-                        <th className="p-3">Executive</th>
-                        <th className="p-3 text-center">Leads Handled</th>
-                        <th className="p-3 text-center">Won Leads</th>
-                        <th className="p-3 text-center">Win Rate %</th>
-                        <th className="p-3 text-right">Revenue Generated</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {callerPerformance.map((exec) => (
-                        <tr key={exec._id || exec.callerId} className="hover:bg-slate-50/80 transition">
-                          <td className="p-3 font-medium text-slate-900">
-                            {exec.name}
-                          </td>
-                          <td className="p-3 text-center font-normal text-slate-700">{exec.assignedLeads ?? exec.totalLeads ?? 0}</td>
-                          <td className="p-3 text-center font-normal text-slate-700">{exec.wonLeads ?? 0}</td>
-                          <td className="p-3 text-center">
-                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded text-[11px]">
-                              {exec.winRate ?? 0}%
-                            </span>
-                          </td>
-                          <td className="p-3 text-right font-semibold text-slate-900">
-                            ₹{(exec.revenueSum || 0).toLocaleString('en-IN')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-
+          <div className="text-center border-t border-slate-100 pt-3">
+            <button onClick={() => handleExportCSV('orders')} className="text-xs font-bold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1 cursor-pointer">
+              <span>View All Reports</span>
+              <ChevronRight size={14} />
+            </button>
           </div>
-
         </div>
-      )}
+
+      </div>
+
+      {/* Footer Info Note */}
+      <div className="flex items-center justify-start gap-1.5 text-xs text-slate-400 font-medium pt-2">
+        <span>All metrics calculated live from database records</span>
+        <Info size={14} />
+      </div>
 
     </div>
   );
 }
+

@@ -14,9 +14,14 @@ import {
   Key,
   Eye,
   EyeOff,
-  Lock
+  Lock,
+  Search,
+  Users as UsersIcon,
+  PhoneCall,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
-import { SkeletonTable } from '../components/ui/Skeleton';
+import { Skeleton, SkeletonTable, SkeletonStatsGrid } from '../components/ui/Skeleton';
 
 export default function Users() {
   const { user: currentUser, role: currentRole } = useAuth();
@@ -25,6 +30,7 @@ export default function Users() {
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -271,6 +277,13 @@ export default function Users() {
     }
   };
 
+  const getInitials = (nameStr) => {
+    if (!nameStr) return 'JS';
+    const parts = nameStr.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return nameStr.substring(0, 2).toUpperCase();
+  };
+
   const getRoleBadgeClass = (roleStr) => {
     switch (roleStr) {
       case 'super_admin':
@@ -278,38 +291,119 @@ export default function Users() {
       case 'manager':
         return 'bg-blue-50 text-blue-700 border-blue-200';
       default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     }
   };
 
+  const getAvatarBg = (roleStr) => {
+    switch (roleStr) {
+      case 'super_admin':
+        return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'manager':
+        return 'bg-blue-100 text-blue-700 border-blue-200';
+      default:
+        return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    }
+  };
+
+  // Filtered users list by search query
+  const filteredUsers = users.filter((u) => {
+    const nameMatch = (u.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const emailMatch = (u.email || '').toLowerCase().includes(searchQuery.toLowerCase());
+    return nameMatch || emailMatch;
+  });
+
+  // Calculate top KPI numbers
+  const totalCount = users.length;
+  const activeCallersCount = users.filter(u => u.role === 'caller' && u.status === 'active').length;
+  const managersCount = users.filter(u => u.role === 'manager' && u.status === 'active').length;
+  const superAdminCount = users.filter(u => u.role === 'super_admin').length;
+
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 font-sans">
+      
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">User Management & Accounts</h1>
-          <p className="text-slate-500 text-sm mt-1 font-normal">Manage team accounts, role privileges, caller status, and lead reassignments</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">User Accounts & Team Management</h1>
+          <p className="text-slate-500 text-sm mt-1 font-normal">Manage team access, role privileges, caller status, and lead reassignments</p>
         </div>
 
         {currentRole === 'super_admin' && (
           <button
             onClick={handleOpenAddModal}
-            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer"
+            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold text-xs rounded-xl shadow-2xs transition flex items-center gap-2 cursor-pointer shrink-0"
           >
             <UserPlus size={16} />
-            <span>Add User</span>
+            <span>Add User Account</span>
           </button>
         )}
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+      {/* Top Metrics Cards Row */}
+      {loading ? (
+        <SkeletonStatsGrid count={4} />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Total Accounts</span>
+              <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                <UsersIcon size={14} />
+              </div>
+            </div>
+            <span className="text-2xl font-extrabold text-slate-900 block">{totalCount}</span>
+            <span className="text-[11px] text-slate-400 font-normal">Registered Team Users</span>
+          </div>
+
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase text-emerald-600 tracking-wider">Active Callers</span>
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <PhoneCall size={14} />
+              </div>
+            </div>
+            <span className="text-2xl font-extrabold text-emerald-600 block">{activeCallersCount}</span>
+            <span className="text-[11px] text-slate-400 font-normal">Tele Executive Callers</span>
+          </div>
+
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase text-blue-600 tracking-wider">Active Managers</span>
+              <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <ShieldCheck size={14} />
+              </div>
+            </div>
+            <span className="text-2xl font-extrabold text-blue-600 block">{managersCount}</span>
+            <span className="text-[11px] text-slate-400 font-normal">Team Lead Managers</span>
+          </div>
+
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase text-purple-600 tracking-wider">Super Admins</span>
+              <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                <ShieldAlert size={14} />
+              </div>
+            </div>
+            <span className="text-2xl font-extrabold text-purple-600 block">{superAdminCount}</span>
+            <span className="text-[11px] text-slate-400 font-normal">System Administrators</span>
+          </div>
+
+        </div>
+      )}
+
+      {/* Filter & Search Bar */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        
+        {/* Dropdown Filters */}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          
           {/* Role Filter */}
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 focus:outline-none cursor-pointer"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
           >
             <option value="">All Roles</option>
             <option value="super_admin">Super Admin</option>
@@ -321,39 +415,49 @@ export default function Users() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 focus:outline-none cursor-pointer"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
           >
             <option value="">All Statuses</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+
         </div>
 
-        <div className="text-xs font-medium text-slate-500">
-          Showing <span className="text-slate-900 font-semibold">{users.length}</span> team accounts
+        {/* Real-time Search Input */}
+        <div className="relative w-full sm:w-64">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name or email..."
+            className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+          />
         </div>
+
       </div>
 
-      {/* Users List / Table */}
+      {/* Users List / Skeleton Table */}
       {loading ? (
-        <SkeletonTable rows={5} cols={6} />
-      ) : users.length === 0 ? (
-        <div className="min-h-[250px] bg-white rounded-2xl border border-slate-200 p-8 text-center flex flex-col items-center justify-center space-y-2">
+        <SkeletonTable rows={6} cols={6} />
+      ) : filteredUsers.length === 0 ? (
+        <div className="min-h-[250px] bg-white rounded-2xl border border-slate-200/80 p-8 text-center flex flex-col items-center justify-center space-y-2 shadow-2xs">
           <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
             <UserX size={24} />
           </div>
-          <h3 className="font-semibold text-slate-800 text-sm">No Users Found</h3>
-          <p className="text-xs text-slate-400 font-normal">No user accounts match the selected filter criteria.</p>
+          <h3 className="font-bold text-slate-900 text-sm">No Users Found</h3>
+          <p className="text-xs text-slate-500 font-normal">No user accounts match your search or selected filter criteria.</p>
         </div>
       ) : (
         <>
           {/* Desktop Table View */}
-          <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden scrollbar-hide">
-            <table className="w-full text-left border-collapse">
+          <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden scrollbar-hide">
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-semibold uppercase text-slate-500 tracking-wider">
-                  <th className="p-4">User Name</th>
-                  <th className="p-4">Contact Info</th>
+                <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-semibold uppercase text-slate-500 tracking-wider">
+                  <th className="p-4">Team User</th>
+                  <th className="p-4">Contact Details</th>
                   <th className="p-4">Role Privilege</th>
                   <th className="p-4">Status</th>
                   <th className="p-4">Last Active</th>
@@ -361,53 +465,70 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {users.map((u) => {
+                {filteredUsers.map((u) => {
                   const isSelf = loggedInUserId && loggedInUserId.toString() === u._id.toString();
+                  const initials = getInitials(u.name);
+                  const avatarBg = getAvatarBg(u.role);
 
                   return (
                     <tr key={u._id} className="hover:bg-slate-50/80 transition">
-                      <td className="p-4 font-semibold text-slate-900 text-sm">
-                        <div className="flex items-center gap-2">
-                          <span>{u.name}</span>
-                          {isSelf && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
-                              Logged-in User
-                            </span>
-                          )}
+                      
+                      {/* User Name & Initials Avatar */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-full ${avatarBg} border font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs`}>
+                            {initials}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-900 text-sm">{u.name}</span>
+                              {isSelf && (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-slate-400 font-normal">{u.role === 'caller' ? 'Tele Executive' : u.role === 'manager' ? 'Sales Manager' : 'Administrator'}</span>
+                          </div>
                         </div>
                       </td>
 
+                      {/* Contact Details */}
                       <td className="p-4">
-                        <span className="font-medium text-slate-800 block">{u.email}</span>
-                        <span className="text-slate-400 text-[11px] block">{u.phone || 'No phone'}</span>
+                        <span className="font-semibold text-slate-800 block">{u.email}</span>
+                        <span className="text-slate-400 text-[11px] block mt-0.5">{u.phone || 'No phone'}</span>
                       </td>
 
+                      {/* Role Privilege */}
                       <td className="p-4">
-                        <span className={`px-2.5 py-1 border text-[11px] font-medium rounded-lg uppercase ${getRoleBadgeClass(u.role)}`}>
+                        <span className={`px-2.5 py-1 border text-[10px] font-bold rounded-md uppercase ${getRoleBadgeClass(u.role)}`}>
                           {u.role.replace('_', ' ')}
                         </span>
                       </td>
 
+                      {/* Status */}
                       <td className="p-4">
-                        <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${
+                        <span className={`px-2.5 py-1 border text-[10px] font-bold rounded-md uppercase ${
                           u.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
                           {u.status}
                         </span>
                       </td>
 
+                      {/* Last Active */}
                       <td className="p-4 font-medium text-slate-600">
-                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN') : 'Never'}
+                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never'}
                       </td>
 
+                      {/* Actions */}
                       <td className="p-4 text-right">
-                        {/* Requirement: If logged-in user is Super Admin, leave Actions completely empty for their own row */}
                         {isSelf ? null : (
                           <div className="flex items-center justify-end gap-1.5">
+                            
                             {/* Edit Button */}
                             <button
                               onClick={() => handleOpenEditModal(u)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
                               title="Edit User Details"
                             >
                               <Edit size={12} />
@@ -418,7 +539,7 @@ export default function Users() {
                             {u.status === 'active' ? (
                               <button
                                 onClick={() => handleDeactivate(u)}
-                                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
                                 title="Deactivate Account"
                               >
                                 <UserX size={12} />
@@ -427,7 +548,7 @@ export default function Users() {
                             ) : (
                               <button
                                 onClick={() => handleActivateUser(u)}
-                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
                                 title="Activate Account"
                               >
                                 <UserCheck size={12} />
@@ -438,8 +559,8 @@ export default function Users() {
                             {/* Update Password Button */}
                             <button
                               onClick={() => handleOpenPasswordModal(u)}
-                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
-                              title="Update User Password"
+                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                              title="Update Password"
                             >
                               <Key size={12} />
                               <span>Password</span>
@@ -455,9 +576,11 @@ export default function Users() {
                                 <Trash2 size={14} />
                               </button>
                             )}
+
                           </div>
                         )}
                       </td>
+
                     </tr>
                   );
                 })}
@@ -467,58 +590,65 @@ export default function Users() {
 
           {/* Mobile Stacked Cards View */}
           <div className="md:hidden space-y-3">
-            {users.map((u) => {
+            {filteredUsers.map((u) => {
               const isSelf = loggedInUserId && loggedInUserId.toString() === u._id.toString();
+              const initials = getInitials(u.name);
+              const avatarBg = getAvatarBg(u.role);
 
               return (
-                <div key={u._id} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
-                        {u.name}
-                        {isSelf && <span className="text-[10px] font-normal text-slate-400">(You)</span>}
-                      </span>
-                      <p className="text-xs text-slate-500 font-normal">{u.email}</p>
+                <div key={u._id} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-full ${avatarBg} border font-bold text-xs flex items-center justify-center shrink-0`}>
+                        {initials}
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                          {u.name}
+                          {isSelf && <span className="text-[10px] font-normal text-slate-400">(You)</span>}
+                        </span>
+                        <p className="text-xs text-slate-500 font-normal">{u.email}</p>
+                      </div>
                     </div>
-                    <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${getRoleBadgeClass(u.role)}`}>
+
+                    <span className={`px-2 py-0.5 border text-[10px] font-bold rounded-md uppercase ${getRoleBadgeClass(u.role)}`}>
                       {u.role.replace('_', ' ')}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                    <span className={`px-2 py-0.5 border text-[10px] font-medium rounded uppercase ${
+                    <span className={`px-2 py-0.5 border text-[10px] font-bold rounded-md uppercase ${
                       u.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
                     }`}>
                       {u.status}
                     </span>
 
-                    {/* Actions on Mobile */}
                     {!isSelf && (
-                      <div className="space-x-1 flex items-center flex-wrap gap-1">
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleOpenEditModal(u)}
-                          className="px-2 py-1 bg-slate-100 text-slate-800 font-medium text-[10px] rounded-lg"
+                          className="px-2 py-1 bg-slate-100 text-slate-800 font-bold text-[10px] rounded-lg"
                         >
                           Edit
                         </button>
                         {u.status === 'active' ? (
                           <button
                             onClick={() => handleDeactivate(u)}
-                            className="px-2 py-1 bg-rose-50 text-rose-700 font-medium text-[10px] rounded-lg"
+                            className="px-2 py-1 bg-rose-50 text-rose-700 font-bold text-[10px] rounded-lg"
                           >
                             Deactivate
                           </button>
                         ) : (
                           <button
                             onClick={() => handleActivateUser(u)}
-                            className="px-2 py-1 bg-emerald-50 text-emerald-700 font-medium text-[10px] rounded-lg"
+                            className="px-2 py-1 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-lg"
                           >
                             Activate
                           </button>
                         )}
                         <button
                           onClick={() => handleOpenPasswordModal(u)}
-                          className="px-2 py-1 bg-blue-50 text-blue-700 font-medium text-[10px] rounded-lg"
+                          className="px-2 py-1 bg-blue-50 text-blue-700 font-bold text-[10px] rounded-lg"
                         >
                           Password
                         </button>
@@ -537,7 +667,7 @@ export default function Users() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-semibold text-slate-900 text-sm">
+              <h3 className="font-bold text-slate-900 text-sm">
                 {isEdit ? 'Edit User Details' : 'Create New User Account'}
               </h3>
               <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
@@ -547,7 +677,7 @@ export default function Users() {
 
             <form onSubmit={handleFormSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Full Name *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Full Name *</label>
                 <input
                   type="text"
                   required
@@ -559,7 +689,7 @@ export default function Users() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Email Address *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Email Address *</label>
                 <input
                   type="email"
                   required
@@ -571,7 +701,7 @@ export default function Users() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Phone Number</label>
+                <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
                 <input
                   type="text"
                   value={formData.phone}
@@ -582,7 +712,7 @@ export default function Users() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Role Privilege *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Role Privilege *</label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
@@ -595,7 +725,7 @@ export default function Users() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">
+                <label className="block font-semibold text-slate-700 mb-1">
                   {isEdit ? 'New Password (optional - leave blank to keep current)' : 'Account Password *'}
                 </label>
                 <input
@@ -619,7 +749,7 @@ export default function Users() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium shadow-xs disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? 'Saving...' : isEdit ? 'Update User' : 'Create User'}
                 </button>
@@ -634,7 +764,7 @@ export default function Users() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                 <Key size={16} className="text-blue-600" />
                 <span>Update Password for {passwordUser.name}</span>
               </h3>
@@ -652,7 +782,7 @@ export default function Users() {
 
             <form onSubmit={handlePasswordSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">New Password *</label>
+                <label className="block font-semibold text-slate-700 mb-1">New Password *</label>
                 <div className="relative flex items-center">
                   <Lock className="absolute left-3 text-slate-400" size={16} />
                   <input
@@ -674,7 +804,7 @@ export default function Users() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Confirm New Password *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Confirm New Password *</label>
                 <div className="relative flex items-center">
                   <Lock className="absolute left-3 text-slate-400" size={16} />
                   <input
@@ -699,7 +829,7 @@ export default function Users() {
                 <button
                   type="submit"
                   disabled={isUpdatingPassword}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium shadow-xs disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
                 >
                   {isUpdatingPassword ? 'Updating...' : 'Update Password'}
                 </button>
@@ -714,7 +844,7 @@ export default function Users() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-semibold text-slate-900">Reassignment Required</h3>
+              <h3 className="text-base font-bold text-slate-900">Reassignment Required</h3>
               <button
                 onClick={() => { setDeactivateTargetUser(null); setOpenItemsData(null); }}
                 className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
@@ -724,17 +854,17 @@ export default function Users() {
             </div>
 
             <p className="text-xs text-slate-600 font-normal">
-              User <span className="font-semibold text-slate-900">{deactivateTargetUser.name}</span> currently has assigned items:
+              User <span className="font-bold text-slate-900">{deactivateTargetUser.name}</span> currently has assigned items:
             </p>
 
             <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs space-y-1">
-              <p className="font-semibold text-amber-900">Open Leads: {openItemsData.openLeadsCount}</p>
-              <p className="font-semibold text-amber-900">Open Follow-ups: {openItemsData.openFollowupsCount}</p>
+              <p className="font-bold text-amber-900">Open Leads: {openItemsData.openLeadsCount}</p>
+              <p className="font-bold text-amber-900">Open Follow-ups: {openItemsData.openFollowupsCount}</p>
             </div>
 
             <form onSubmit={handleReassignSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Reassign All Items To:</label>
+                <label className="block font-semibold text-slate-700 mb-1">Reassign All Items To:</label>
                 <select
                   required
                   value={reassignTo}
@@ -764,7 +894,7 @@ export default function Users() {
                 <button
                   type="submit"
                   disabled={isSubmittingReassign || !reassignTo}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium shadow-xs disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmittingReassign ? 'Processing...' : 'Reassign & Deactivate'}
                 </button>
@@ -777,3 +907,4 @@ export default function Users() {
     </div>
   );
 }
+

@@ -3,7 +3,57 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Settings as SettingsIcon, Save, Clock, Bell, UserCheck, FileText, AlertTriangle } from 'lucide-react';
+import {
+  Settings as SettingsIcon,
+  Save,
+  Clock,
+  Bell,
+  UserCheck,
+  FileText,
+  AlertTriangle,
+  Sparkles,
+  Check
+} from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
+
+function SettingsSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      {/* Section 1 Skeleton */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+        <Skeleton className="h-6 w-64" />
+        <Skeleton className="h-4 w-96" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-xl" />
+        </div>
+      </div>
+
+      {/* Section 2 Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-3">
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="h-10 w-full rounded-xl" />
+        </div>
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-3">
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="h-10 w-full rounded-xl" />
+        </div>
+      </div>
+
+      {/* Section 3 Skeleton */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+        <Skeleton className="h-6 w-64" />
+        <div className="space-y-3">
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Settings() {
   const { user } = useAuth();
@@ -114,84 +164,96 @@ export default function Settings() {
     }
   };
 
+  const copyVariable = (varName) => {
+    navigator.clipboard.writeText(`{{${varName}}}`);
+    notify.success(`Copied placeholder {{${varName}}} to clipboard`);
+  };
+
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 font-sans">
+      
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">System Settings & Automation Configuration</h1>
-          <p className="text-slate-500 text-sm mt-1 font-normal">Configure escalation timing thresholds, reminder lead milestones, notification templates, and lead routing rules</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">System Settings & Automation Rules</h1>
+          <p className="text-slate-500 text-sm mt-1 font-normal">Configure escalation timing thresholds, reminder lead milestones, notification templates, and lead routing strategies</p>
         </div>
 
-        <div className="px-3.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-medium uppercase tracking-wider">
+        <div className="px-3.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs font-bold uppercase tracking-wider shrink-0">
           Super Admin Console
         </div>
       </div>
 
       {loading ? (
-        <div className="min-h-[300px] flex items-center justify-center bg-white rounded-2xl border border-slate-200">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 text-xs font-medium">Loading System Configurations...</p>
-          </div>
-        </div>
+        <SettingsSkeleton />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
           
           {/* Section 1: Escalation Timing */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-            <div className="border-b border-slate-100 pb-3 flex flex-wrap items-start justify-between gap-2">
+          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="border-b border-slate-100 pb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <Clock size={16} className="text-slate-500" />
                   <span>1. Follow-up Escalation Delays (Hours)</span>
                 </h3>
-                <p className="text-xs text-slate-500 font-normal">Set overdue hours required to trigger stage transitions. Must be strictly ascending.</p>
+                <p className="text-xs text-slate-500 font-normal mt-0.5">Set overdue hours required to trigger stage transitions. Must be strictly ascending.</p>
               </div>
-              {!isEscalationValid && (
-                <span className="text-xs font-medium text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 whitespace-nowrap flex items-center gap-1">
+
+              {!isEscalationValid ? (
+                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1 rounded-xl border border-rose-200 whitespace-nowrap flex items-center gap-1.5">
                   <AlertTriangle size={14} />
-                  <span>Warning &lt; Escalation &lt; MD Review</span>
+                  <span>Warning &lt; Escalation &lt; MD Review Required</span>
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 whitespace-nowrap flex items-center gap-1.5">
+                  <Check size={14} />
+                  <span>Threshold Hours Valid</span>
                 </span>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Stage 1: Warning Delay (Hours)</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+              
+              <div className="p-4 bg-amber-50/40 border border-amber-200/80 rounded-xl space-y-2">
+                <label className="block text-xs font-bold text-amber-900">Stage 1: Warning Delay (Hours)</label>
                 <input
                   type="number"
                   min="1"
                   required
                   value={escalationHours.warning}
                   onChange={(e) => setEscalationHours({ ...escalationHours, warning: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
                 />
+                <span className="text-[10px] text-amber-700 font-medium block">Default: 24h</span>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Stage 2: Escalation Delay (Hours)</label>
+              <div className="p-4 bg-rose-50/40 border border-rose-200/80 rounded-xl space-y-2">
+                <label className="block text-xs font-bold text-rose-900">Stage 2: Escalation Delay (Hours)</label>
                 <input
                   type="number"
                   min="1"
                   required
                   value={escalationHours.escalation}
                   onChange={(e) => setEscalationHours({ ...escalationHours, escalation: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-white border border-rose-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-rose-500"
                 />
+                <span className="text-[10px] text-rose-700 font-medium block">Default: 48h</span>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Stage 3: MD Review Delay (Hours)</label>
+              <div className="p-4 bg-purple-50/40 border border-purple-200/80 rounded-xl space-y-2">
+                <label className="block text-xs font-bold text-purple-900">Stage 3: MD Review Delay (Hours)</label>
                 <input
                   type="number"
                   min="1"
                   required
                   value={escalationHours.mdReview}
                   onChange={(e) => setEscalationHours({ ...escalationHours, mdReview: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500"
                 />
+                <span className="text-[10px] text-purple-700 font-medium block">Default: 72h</span>
               </div>
+
             </div>
           </div>
 
@@ -199,48 +261,50 @@ export default function Settings() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Reminder Lead Days */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
               <div className="border-b border-slate-100 pb-3">
-                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <Bell size={16} className="text-slate-500" />
                   <span>2. Reorder Reminder Lead Milestones (Days)</span>
                 </h3>
-                <p className="text-xs text-slate-500 font-normal">Comma-separated list of days before expected reorder date to dispatch reminders</p>
+                <p className="text-xs text-slate-500 font-normal mt-0.5">Comma-separated list of days before expected reorder date to dispatch reminders</p>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Milestone Days (Comma Separated)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Milestone Days (Comma Separated)</label>
                 <input
                   type="text"
                   required
                   value={leadDaysStr}
                   onChange={(e) => setLeadDaysStr(e.target.value)}
                   placeholder="7, 3, 0"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
                 />
-                <span className="text-[11px] text-slate-400 mt-1 block font-normal">e.g. "7, 3, 0" sends reminders 7 days prior, 3 days prior, and on due date.</span>
+                <span className="text-[11px] text-slate-400 mt-1.5 block font-normal leading-relaxed">
+                  Example: "7, 3, 0" sends automated reminders 7 days prior, 3 days prior, and on the due date.
+                </span>
               </div>
             </div>
 
             {/* Auto Assignment Rule */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
               <div className="border-b border-slate-100 pb-3">
-                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <UserCheck size={16} className="text-slate-500" />
-                  <span>3. Lead Auto-Assignment Routing</span>
+                  <span>3. Lead Auto-Assignment Routing Strategy</span>
                 </h3>
-                <p className="text-xs text-slate-500 font-normal">Rule used to automatically assign incoming website and tele-caller leads</p>
+                <p className="text-xs text-slate-500 font-normal mt-0.5">Rule used to automatically assign incoming website and tele-caller leads</p>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Assignment Rule Strategy</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Assignment Strategy</label>
                 <select
                   value={autoAssignmentRule}
                   onChange={(e) => setAutoAssignmentRule(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500 cursor-pointer"
                 >
-                  <option value="round_robin">Round Robin (Distribute sequentially to all active callers)</option>
-                  <option value="load_based">Load Based (Assign to caller with lowest open lead count)</option>
+                  <option value="round_robin">Round Robin (Distribute sequentially across all active callers)</option>
+                  <option value="load_based">Load Based (Assign to active caller with lowest open lead count)</option>
                 </select>
               </div>
             </div>
@@ -248,43 +312,59 @@ export default function Settings() {
           </div>
 
           {/* Section 3: Notification Templates */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
-                <FileText size={16} className="text-slate-500" />
-                <span>4. Notification Templates & Placeholders</span>
-              </h3>
-              <p className="text-xs text-slate-500 font-normal">Supported variables: &#123;&#123;customerName&#125;&#125;, &#123;&#123;company&#125;&#125;, &#123;&#123;expectedReorderDate&#125;&#125;, &#123;&#123;probability&#125;&#125;, &#123;&#123;followUpId&#125;&#125;, &#123;&#123;hoursOverdue&#125;&#125;</p>
+          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="border-b border-slate-100 pb-3 flex flex-col md:flex-row md:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <FileText size={16} className="text-slate-500" />
+                  <span>4. Notification Templates & Variable Placeholders</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-normal mt-0.5">Click any variable chip below to copy to clipboard for template customization</p>
+              </div>
+
+              {/* Variable Chips */}
+              <div className="flex flex-wrap gap-1.5">
+                {['customerName', 'company', 'expectedReorderDate', 'probability', 'followUpId', 'hoursOverdue'].map((varName) => (
+                  <button
+                    key={varName}
+                    type="button"
+                    onClick={() => copyVariable(varName)}
+                    className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[10px] rounded-md transition cursor-pointer"
+                  >
+                    &#123;&#123;{varName}&#125;&#125;
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">WhatsApp Reorder Reminder Template</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Reorder Reminder Template</label>
                 <textarea
                   rows="2"
                   value={templates.reorderWhatsapp}
                   onChange={(e) => setTemplates({ ...templates, reorderWhatsapp: e.target.value })}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 font-mono font-normal"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 font-mono font-medium focus:ring-2 focus:ring-red-500"
                 ></textarea>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Email Reorder Reminder Template</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Email Reorder Reminder Template</label>
                 <textarea
                   rows="3"
                   value={templates.reorderEmail}
                   onChange={(e) => setTemplates({ ...templates, reorderEmail: e.target.value })}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 font-mono font-normal"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 font-mono font-medium focus:ring-2 focus:ring-red-500"
                 ></textarea>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Escalation Alert Email Template</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Escalation Alert Email Template</label>
                 <textarea
                   rows="2"
                   value={templates.escalationEmail}
                   onChange={(e) => setTemplates({ ...templates, escalationEmail: e.target.value })}
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 font-mono font-normal"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 font-mono font-medium focus:ring-2 focus:ring-red-500"
                 ></textarea>
               </div>
             </div>
@@ -295,10 +375,10 @@ export default function Settings() {
             <button
               type="submit"
               disabled={isSaving || !isEscalationValid}
-              className="px-6 py-3 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs rounded-xl shadow-md transition disabled:opacity-50 flex items-center gap-2"
+              className="px-6 py-3 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-xs rounded-xl shadow-2xs transition disabled:opacity-50 flex items-center gap-2 cursor-pointer"
             >
               <Save size={16} />
-              <span>{isSaving ? 'Saving Configurations...' : 'Save Settings & Configurations'}</span>
+              <span>{isSaving ? 'Saving Configurations...' : 'Save System Settings'}</span>
             </button>
           </div>
 
@@ -308,3 +388,4 @@ export default function Settings() {
     </div>
   );
 }
+

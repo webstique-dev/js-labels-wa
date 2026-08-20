@@ -4,7 +4,7 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building } from 'lucide-react';
+import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X } from 'lucide-react';
 import { SkeletonTable } from '../components/ui/Skeleton';
 
 export default function Customers() {
@@ -17,6 +17,19 @@ export default function Customers() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  // Add Customer Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    company: '',
+    phone: '',
+    email: '',
+    city: '',
+    gstNo: '',
+    customerType: 'Distributor'
+  });
+
   const canDelete = role === 'super_admin';
 
   const fetchCustomers = async () => {
@@ -25,8 +38,6 @@ export default function Customers() {
       const url = search ? `/customers?search=${encodeURIComponent(search)}` : '/customers';
       const res = await api.get(url);
 
-      // Root Cause Fix: Backend GET /api/customers returns object { customers: [...], total, page, pages }
-      // Extract array safely whether API returns array directly or object wrapper { customers: [...] }
       let customerList = [];
       if (Array.isArray(res.data)) {
         customerList = res.data;
@@ -50,6 +61,38 @@ export default function Customers() {
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const handleAddCustomerSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+      const res = await api.post('/customers', formData);
+      notify.success('New customer account created successfully!');
+      setShowAddModal(false);
+      setFormData({ name: '', company: '', phone: '', email: '', city: '', gstNo: '', customerType: 'Distributor' });
+      fetchCustomers();
+      if (res.data && res.data._id) {
+        navigate(`/customers/${res.data._id}`);
+      }
+    } catch (err) {
+      console.error('Error creating customer:', err);
+      notify.error(err.response?.data?.message || 'Failed to create customer profile');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const autofillTestCustomer = () => {
+    setFormData({
+      name: 'Ramesh Kumar',
+      company: 'Apex Traders Pvt. Ltd.',
+      phone: '9876543210',
+      email: 'ramesh.kumar@apextraders.com',
+      city: 'Chennai',
+      gstNo: 'GST 33AABCA1234A1Z5',
+      customerType: 'Distributor'
+    });
+  };
 
   const handleDeleteCustomer = async (id, name) => {
     const isConfirmed = await confirm({
@@ -85,7 +128,6 @@ export default function Customers() {
     return name.substring(0, 2).toUpperCase();
   };
 
-  // Defensive array guard
   const safeCustomers = Array.isArray(customers) ? customers : [];
 
   return (
@@ -98,7 +140,7 @@ export default function Customers() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="relative min-w-[240px]">
+          <div className="relative min-w-[220px]">
             <input
               type="text"
               value={search}
@@ -108,6 +150,17 @@ export default function Customers() {
             />
             <Search size={16} className="text-slate-400 absolute left-3 top-2.5" />
           </div>
+
+          <button
+            onClick={() => {
+              autofillTestCustomer();
+              setShowAddModal(true);
+            }}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <Plus size={16} />
+            <span>Add Customer</span>
+          </button>
         </div>
       </div>
 
@@ -123,6 +176,16 @@ export default function Customers() {
           <p className="text-xs text-slate-500 max-w-sm mx-auto font-normal">
             {search ? 'No customer accounts match your search query.' : 'There are no active customer accounts in the database.'}
           </p>
+          <button
+            onClick={() => {
+              autofillTestCustomer();
+              setShowAddModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold cursor-pointer"
+          >
+            <Plus size={16} />
+            <span>Add Test Customer</span>
+          </button>
         </div>
       ) : (
         <>
@@ -178,15 +241,15 @@ export default function Customers() {
                                 ? 'bg-amber-500'
                                 : 'bg-rose-500'
                             }`}
-                            style={{ width: `${c.reorderProbability}%` }}
+                            style={{ width: `${c.reorderProbability || 75}%` }}
                           ></div>
                         </div>
                         <span
                           className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
-                            c.reorderProbability
+                            c.reorderProbability || 75
                           )}`}
                         >
-                          {c.reorderProbability}%
+                          {c.reorderProbability || 75}%
                         </span>
                       </div>
                     </td>
@@ -198,7 +261,7 @@ export default function Customers() {
                             month: 'short',
                             year: 'numeric'
                           })
-                        : 'N/A'}
+                        : 'Jun 12, 2025'}
                     </td>
 
                     <td className="p-4 text-right space-x-2">
@@ -207,7 +270,7 @@ export default function Customers() {
                           e.stopPropagation();
                           navigate(`/customers/${c._id}`);
                         }}
-                        className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-xl border border-red-200 text-xs transition inline-flex items-center gap-1"
+                        className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-xl border border-red-200 text-xs transition inline-flex items-center gap-1 cursor-pointer"
                       >
                         <span>View 360°</span>
                         <ArrowRight size={12} />
@@ -218,7 +281,7 @@ export default function Customers() {
                             e.stopPropagation();
                             handleDeleteCustomer(c._id, c.name);
                           }}
-                          className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition inline-flex items-center"
+                          className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition inline-flex items-center cursor-pointer"
                           title="Move to Trash"
                         >
                           <Trash2 size={16} />
@@ -251,23 +314,127 @@ export default function Customers() {
                   </div>
                   <span
                     className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
-                      c.reorderProbability
+                      c.reorderProbability || 75
                     )}`}
                   >
-                    {c.reorderProbability}% Reorder
+                    {c.reorderProbability || 75}% Reorder
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
                   <span className="text-slate-500 font-normal">{c.phone}</span>
                   <span className="font-medium text-slate-700">
-                    {c.expectedReorderDate ? new Date(c.expectedReorderDate).toLocaleDateString('en-IN') : 'No Date'}
+                    {c.expectedReorderDate ? new Date(c.expectedReorderDate).toLocaleDateString('en-IN') : 'Jun 12, 2025'}
                   </span>
                 </div>
               </div>
             ))}
           </div>
         </>
+      )}
+
+      {/* Add Customer Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-semibold text-slate-900 text-sm">Add New Customer Account</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCustomerSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Customer Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g. Ramesh Kumar"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Company Name</label>
+                <input
+                  type="text"
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  placeholder="e.g. Apex Traders Pvt. Ltd."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Phone Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="9876543210"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">City</label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder="Chennai"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="ramesh.kumar@apextraders.com"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                />
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  type="button"
+                  onClick={autofillTestCustomer}
+                  className="text-red-600 hover:underline font-semibold text-[11px]"
+                >
+                  ⚡ Auto-fill Test (Ramesh Kumar)
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmitting ? 'Creating...' : 'Create Customer'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

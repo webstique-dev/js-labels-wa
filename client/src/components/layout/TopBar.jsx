@@ -188,7 +188,7 @@ export default function TopBar() {
             onFocus={() => {
               if (searchResults) setIsSearchOpen(true);
             }}
-            placeholder="Search leads, customers, orders, products..."
+            placeholder="Search leads, customers, orders..."
             className="w-full pl-10 pr-9 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:bg-white transition duration-150 font-medium"
           />
 
@@ -298,34 +298,8 @@ export default function TopBar() {
                 </div>
               )}
 
-              {/* Products Results */}
-              {searchResults.products?.length > 0 && (
-                <div className="p-3">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    <Tag size={12} />
-                    <span>Products ({searchResults.products.length})</span>
-                  </div>
-                  <div className="space-y-1">
-                    {searchResults.products.map((p) => (
-                      <Link
-                        key={p._id}
-                        to="/products"
-                        onClick={() => setIsSearchOpen(false)}
-                        className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg text-xs transition"
-                      >
-                        <div>
-                          <span className="font-semibold text-slate-900 block">{p.name}</span>
-                          <span className="text-slate-400 text-[11px] font-normal">{p.category}</span>
-                        </div>
-                        <span className="font-semibold text-slate-800 text-xs">₹{p.unitPrice}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* No Results Found State */}
-              {(!searchResults.leads?.length && !searchResults.customers?.length && !searchResults.orders?.length && !searchResults.products?.length) && (
+              {(!searchResults.leads?.length && !searchResults.customers?.length && !searchResults.orders?.length) && (
                 <div className="p-8 text-center text-xs text-slate-400 font-normal">
                   No matching records found for "{searchQuery}"
                 </div>
