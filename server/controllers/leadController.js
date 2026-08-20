@@ -1,6 +1,7 @@
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const User = require('../models/User');
+const FollowUp = require('../models/FollowUp');
 
 // GET /api/leads
 const getLeads = async (req, res) => {
@@ -51,15 +52,30 @@ const createLead = async (req, res) => {
       return res.status(400).json({ message: 'Lead name and phone number are required' });
     }
 
+    const cleanPhone = phone.toString().replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      return res.status(400).json({ message: 'Phone number must be exactly 10 digits' });
+    }
+
+    if (email && email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        return res.status(400).json({ message: 'Please enter a valid email address' });
+      }
+    }
+
+    const finalAssignedTo = req.user.role === 'caller' ? req.user.id : (assignedTo || req.user.id);
+    const finalSource = (source && source.trim()) ? source.trim() : null;
+
     const newLead = await Lead.create({
-      name,
-      company,
-      phone,
-      email,
-      source: source || 'website',
+      name: name.trim(),
+      company: company ? company.trim() : undefined,
+      phone: cleanPhone,
+      email: email ? email.trim().toLowerCase() : undefined,
+      source: finalSource,
       priority: priority || 'medium',
       status: 'new',
-      assignedTo: assignedTo || req.user.id,
+      assignedTo: finalAssignedTo,
       createdBy: req.user.id
     });
 
@@ -87,7 +103,7 @@ const createLead = async (req, res) => {
 const updateLeadStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, cancelReason } = req.body;
+    const { status, cancelReason, followUpDate, followUpTime, notes } = req.body;
 
     const validStatuses = ['new', 'contacted', 'follow_up', 'won', 'cancelled'];
     if (!status || !validStatuses.includes(status)) {
@@ -108,7 +124,25 @@ const updateLeadStatus = async (req, res) => {
       return res.status(403).json({ message: 'Forbidden: You can only update leads assigned to you' });
     }
 
-    const oldStatus = lead.status;
+    const ALLOWED_TRANSITIONS = {
+      new: ['contacted', 'follow_up', 'won', 'cancelled'],
+      contacted: ['new', 'follow_up', 'won', 'cancelled'],
+      follow_up: ['new', 'contacted', 'follow_up', 'won', 'cancelled'],
+      won: ['new', 'contacted', 'follow_up', 'cancelled'],
+      cancelled: ['new', 'contacted', 'follow_up', 'won']
+    };
+
+    const oldStatus = lead.status || 'new';
+
+    if (oldStatus !== status) {
+      const allowedNext = ALLOWED_TRANSITIONS[oldStatus] || [];
+      if (!allowedNext.includes(status)) {
+        return res.status(400).json({
+          message: `Invalid lead status transition from '${oldStatus}' to '${status}'`
+        });
+      }
+    }
+
     lead.status = status;
     if (status === 'cancelled') {
       lead.cancelReason = cancelReason;
@@ -117,6 +151,45 @@ const updateLeadStatus = async (req, res) => {
     }
 
     await lead.save();
+
+    // If moving to follow_up, create a FollowUp document to sync with Followups List and Details pages
+    if (status === 'follow_up') {
+      let dueDate = new Date();
+      if (followUpDate && followUpTime) {
+        dueDate = new Date(`${followUpDate}T${followUpTime}`);
+      } else if (followUpDate) {
+        dueDate = new Date(followUpDate);
+      }
+
+      await FollowUp.create({
+        relatedType: 'lead',
+        relatedId: lead._id,
+        dueDate: isNaN(dueDate.getTime()) ? new Date() : dueDate,
+        notes: notes || '',
+        status: 'open',
+        assignedTo: lead.assignedTo || req.user.id
+      });
+    }
+
+    // If moving to won, create a Customer document if not already existing
+    if (status === 'won') {
+      const Customer = require('../models/Customer');
+      const existingCust = await Customer.findOne({ $or: [{ leadId: lead._id }, { phone: lead.phone }] });
+      if (!existingCust) {
+        await Customer.create({
+          name: lead.name,
+          company: lead.company,
+          phone: lead.phone,
+          email: lead.email,
+          leadId: lead._id,
+          salesExecutive: lead.assignedTo || req.user.id,
+          customerType: 'Regular',
+          paymentTerms: '30 Days',
+          reorderProbability: 75,
+          expectedReorderDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        });
+      }
+    }
 
     // Create activity audit entry
     await Activity.create({

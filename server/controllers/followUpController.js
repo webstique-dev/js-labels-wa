@@ -35,6 +35,16 @@ const getFollowUps = async (req, res) => {
       .sort({ dueDate: 1 });
 
     const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+    const summary = {
+      total: rawFollowUps.length,
+      open: 0,
+      dueToday: 0,
+      overdue: 0,
+      completed: 0
+    };
 
     // Populate related record (Lead or Customer) manually if ref path dynamic
     let populatedItems = await Promise.all(
@@ -50,11 +60,21 @@ const getFollowUps = async (req, res) => {
 
         itemObj.relatedRecord = relatedObj;
 
-        // Compute on-the-fly overdue status
+        // Compute on-the-fly overdue status & summary stats
         const dueDate = new Date(f.dueDate);
-        let computedStatus = f.status;
-        if (f.status === 'open' && dueDate < now) {
-          computedStatus = 'overdue';
+        let computedStatus = f.status === 'done' ? 'completed' : f.status;
+        if (f.status === 'open') {
+          if (dueDate < now) {
+            computedStatus = 'overdue';
+            summary.overdue += 1;
+          } else {
+            summary.open += 1;
+            if (dueDate >= todayStart && dueDate <= todayEnd) {
+              summary.dueToday += 1;
+            }
+          }
+        } else if (f.status === 'done' || f.status === 'completed') {
+          summary.completed += 1;
         }
 
         itemObj.status = computedStatus;
@@ -66,10 +86,13 @@ const getFollowUps = async (req, res) => {
 
     // Filter by status if requested
     if (status) {
-      populatedItems = populatedItems.filter((i) => i.status === status.toLowerCase());
+      populatedItems = populatedItems.filter((i) => (i.status || '').toLowerCase() === status.toLowerCase());
     }
 
-    return res.json(populatedItems);
+    return res.json({
+      followups: populatedItems,
+      summary
+    });
   } catch (error) {
     console.error('Error fetching followUps list:', error);
     return res.status(500).json({ message: 'Server error fetching followUps' });

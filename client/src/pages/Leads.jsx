@@ -14,7 +14,7 @@ import {
   ArrowRight,
   Trash2,
   Phone,
-  MessageSquare,
+  MessageCircle,
   Mail,
   UserCheck,
   AlertTriangle,
@@ -33,6 +33,9 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { Skeleton, SkeletonCard } from '../components/ui/Skeleton';
+import { initiatePhoneCall, openWhatsApp, openEmail, WhatsAppIcon } from '../utils/contactUtils';
+import CustomDatePicker from '../components/ui/DatePicker';
+import CustomTimePicker from '../components/ui/TimePicker';
 
 const COLUMNS = [
   {
@@ -73,7 +76,7 @@ const COLUMNS = [
   },
   {
     id: 'cancelled',
-    title: 'Cancelled',
+    title: 'Rejected',
     icon: XCircle,
     iconBg: 'bg-rose-50 text-rose-600',
     avatarBg: 'bg-rose-100 text-rose-700',
@@ -182,6 +185,23 @@ export default function Leads() {
   // Order Received Drag Modal
   const [orderModalLead, setOrderModalLead] = useState(null);
 
+  // Active Drag Source Status for Visual Target Dimming
+  const [activeDragSourceStatus, setActiveDragSourceStatus] = useState(null);
+
+  const getLiveDateStr = () => new Date().toISOString().split('T')[0];
+  const getLiveTimeStr = () => {
+    const now = new Date();
+    const hrs = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    return `${hrs}:${mins}`;
+  };
+
+  // Schedule Follow-up Modal on Drag to follow_up
+  const [pendingFollowUpMove, setPendingFollowUpMove] = useState(null);
+  const [followUpDateInput, setFollowUpDateInput] = useState(getLiveDateStr());
+  const [followUpTimeInput, setFollowUpTimeInput] = useState(getLiveTimeStr());
+  const [followUpNotesInput, setFollowUpNotesInput] = useState('');
+
   const canCreate = permissions.leads?.includes('create');
   const canDelete = permissions.leads?.includes('delete') || role === 'super_admin' || role === 'manager';
   const isManagerOrAdmin = role === 'super_admin' || role === 'manager';
@@ -257,18 +277,53 @@ export default function Leads() {
     }
   };
 
+  // Allowed Kanban Status Transitions Graph
+  const ALLOWED_KANBAN_TRANSITIONS = {
+    new: ['contacted'],
+    contacted: ['follow_up', 'won', 'cancelled'],
+    follow_up: ['won', 'cancelled'],
+    won: [],
+    cancelled: []
+  };
+
+  // Drag Start Handler
+  const handleDragStart = (start) => {
+    setActiveDragSourceStatus(start.source.droppableId);
+  };
+
   // Drag and Drop Handler
   const handleDragEnd = async (result) => {
+    setActiveDragSourceStatus(null);
     const { destination, source, draggableId } = result;
 
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
+    const sourceStatus = source.droppableId;
+    const destStatus = destination.droppableId;
+
+    // Validate Kanban status transition graph: snap back silently if invalid
+    const allowed = ALLOWED_KANBAN_TRANSITIONS[sourceStatus] || [];
+    if (!allowed.includes(destStatus)) {
+      return;
+    }
+
     const leadToMove = leads.find(l => l._id === draggableId);
     if (!leadToMove) return;
 
-    const sourceStatus = source.droppableId;
-    const destStatus = destination.droppableId;
+    if (destStatus === 'follow_up') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      setPendingFollowUpMove({
+        leadId: draggableId,
+        sourceStatus,
+        destStatus,
+        lead: leadToMove
+      });
+      setFollowUpDateInput(todayStr);
+      setFollowUpTimeInput(getLiveTimeStr());
+      setFollowUpNotesInput('');
+      return;
+    }
 
     if (destStatus === 'cancelled') {
       setPendingCancelMove({
@@ -323,6 +378,35 @@ export default function Leads() {
     }
   };
 
+  // Confirm Follow-up Schedule on Drag to follow_up
+  const confirmFollowUpMove = async (e) => {
+    e.preventDefault();
+    if (!pendingFollowUpMove || !followUpDateInput || !followUpTimeInput) {
+      notify.error('Please select both follow-up date and time');
+      return;
+    }
+
+    const { leadId, destStatus } = pendingFollowUpMove;
+    const updatedLeads = leads.map(l => l._id === leadId ? { ...l, status: destStatus } : l);
+    setLeads(updatedLeads);
+
+    try {
+      await api.patch(`/leads/${leadId}/status`, {
+        status: destStatus,
+        followUpDate: followUpDateInput,
+        followUpTime: followUpTimeInput,
+        notes: followUpNotesInput
+      });
+      notify.success('Follow-up scheduled & lead moved!');
+      fetchLeads();
+    } catch (err) {
+      setLeads(leads);
+      notify.error(err.response?.data?.message || 'Failed to schedule follow-up');
+    } finally {
+      setPendingFollowUpMove(null);
+    }
+  };
+
   // Open Add Lead Modal with Target Stage
   const openAddLeadForStage = (stageId = 'new') => {
     setNewLeadForm({
@@ -330,10 +414,10 @@ export default function Leads() {
       company: '',
       phone: '',
       email: '',
-      source: 'website',
+      source: '',
       priority: 'medium',
       status: stageId,
-      assignedTo: ''
+      assignedTo: role === 'caller' ? (user?.id || user?._id || '') : ''
     });
     setIsAddModalOpen(true);
   };
@@ -341,8 +425,34 @@ export default function Leads() {
   // Submit Add Lead Form
   const handleAddLeadSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate 10-digit phone number
+    const cleanPhone = (newLeadForm.phone || '').replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      notify.error('Phone number must be exactly 10 digits');
+      return;
+    }
+
+    // Validate optional email format
+    if (newLeadForm.email && newLeadForm.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newLeadForm.email.trim())) {
+        notify.error('Please enter a valid email address');
+        return;
+      }
+    }
+
     try {
-      await api.post('/leads', newLeadForm);
+      const payload = {
+        ...newLeadForm,
+        name: newLeadForm.name.trim(),
+        company: newLeadForm.company ? newLeadForm.company.trim() : undefined,
+        phone: cleanPhone,
+        email: newLeadForm.email ? newLeadForm.email.trim().toLowerCase() : undefined,
+        source: newLeadForm.source || null,
+        assignedTo: role === 'caller' ? (user?.id || user?._id || '') : newLeadForm.assignedTo
+      };
+      await api.post('/leads', payload);
       notify.success('Lead created successfully!');
       setIsAddModalOpen(false);
       fetchLeads();
@@ -351,22 +461,23 @@ export default function Leads() {
     }
   };
 
-  // Submit Quick Activity Note
-  const handleActivitySubmit = async (e) => {
-    e.preventDefault();
-    if (!activeActivityModal || !activityNote.trim()) return;
-
+  // Automatic Background Activity Logging (No modal note popup required)
+  const handleAutoLogActivity = async (leadId, leadName, type) => {
     try {
-      await api.post(`/leads/${activeActivityModal.leadId}/activity`, {
-        type: activeActivityModal.type,
-        description: activityNote
+      const descriptions = {
+        call: `Initiated phone call with ${leadName}`,
+        whatsapp: `Sent WhatsApp message to ${leadName}`,
+        email: `Sent email follow-up to ${leadName}`
+      };
+      const description = descriptions[type] || `Executed ${type} action for ${leadName}`;
+
+      await api.post(`/leads/${leadId}/activity`, {
+        type,
+        description
       });
-      notify.success(`Logged ${activeActivityModal.type} note!`);
-      setActiveActivityModal(null);
-      setActivityNote('');
       fetchLeads();
     } catch (err) {
-      notify.error(err.response?.data?.message || 'Failed to log activity');
+      console.error(`Failed to auto-log ${type} activity for ${leadName}:`, err);
     }
   };
 
@@ -387,10 +498,10 @@ export default function Leads() {
 
   return (
     <div className="space-y-6 pb-12">
-      
+
       {/* Reference UI Top Header Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/50 backdrop-blur-xs p-2 rounded-2xl">
-        
+
         {/* Left: Optional Title / Search Input */}
         <div className="flex items-center gap-3 flex-1">
           <div className="relative w-full max-w-sm">
@@ -448,9 +559,8 @@ export default function Leads() {
           {/* Filters Toggle Button */}
           <button
             onClick={() => setShowFiltersPanel(!showFiltersPanel)}
-            className={`px-3.5 py-2 bg-white border border-slate-200/90 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium transition shadow-2xs flex items-center gap-1.5 cursor-pointer ${
-              showFiltersPanel ? 'ring-2 ring-red-500/20 border-red-500' : ''
-            }`}
+            className={`px-3.5 py-2 bg-white border border-slate-200/90 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium transition shadow-2xs flex items-center gap-1.5 cursor-pointer ${showFiltersPanel ? 'ring-2 ring-red-500/20 border-red-500' : ''
+              }`}
           >
             <SlidersHorizontal size={14} className="text-slate-500" />
             <span>Filters</span>
@@ -491,17 +601,15 @@ export default function Leads() {
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
               <button
                 onClick={() => setViewMode('kanban')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
-                  viewMode === 'kanban' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
-                }`}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${viewMode === 'kanban' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
+                  }`}
               >
                 Kanban Board
               </button>
               <button
                 onClick={() => setViewMode('grid')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
-                  viewMode === 'grid' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
-                }`}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${viewMode === 'grid' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
+                  }`}
               >
                 Grid View
               </button>
@@ -526,27 +634,48 @@ export default function Leads() {
           ))}
         </div>
       ) : viewMode === 'kanban' ? (
-        <DragDropContext onDragEnd={handleDragEnd}>
+        <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex md:grid md:grid-cols-4 lg:grid-cols-4 gap-4 items-start overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-4">
             {COLUMNS.filter(c => c.id !== 'cancelled').map((column) => {
               const columnLeads = filteredLeads.filter(l => l.status === column.id);
               const columnTotalStr = calculateColumnTotal(columnLeads);
               const IconComp = column.icon;
 
+              const isDraggingCard = Boolean(activeDragSourceStatus);
+              const isValidTarget = !isDraggingCard || (
+                activeDragSourceStatus === column.id || (ALLOWED_KANBAN_TRANSITIONS[activeDragSourceStatus] || []).includes(column.id)
+              );
+              const isInvalidTarget = isDraggingCard && !isValidTarget;
+
               return (
                 <div
                   key={column.id}
-                  className="bg-white/70 rounded-2xl border border-slate-200/80 shadow-2xs p-3 flex flex-col max-h-[calc(100vh-180px)] min-w-[85vw] sm:min-w-[300px] md:min-w-0 snap-center flex-shrink-0 md:flex-shrink"
+                  className={`rounded-2xl border shadow-2xs p-3 flex flex-col max-h-[calc(100vh-180px)] min-w-[85vw] sm:min-w-[300px] md:min-w-0 snap-center flex-shrink-0 md:flex-shrink transition-all duration-200 ${isInvalidTarget
+                    ? 'bg-rose-50/20 border-dashed border-rose-300 opacity-40 grayscale pointer-events-none'
+                    : isDraggingCard && activeDragSourceStatus !== column.id
+                      ? 'bg-emerald-50/20 border-emerald-400 ring-2 ring-emerald-500/30'
+                      : 'bg-white/70 border-slate-200/80'
+                    }`}
                 >
                   {/* Column Header */}
                   <div className="p-3 bg-white rounded-xl border border-slate-200/60 shadow-2xs flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${column.iconBg}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${column.iconBg}`}>
                         <IconComp size={18} />
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-slate-900 text-sm leading-tight">
-                          {column.title} ({columnLeads.length})
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-slate-900 text-sm leading-tight flex items-center gap-1.5">
+                          <span className="truncate">{column.title} ({columnLeads.length})</span>
+                          {isInvalidTarget && (
+                            <span className="text-[10px] font-bold text-rose-600 bg-rose-100 border border-rose-200 px-1.5 py-0.5 rounded-md shrink-0">
+                              Blocked
+                            </span>
+                          )}
+                          {isDraggingCard && isValidTarget && activeDragSourceStatus !== column.id && (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-md shrink-0">
+                              Allowed
+                            </span>
+                          )}
                         </h3>
                         <span className="text-xs text-slate-500 font-medium block">
                           {columnTotalStr}
@@ -554,12 +683,24 @@ export default function Leads() {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition"
-                    >
-                      <MoreVertical size={16} />
-                    </button>
+                    {/* <div className="flex items-center gap-1">
+                      {canCreate && (
+                        <button
+                          type="button"
+                          onClick={() => openAddLeadForStage(column.id)}
+                          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                          title={`Add Lead in ${column.title}`}
+                        >
+                          <Plus size={16} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+                    </div> */}
                   </div>
 
                   {/* Droppable Area */}
@@ -568,9 +709,8 @@ export default function Leads() {
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`space-y-3 overflow-y-auto scrollbar-hide flex-1 min-h-[340px] p-1 transition-colors ${
-                          snapshot.isDraggingOver ? 'bg-slate-100/80 rounded-xl' : ''
-                        }`}
+                        className={`space-y-3 overflow-y-auto scrollbar-hide flex-1 min-h-[340px] p-1 transition-colors ${snapshot.isDraggingOver ? 'bg-slate-100/80 rounded-xl' : ''
+                          }`}
                       >
                         {columnLeads.length === 0 ? (
                           <div className="py-12 text-center text-slate-400 text-xs font-normal border border-dashed border-slate-200 rounded-xl">
@@ -592,10 +732,7 @@ export default function Leads() {
                                     setReassignModalLead(lead);
                                     setReassignTargetUser(lead.assignedTo?._id || '');
                                   }}
-                                  onLogActivity={(type) => {
-                                    setActiveActivityModal({ leadId: lead._id, leadName: lead.name, type });
-                                    setActivityNote('');
-                                  }}
+                                  onLogActivity={(type) => handleAutoLogActivity(lead._id, lead.name, type)}
                                   onCancel={() => {
                                     setPendingCancelMove({
                                       leadId: lead._id,
@@ -653,10 +790,7 @@ export default function Leads() {
                     setReassignModalLead(lead);
                     setReassignTargetUser(lead.assignedTo?._id || '');
                   }}
-                  onLogActivity={(type) => {
-                    setActiveActivityModal({ leadId: lead._id, leadName: lead.name, type });
-                    setActivityNote('');
-                  }}
+                  onLogActivity={(type) => handleAutoLogActivity(lead._id, lead.name, type)}
                   onCancel={() => {
                     setPendingCancelMove({
                       leadId: lead._id,
@@ -729,7 +863,7 @@ export default function Leads() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-semibold text-rose-600 flex items-center gap-2">
                 <AlertTriangle size={18} />
-                <span>Mark Lead as Cancelled</span>
+                <span>Mark Lead as Rejected</span>
               </h3>
               <button onClick={() => setPendingCancelMove(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
@@ -737,7 +871,7 @@ export default function Leads() {
             </div>
 
             <p className="text-xs text-slate-600 font-normal">
-              Please enter the reason for marking lead <strong className="text-slate-800">{pendingCancelMove.lead?.name}</strong> as cancelled.
+              Please enter the reason for marking lead <strong className="text-slate-800">{pendingCancelMove.lead?.name}</strong> as rejected.
             </p>
             <textarea
               rows={3}
@@ -760,7 +894,7 @@ export default function Leads() {
                 onClick={confirmCancelMove}
                 className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs"
               >
-                Submit & Cancel Lead
+                Submit & Reject Lead
               </button>
             </div>
           </div>
@@ -772,18 +906,27 @@ export default function Leads() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto scrollbar-hide">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-red-600"></span>
-                Add New Lead
-              </h3>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-600"></span>
+                  Add New Lead
+                </h3>
+                <p className="text-[11px] text-slate-500 font-normal mt-0.5">
+                  Create a new sales lead and assign to caller executive
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition"
+              >
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleAddLeadSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">
+                <label className="block font-semibold text-slate-700 mb-1">
                   Lead Name *
                 </label>
                 <input
@@ -792,12 +935,12 @@ export default function Leads() {
                   value={newLeadForm.name}
                   onChange={(e) => setNewLeadForm({ ...newLeadForm, name: e.target.value })}
                   placeholder="e.g. Ramesh Kumar"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">
+                <label className="block font-semibold text-slate-700 mb-1">
                   Company Name
                 </label>
                 <input
@@ -805,63 +948,85 @@ export default function Leads() {
                   value={newLeadForm.company}
                   onChange={(e) => setNewLeadForm({ ...newLeadForm, company: e.target.value })}
                   placeholder="e.g. Apex Traders Pvt. Ltd."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Phone Number *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-700">
+                      Phone Number *
+                    </label>
+                    {/* <span className={`text-[10px] ${newLeadForm.phone.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                      {newLeadForm.phone.length}/10 digits
+                    </span> */}
+                  </div>
                   <input
-                    type="text"
+                    type="tel"
                     required
+                    maxLength={10}
                     value={newLeadForm.phone}
-                    onChange={(e) => setNewLeadForm({ ...newLeadForm, phone: e.target.value })}
-                    placeholder="+91 9876543210"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
+                    onChange={(e) => setNewLeadForm({ ...newLeadForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    placeholder="e.g. 9876543210"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
+                  {newLeadForm.phone && newLeadForm.phone.length !== 10 && (
+                    <p className="text-[10px] text-rose-500 font-medium mt-1">
+                      Must be exactly 10 digits
+                    </p>
+                  )}
                 </div>
+
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Email Address
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-700">
+                      Email Address
+                    </label>
+                    {newLeadForm.email && newLeadForm.email.trim() && (
+                      <span className={`text-[10px] ${/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newLeadForm.email.trim()) ? 'text-emerald-600 font-bold' : 'text-rose-500 font-medium'}`}>
+                        {/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newLeadForm.email.trim()) ? 'Valid Email' : 'Invalid Format'}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="email"
                     value={newLeadForm.email}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, email: e.target.value })}
-                    placeholder="ramesh@apex.com"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="ramesh@apex.com (Optional)"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Source
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Source <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
                   </label>
                   <select
                     value={newLeadForm.source}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, source: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                   >
+                    <option value="">Select Source (Optional)</option>
                     <option value="website">Website</option>
                     <option value="referral">Referral</option>
                     <option value="walk_in">Walk-in</option>
                     <option value="google_ads">Google Ads</option>
                     <option value="tele_caller">Tele-caller</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">
+                  <label className="block font-semibold text-slate-700 mb-1">
                     Priority
                   </label>
                   <select
                     value={newLeadForm.priority}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, priority: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                   >
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
@@ -870,16 +1035,16 @@ export default function Leads() {
                 </div>
               </div>
 
-              {isManagerOrAdmin && (
+              {isManagerOrAdmin ? (
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">
+                  <label className="block font-semibold text-slate-700 mb-1">
                     Assign Executive *
                   </label>
                   <select
                     required
                     value={newLeadForm.assignedTo}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, assignedTo: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                   >
                     <option value="" disabled>Select Executive Caller</option>
                     {usersList.filter(u => u.role === 'caller').map(u => (
@@ -889,19 +1054,31 @@ export default function Leads() {
                     ))}
                   </select>
                 </div>
+              ) : (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Assign Executive
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={`${user?.name || 'You'} (Assigned to Self)`}
+                    className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl font-semibold text-slate-500 cursor-not-allowed"
+                  />
+                </div>
               )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs"
+                  className="px-5 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-xl shadow-xs transition cursor-pointer"
                 >
                   Save Lead
                 </button>
@@ -958,6 +1135,96 @@ export default function Leads() {
         </div>
       )}
 
+      {/* Schedule Follow-up Modal on Drag to Follow Up stage */}
+      {pendingFollowUpMove && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-200/90 my-auto max-h-[92vh] overflow-y-auto scrollbar-hide">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center font-bold shrink-0">
+                  <Calendar size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-snug">Schedule Follow-up</h3>
+                  <p className="text-[11px] text-slate-400 font-normal">Set date, time & notes for this lead</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingFollowUpMove(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl text-xs text-slate-700 space-y-0.5">
+              <span className="font-semibold text-slate-900">Lead: {pendingFollowUpMove.lead?.name}</span>
+              <p className="text-[11px] text-slate-500 font-normal">
+                Moving to <span className="font-bold text-amber-700">Follow Up</span> stage upon confirmation.
+              </p>
+            </div>
+
+            <form onSubmit={confirmFollowUpMove} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Follow-up Date <span className="text-red-500">*</span>
+                  </label>
+                  <CustomDatePicker
+                    required
+                    selectedDate={followUpDateInput}
+                    onChange={(val) => setFollowUpDateInput(val)}
+                    placeholder="Select follow-up date"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Follow-up Time <span className="text-red-500">*</span>
+                  </label>
+                  <CustomTimePicker
+                    required
+                    selectedTime={followUpTimeInput}
+                    onChange={(val) => setFollowUpTimeInput(val)}
+                    placeholder="Select follow-up time"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Follow-up Notes <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={followUpNotesInput}
+                  onChange={(e) => setFollowUpNotesInput(e.target.value)}
+                  placeholder="Add details about what to discuss during the follow-up..."
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/80 transition"
+                />
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setPendingFollowUpMove(null)}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-full sm:w-auto px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-2xs transition cursor-pointer text-center"
+                >
+                  Confirm & Schedule
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* New Order Modal */}
       <NewOrderModal
         isOpen={!!orderModalLead}
@@ -975,6 +1242,7 @@ export default function Leads() {
 
 // Kanban Lead Card matching exact reference design
 function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, canDelete, onDelete, onReassign, onLogActivity, onCancel }) {
+  const notify = useNotification();
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
 
@@ -1007,11 +1275,10 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
       ref={provided?.innerRef}
       {...(provided?.draggableProps || {})}
       {...(provided?.dragHandleProps || {})}
-      className={`bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-md transition space-y-3 relative group ${
-        snapshot?.isDragging ? 'shadow-2xl ring-2 ring-red-500 rotate-1 z-30' : ''
-      }`}
+      className={`bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-md transition space-y-3 relative group ${snapshot?.isDragging ? 'shadow-2xl ring-2 ring-red-500 rotate-1 z-30' : ''
+        }`}
     >
-      {/* Lead Card Header: Avatar Initials + Lead Name + Company */}
+      {/* Lead Card Header: Avatar Initials + Lead Name + Company + Profile Workspace Button */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-3 min-w-0">
           <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold text-xs flex-shrink-0 shadow-2xs ${column.avatarBg}`}>
@@ -1026,12 +1293,21 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
             </p>
           </div>
         </div>
+
+        {/* View Workspace Profile Button */}
+        <Link
+          to={`/leads/${lead._id}/followup`}
+          onClick={(e) => e.stopPropagation()}
+          className="px-2.5 py-1 bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-600 rounded-xl text-[11px] font-semibold transition border border-slate-200/80 hover:border-red-200 inline-flex items-center gap-1.5 shrink-0 shadow-2xs cursor-pointer"
+          title={`View Workspace for ${lead.name}`}
+        >
+          <User size={13} className="text-slate-500" />
+          {/* <span>Profile</span> */}
+        </Link>
       </div>
 
-      {/* Source & Priority Line: Source: Website • Priority: High */}
+      {/* Priority Line (Source removed per request) */}
       <div className="text-xs text-slate-500 font-normal">
-        <span>Source: {SOURCE_LABELS[lead.source] || lead.source || 'Website'}</span>
-        <span className="mx-1.5">•</span>
         <span>Priority: </span>
         <span className={getPriorityColorClass(lead.priority)}>
           {lead.priority ? lead.priority.charAt(0).toUpperCase() + lead.priority.slice(1) : 'Medium'}
@@ -1067,94 +1343,48 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
           {formatLeadTime(lead.createdAt || lead.updatedAt)}
         </span>
 
-        {/* Action Buttons based on stage */}
-        <div className="flex items-center gap-1.5" ref={menuRef}>
-          {/* Quick Contact Options for Follow-up or Standard Cards */}
-          {(isFollowUpStage || lead.status === 'contacted' || lead.status === 'new') && (
-            <>
-              <button
-                type="button"
-                title="Call Lead"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onLogActivity('call');
-                }}
-                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
-              >
-                <Phone size={14} />
-              </button>
-
-              <button
-                type="button"
-                title="WhatsApp Lead"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onLogActivity('whatsapp');
-                }}
-                className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
-              >
-                <MessageSquare size={14} />
-              </button>
-
-              <button
-                type="button"
-                title="Email Lead"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onLogActivity('email');
-                }}
-                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-              >
-                <Mail size={14} />
-              </button>
-
-              <button
-                type="button"
-                title="Cancel Lead"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCancel();
-                }}
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-              >
-                <XCircle size={14} />
-              </button>
-            </>
-          )}
-
-          {/* Quick View & Order Icons for Order Received Stage */}
-          {isWonStage && (
-            <>
-              <Link
-                to={`/leads/${lead._id}/followup`}
-                onClick={(e) => e.stopPropagation()}
-                title="View Lead 360"
-                className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
-              >
-                <Eye size={14} />
-              </Link>
-              <Link
-                to="/orders"
-                onClick={(e) => e.stopPropagation()}
-                title="View Orders"
-                className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition"
-              >
-                <FileText size={14} />
-              </Link>
-            </>
-          )}
-
-          {/* User Assign Icon */}
+        {/* Action Buttons Row */}
+        <div className="flex items-center gap-1" ref={menuRef}>
+          {/* Call Icon */}
           <button
             type="button"
-            title={lead.assignedTo?.name ? `Assigned to ${lead.assignedTo.name}` : "Assign Executive"}
+            title={`Call ${lead.name}`}
             onClick={(e) => {
               e.stopPropagation();
-              if (isManagerOrAdmin) onReassign();
+              initiatePhoneCall(lead.phone, lead.name, notify);
+              onLogActivity('call');
             }}
-            className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
           >
-            <User size={14} />
+            <Phone size={14} />
+          </button>
+
+          {/* WhatsApp Icon */}
+          <button
+            type="button"
+            title={`WhatsApp ${lead.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              openWhatsApp(lead.phone, lead.name, null, notify);
+              onLogActivity('whatsapp');
+            }}
+            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+          >
+            <WhatsAppIcon size={14} className="text-slate-400 hover:text-emerald-600" />
+          </button>
+
+          {/* Email Icon */}
+          <button
+            type="button"
+            title={`Email ${lead.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              openEmail(lead.email, lead.name, null, null, notify);
+              onLogActivity('email');
+            }}
+            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+          >
+            <Mail size={14} />
           </button>
 
           {/* 3-dots Menu Button */}
@@ -1166,57 +1396,40 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
                 e.stopPropagation();
                 setShowMenu(!showMenu);
               }}
-              className="p-1 text-slate-400 hover:text-slate-800 rounded-lg transition"
+              className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg transition"
             >
               <MoreHorizontal size={14} />
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 bottom-full mb-1 w-40 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 text-xs py-1 animate-scale-up">
-                <Link
-                  to={`/leads/${lead._id}/followup`}
-                  className="px-3 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
-                >
-                  <ArrowRight size={12} />
-                  <span>Open Workspace</span>
-                </Link>
+              <div className="absolute right-0 bottom-full mb-1 w-44 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 text-xs py-1 animate-scale-up">
                 {isManagerOrAdmin && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setShowMenu(false);
                       onReassign();
                     }}
                     className="w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
                   >
-                    <UserCheck size={12} />
-                    <span>Reassign</span>
+                    <UserCheck size={13} />
+                    <span>Assign Executive</span>
                   </button>
                 )}
+
                 {['new', 'contacted', 'follow_up'].includes(lead.status) && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setShowMenu(false);
                       onCancel();
                     }}
                     className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
                   >
-                    <XCircle size={12} />
-                    <span>Cancel Lead</span>
-                  </button>
-                )}
-                {canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMenu(false);
-                      onDelete();
-                    }}
-                    className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
-                  >
-                    <Trash2 size={12} />
-                    <span>Move to Trash</span>
+                    <XCircle size={13} />
+                    <span>Reject Lead</span>
                   </button>
                 )}
               </div>

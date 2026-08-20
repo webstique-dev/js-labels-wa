@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X, ChevronDown, ChevronUp, FileText, CreditCard, MapPin, AlignLeft } from 'lucide-react';
+import CustomDatePicker from './ui/DatePicker';
 
 export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead }) {
-  const [products, setProducts] = useState([]);
   const [existingCustomers, setExistingCustomers] = useState([]);
   const [loadingResources, setLoadingResources] = useState(false);
 
   // Customer Mode: 'existing' or 'new'
   const [customerMode, setCustomerMode] = useState(initialLead ? 'new' : 'existing');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  
+
   // New Customer Form State
   const [newCustomerForm, setNewCustomerForm] = useState({
     name: initialLead?.name || '',
@@ -21,19 +21,27 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
     address: ''
   });
 
-  // Line Items
+  // Custom Spec Line Items (Description, Qty, Rate per 1000, Total Amount)
   const [lineItems, setLineItems] = useState([
-    { productId: '', qty: 1000, price: 0, lineTotal: 0 }
+    { description: '', qty: 1000, rate: '', lineTotal: '' }
   ]);
 
   // Order Details
   const [deliveryDate, setDeliveryDate] = useState('');
   const [usageCycleDays, setUsageCycleDays] = useState(30);
 
+  // Collapsible "+ More Details" State
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [poNumber, setPoNumber] = useState('');
+  const [advanceReceived, setAdvanceReceived] = useState(false);
+  const [advanceAmount, setAdvanceAmount] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [notes, setNotes] = useState('');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Sync initialLead prop if updated
+  // Sync initialLead prop when modal opens or initialLead changes
   useEffect(() => {
     if (initialLead) {
       setCustomerMode('new');
@@ -48,89 +56,49 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
     }
   }, [initialLead]);
 
-  // Load Products and Customers on Modal Open
+  // Load Existing Customers on Modal Open
   useEffect(() => {
     if (isOpen) {
-      const fetchResources = async () => {
+      const fetchCustomers = async () => {
         try {
           setLoadingResources(true);
-          const [prodRes, custRes] = await Promise.all([
-            api.get('/products'),
-            api.get('/customers')
-          ]);
-          setProducts(prodRes.data || []);
-          setExistingCustomers(custRes.data?.customers || []);
-
-          // Auto-select first product if line item empty
-          if (prodRes.data?.length > 0 && (!lineItems[0].productId || lineItems[0].price === 0)) {
-            const p1 = prodRes.data[0];
-            setLineItems([
-              {
-                productId: p1._id,
-                qty: 1000,
-                price: p1.unitPrice,
-                lineTotal: 1000 * p1.unitPrice
-              }
-            ]);
-            setUsageCycleDays(p1.defaultUsageCycleDays || 30);
-          }
+          const custRes = await api.get('/customers');
+          setExistingCustomers(custRes.data?.customers || (Array.isArray(custRes.data) ? custRes.data : []));
         } catch (err) {
-          console.error('Error loading order modal resources:', err);
+          console.error('Error loading existing customers:', err);
         } finally {
           setLoadingResources(false);
         }
       };
-      fetchResources();
+      fetchCustomers();
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Handle Line Item Product Selection
-  const handleProductChange = (index, productId) => {
-    const selectedProd = products.find(p => p._id === productId);
-    const updated = [...lineItems];
-    const price = selectedProd ? selectedProd.unitPrice : 0;
-    const qty = updated[index].qty || 1;
-
-    updated[index] = {
-      ...updated[index],
-      productId,
-      price,
-      lineTotal: qty * price
-    };
-
-    setLineItems(updated);
-    if (selectedProd && selectedProd.defaultUsageCycleDays) {
-      setUsageCycleDays(selectedProd.defaultUsageCycleDays);
-    }
-  };
-
-  // Handle Line Item Qty/Price Change
+  // Handle Line Item Field Change (Auto-calculates lineTotal when qty or rate changes)
   const handleItemChange = (index, field, value) => {
     const updated = [...lineItems];
     const item = { ...updated[index], [field]: value };
-    const qty = field === 'qty' ? (parseInt(value) || 0) : item.qty;
-    const price = field === 'price' ? (parseFloat(value) || 0) : item.price;
-    
-    item.qty = qty;
-    item.price = price;
-    item.lineTotal = qty * price;
+
+    if (field === 'qty' || field === 'rate') {
+      const qty = field === 'qty' ? (parseFloat(value) || 0) : (parseFloat(item.qty) || 0);
+      const rate = field === 'rate' ? (parseFloat(value) || 0) : (parseFloat(item.rate) || 0);
+      if (qty > 0 && rate > 0) {
+        item.lineTotal = Math.round((qty / 1000) * rate);
+      } else if (value === '' || parseFloat(value) === 0) {
+        item.lineTotal = '';
+      }
+    }
+
     updated[index] = item;
     setLineItems(updated);
   };
 
   const addLineItem = () => {
-    const defaultProd = products[0];
-    const price = defaultProd ? defaultProd.unitPrice : 0;
     setLineItems([
       ...lineItems,
-      {
-        productId: defaultProd ? defaultProd._id : '',
-        qty: 1000,
-        price,
-        lineTotal: 1000 * price
-      }
+      { description: '', qty: 1000, rate: '', lineTotal: '' }
     ]);
   };
 
@@ -140,7 +108,13 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
   };
 
   // Grand Total Calculation
-  const grandTotal = lineItems.reduce((sum, item) => sum + (item.lineTotal || 0), 0);
+  const calculatedGrandTotal = lineItems.reduce((sum, item) => {
+    const totalVal = parseFloat(item.lineTotal);
+    if (!isNaN(totalVal) && totalVal > 0) return sum + totalVal;
+    const qty = parseFloat(item.qty) || 0;
+    const rate = parseFloat(item.rate) || 0;
+    return sum + (qty > 0 && rate > 0 ? (qty / 1000) * rate : 0);
+  }, 0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -151,13 +125,44 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
       return;
     }
 
-    if (customerMode === 'new' && (!newCustomerForm.name || !newCustomerForm.phone)) {
-      setErrorMessage('Customer name and phone number are required');
-      return;
+    if (customerMode === 'new') {
+      if (!newCustomerForm.name || !newCustomerForm.phone) {
+        setErrorMessage('Customer name and phone number are required');
+        return;
+      }
+      const cleanPhone = newCustomerForm.phone.replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        setErrorMessage('Phone number must be exactly 10 digits');
+        return;
+      }
+      if (newCustomerForm.email && newCustomerForm.email.trim()) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(newCustomerForm.email.trim())) {
+          setErrorMessage('Please enter a valid email address');
+          return;
+        }
+      }
     }
 
-    if (lineItems.some(i => !i.productId || i.qty <= 0)) {
-      setErrorMessage('All line items must have a selected product and valid quantity');
+    // Validate line items
+    for (let i = 0; i < lineItems.length; i++) {
+      const item = lineItems[i];
+      if (!item.description || !item.description.trim()) {
+        setErrorMessage(`Item ${i + 1}: Label Description is required`);
+        return;
+      }
+      if (!item.qty || parseFloat(item.qty) <= 0) {
+        setErrorMessage(`Item ${i + 1}: Valid Quantity is required`);
+        return;
+      }
+      if (!item.rate || parseFloat(item.rate) <= 0) {
+        setErrorMessage(`Item ${i + 1}: Valid Rate (per 1000 units) is required`);
+        return;
+      }
+    }
+
+    if (calculatedGrandTotal <= 0) {
+      setErrorMessage('Order Total Amount must be greater than ₹0');
       return;
     }
 
@@ -168,9 +173,21 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
         customerId: customerMode === 'existing' ? selectedCustomerId : undefined,
         newCustomer: customerMode === 'new' ? newCustomerForm : undefined,
         leadId: initialLead?._id,
-        lineItems: lineItems.map(i => ({ productId: i.productId, qty: i.qty, price: i.price })),
+        lineItems: lineItems.map(i => ({
+          description: i.description.trim(),
+          name: i.description.trim(),
+          qty: parseFloat(i.qty),
+          rate: parseFloat(i.rate),
+          lineTotal: parseFloat(i.lineTotal) || (parseFloat(i.qty) / 1000) * parseFloat(i.rate)
+        })),
+        totalAmount: calculatedGrandTotal,
         deliveryDate: deliveryDate || undefined,
-        usageCycleDays: parseInt(usageCycleDays) || 30
+        usageCycleDays: parseInt(usageCycleDays) || 30,
+        poNumber: poNumber.trim() || undefined,
+        advanceReceived,
+        advanceAmount: advanceReceived ? (parseFloat(advanceAmount) || 0) : 0,
+        deliveryAddress: deliveryAddress.trim() || undefined,
+        notes: notes.trim() || undefined
       };
 
       const res = await api.post('/orders', payload);
@@ -185,8 +202,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white max-w-2xl w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto scrollbar-hide">
-        
+      <div className="bg-white max-w-2xl w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto scrollbar-hide font-sans">
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
@@ -194,12 +211,13 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
               {initialLead ? `Create Order for ${initialLead.name}` : 'Create New Order'}
             </h3>
             <p className="text-xs text-slate-500">
-              {initialLead ? 'Converts lead into an active Customer and logs confirmed order' : 'Select customer and add product line items'}
+              {initialLead ? 'Converts lead into an active Customer and logs confirmed order' : 'Select customer and specify custom label specifications'}
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition"
+            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -213,8 +231,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          
-          {/* Customer Selection Section */}
+
+          {/* Section 1: Customer Selection Section */}
           <div className="space-y-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase text-slate-600">1. Customer Selection</span>
@@ -223,8 +241,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
                   <button
                     type="button"
                     onClick={() => setCustomerMode('existing')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition ${
-                      customerMode === 'existing' ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
+                      customerMode === 'existing' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
                     }`}
                   >
                     Existing Customer
@@ -232,8 +250,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
                   <button
                     type="button"
                     onClick={() => setCustomerMode('new')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition ${
-                      customerMode === 'new' ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
+                      customerMode === 'new' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
                     }`}
                   >
                     + New Customer
@@ -249,7 +267,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
                   required
                   value={selectedCustomerId}
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-red-500 cursor-pointer"
                 >
                   <option value="">-- Choose Existing Customer --</option>
                   {existingCustomers.map((c) => (
@@ -269,7 +287,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
                     value={newCustomerForm.name}
                     onChange={(e) => setNewCustomerForm({ ...newCustomerForm, name: e.target.value })}
                     placeholder="e.g. Apex Logistics"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
                   />
                 </div>
                 <div>
@@ -279,18 +297,19 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
                     value={newCustomerForm.company}
                     onChange={(e) => setNewCustomerForm({ ...newCustomerForm, company: e.target.value })}
                     placeholder="e.g. Apex Pvt Ltd"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">Phone Number *</label>
                   <input
-                    type="text"
+                    type="tel"
                     required
+                    maxLength={10}
                     value={newCustomerForm.phone}
-                    onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })}
-                    placeholder="+91 98765 43210"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
+                    onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    placeholder="9876543210"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
                   />
                 </div>
                 <div>
@@ -299,102 +318,130 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
                     type="email"
                     value={newCustomerForm.email}
                     onChange={(e) => setNewCustomerForm({ ...newCustomerForm, email: e.target.value })}
-                    placeholder="contact@company.com"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
+                    placeholder="contact@company.com (Optional)"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
                   />
                 </div>
               </div>
             )}
           </div>
 
-          {/* Line Items Section */}
+          {/* Section 2: Order Line Items (Custom Specs - Replaces Product Dropdown) */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase text-slate-600">2. Order Line Items</span>
+              <span className="text-xs font-semibold uppercase text-slate-600">2. Order Line Items (Custom Specs)</span>
               <button
                 type="button"
                 onClick={addLineItem}
-                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1"
+                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 cursor-pointer"
               >
                 <Plus size={14} />
                 <span>Add Item</span>
               </button>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {lineItems.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-2 items-center p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  {/* Product Dropdown */}
-                  <div className="col-span-5">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Product</label>
-                    <select
-                      required
-                      value={item.productId}
-                      onChange={(e) => handleProductChange(index, e.target.value)}
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800"
-                    >
-                      <option value="">Select Label Product</option>
-                      {products.map((p) => (
-                        <option key={p._id} value={p._id}>
-                          {p.name} (₹{p.unitPrice})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Quantity */}
-                  <div className="col-span-3">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Qty</label>
-                    <input
-                      type="number"
-                      min="1"
-                      required
-                      value={item.qty}
-                      onChange={(e) => handleItemChange(index, 'qty', e.target.value)}
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 text-center"
-                    />
-                  </div>
-
-                  {/* Line Total */}
-                  <div className="col-span-3 text-right">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Total</label>
-                    <span className="font-semibold text-slate-900 text-xs">
-                      ₹{item.lineTotal.toLocaleString('en-IN')}
+                <div key={index} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Item #{index + 1}
                     </span>
-                  </div>
-
-                  {/* Delete button */}
-                  <div className="col-span-1 text-center">
                     {lineItems.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeLineItem(index)}
-                        className="text-slate-400 hover:text-red-600"
+                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer"
+                        title="Remove Item"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={15} />
                       </button>
                     )}
+                  </div>
+
+                  {/* Label Description Input */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Label Description *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={item.description}
+                      onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                      placeholder="e.g. 500ml bottle label, matte finish, 8x5cm"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  {/* Qty, Rate per 1000, and Line Total Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Quantity *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={item.qty}
+                        onChange={(e) => handleItemChange(index, 'qty', e.target.value)}
+                        placeholder="1000"
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Rate (per 1000 units) *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          required
+                          value={item.rate}
+                          onChange={(e) => handleItemChange(index, 'rate', e.target.value)}
+                          placeholder="e.g. 250"
+                          className="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Total Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.lineTotal}
+                        onChange={(e) => handleItemChange(index, 'lineTotal', e.target.value)}
+                        placeholder="Calculated"
+                        className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
 
             {/* Grand Total Bar */}
-            <div className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-between">
+            <div className="p-3.5 bg-slate-900 text-white rounded-xl flex items-center justify-between shadow-md">
               <span className="text-xs font-semibold uppercase tracking-wider">Order Total Amount</span>
-              <span className="text-lg font-semibold text-emerald-400">₹{grandTotal.toLocaleString('en-IN')}</span>
+              <span className="text-xl font-bold text-emerald-400">₹{calculatedGrandTotal.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
-          {/* Delivery & Reorder Settings */}
+          {/* Section 3: Delivery & Reorder Settings */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Target Delivery Date</label>
-              <input
-                type="date"
-                value={deliveryDate}
-                onChange={(e) => setDeliveryDate(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900"
+              <CustomDatePicker
+                selectedDate={deliveryDate}
+                onChange={(val) => setDeliveryDate(val)}
+                placeholder="Select target delivery date"
               />
             </div>
             <div>
@@ -402,12 +449,126 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
               <select
                 value={usageCycleDays}
                 onChange={(e) => setUsageCycleDays(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-red-500 cursor-pointer"
               >
                 <option value={30}>30 Days (Standard Labels)</option>
                 <option value={45}>45 Days (Extended Batch)</option>
+                <option value={60}>60 Days (Bimonthly Supply)</option>
+                <option value={90}>90 Days (Quarterly Supply)</option>
               </select>
             </div>
+          </div>
+
+          {/* Collapsible "+ More Details" Section */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+            <button
+              type="button"
+              onClick={() => setShowMoreDetails(!showMoreDetails)}
+              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-bold text-slate-700 transition cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <FileText size={15} className="text-slate-500" />
+                <span>+ More Details (PO, Advance Payment, Address & Notes)</span>
+              </span>
+              {showMoreDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {showMoreDetails && (
+              <div className="p-4 space-y-3.5 border-t border-slate-200 bg-slate-50/50">
+                {/* PO / Reference Number */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    PO / Reference Number
+                  </label>
+                  <input
+                    type="text"
+                    value={poNumber}
+                    onChange={(e) => setPoNumber(e.target.value)}
+                    placeholder="e.g. PO-2026-8890"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+
+                {/* Advance Received Toggle & Amount */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                      <CreditCard size={14} className="text-slate-400" />
+                      <span>Advance Received?</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAdvanceReceived(false)}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
+                          !advanceReceived ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        No
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdvanceReceived(true)}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
+                          advanceReceived ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        Yes
+                      </button>
+                    </div>
+                  </div>
+
+                  {advanceReceived && (
+                    <div className="pt-1">
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Advance Amount Received (₹)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={advanceAmount}
+                          onChange={(e) => setAdvanceAmount(e.target.value)}
+                          placeholder="e.g. 5000"
+                          className="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Delivery Address */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <MapPin size={13} className="text-slate-400" />
+                    <span>Delivery Address</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="Delivery address (if different from customer address)"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+
+                {/* Notes / Special Instructions */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <AlignLeft size={13} className="text-slate-400" />
+                    <span>Notes / Special Instructions</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="e.g. Handle with care, pack in bundles of 500"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Submit Actions */}
@@ -415,14 +576,14 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-xl shadow-md transition disabled:opacity-50"
+              disabled={isSubmitting || calculatedGrandTotal <= 0}
+              className="px-5 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-xl shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? 'Creating Order...' : 'Confirm & Create Order'}
             </button>

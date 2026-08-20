@@ -4,8 +4,11 @@ const softDeletePlugin = require('../utils/softDelete');
 const lineItemSchema = new mongoose.Schema({
   productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
   name: { type: String },
+  description: { type: String },
   qty: { type: Number },
-  price: { type: Number }
+  rate: { type: Number },
+  price: { type: Number },
+  lineTotal: { type: Number }
 }, { _id: false });
 
 const orderSchema = new mongoose.Schema({
@@ -16,11 +19,16 @@ const orderSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'production', 'quality_check', 'dispatched', 'delivered', 'cancelled'],
-    default: 'pending'
+    default: 'confirmed'
   },
   deliveryDate: { type: Date },
   salesExecutive: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   usageCycleDays: { type: Number },
+  poNumber: { type: String },
+  advanceReceived: { type: Boolean, default: false },
+  advanceAmount: { type: Number, default: 0 },
+  deliveryAddress: { type: String },
+  notes: { type: String },
   lineItems: [lineItemSchema]
 }, {
   timestamps: true

@@ -64,9 +64,29 @@ export default function Customers() {
 
   const handleAddCustomerSubmit = async (e) => {
     e.preventDefault();
+
+    const cleanPhone = (formData.phone || '').replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      notify.error('Phone number must be exactly 10 digits');
+      return;
+    }
+
+    if (formData.email && formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        notify.error('Please enter a valid email address');
+        return;
+      }
+    }
+
     try {
       setIsSubmitting(true);
-      const res = await api.post('/customers', formData);
+      const payload = {
+        ...formData,
+        phone: cleanPhone,
+        email: formData.email ? formData.email.trim().toLowerCase() : undefined
+      };
+      const res = await api.post('/customers', payload);
       notify.success('New customer account created successfully!');
       setShowAddModal(false);
       setFormData({ name: '', company: '', phone: '', email: '', city: '', gstNo: '', customerType: 'Distributor' });
@@ -82,17 +102,7 @@ export default function Customers() {
     }
   };
 
-  const autofillTestCustomer = () => {
-    setFormData({
-      name: 'Ramesh Kumar',
-      company: 'Apex Traders Pvt. Ltd.',
-      phone: '9876543210',
-      email: 'ramesh.kumar@apextraders.com',
-      city: 'Chennai',
-      gstNo: 'GST 33AABCA1234A1Z5',
-      customerType: 'Distributor'
-    });
-  };
+
 
   const handleDeleteCustomer = async (id, name) => {
     const isConfirmed = await confirm({
@@ -153,7 +163,7 @@ export default function Customers() {
 
           <button
             onClick={() => {
-              autofillTestCustomer();
+              setFormData({ name: '', company: '', phone: '', email: '', city: '', gstNo: '', customerType: 'Distributor' });
               setShowAddModal(true);
             }}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
@@ -178,13 +188,13 @@ export default function Customers() {
           </p>
           <button
             onClick={() => {
-              autofillTestCustomer();
+              setFormData({ name: '', company: '', phone: '', email: '', city: '', gstNo: '', customerType: 'Distributor' });
               setShowAddModal(true);
             }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold cursor-pointer"
           >
             <Plus size={16} />
-            <span>Add Test Customer</span>
+            <span>Add Customer</span>
           </button>
         </div>
       ) : (
@@ -234,13 +244,12 @@ export default function Customers() {
                       <div className="flex items-center gap-2">
                         <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
                           <div
-                            className={`h-full rounded-full ${
-                              c.reorderProbability >= 80
+                            className={`h-full rounded-full ${c.reorderProbability >= 80
                                 ? 'bg-emerald-500'
                                 : c.reorderProbability >= 50
-                                ? 'bg-amber-500'
-                                : 'bg-rose-500'
-                            }`}
+                                  ? 'bg-amber-500'
+                                  : 'bg-rose-500'
+                              }`}
                             style={{ width: `${c.reorderProbability || 75}%` }}
                           ></div>
                         </div>
@@ -257,36 +266,37 @@ export default function Customers() {
                     <td className="p-4 font-medium text-slate-800">
                       {c.expectedReorderDate
                         ? new Date(c.expectedReorderDate).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          })
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })
                         : 'Jun 12, 2025'}
                     </td>
 
-                    <td className="p-4 text-right space-x-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/customers/${c._id}`);
-                        }}
-                        className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-xl border border-red-200 text-xs transition inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>View 360°</span>
-                        <ArrowRight size={12} />
-                      </button>
-                      {canDelete && (
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
+                          type="button"
+                          title={`Delete ${c.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteCustomer(c._id, c.name);
                           }}
-                          className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition inline-flex items-center cursor-pointer"
-                          title="Move to Trash"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
-                      )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/customers/${c._id}`);
+                          }}
+                          className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-xl border border-red-200 text-xs transition inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>View 360°</span>
+                          <ArrowRight size={12} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -312,13 +322,26 @@ export default function Customers() {
                       <p className="text-slate-500 text-xs font-normal">{c.company || 'Individual'}</p>
                     </div>
                   </div>
-                  <span
-                    className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
-                      c.reorderProbability || 75
-                    )}`}
-                  >
-                    {c.reorderProbability || 75}% Reorder
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      title={`Delete ${c.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCustomer(c._id, c.name);
+                      }}
+                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    <span
+                      className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
+                        c.reorderProbability || 75
+                      )}`}
+                    >
+                      {c.reorderProbability || 75}% Reorder
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
@@ -373,15 +396,24 @@ export default function Customers() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Phone Number *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-700">Phone Number *</label>
+                    {/* <span className={`text-[10px] ${formData.phone.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                      {formData.phone.length}/10 digits
+                    </span> */}
+                  </div>
                   <input
-                    type="text"
+                    type="tel"
                     required
+                    maxLength={10}
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                     placeholder="9876543210"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
+                  {formData.phone && formData.phone.length !== 10 && (
+                    <p className="text-[10px] text-rose-500 font-medium mt-1">Must be 10 digits</p>
+                  )}
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">City</label>
@@ -390,7 +422,7 @@ export default function Customers() {
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                     placeholder="Chennai"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
               </div>
@@ -406,31 +438,21 @@ export default function Customers() {
                 />
               </div>
 
-              <div className="flex justify-between items-center pt-2">
+              <div className="flex justify-end items-center gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={autofillTestCustomer}
-                  className="text-red-600 hover:underline font-semibold text-[11px]"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
                 >
-                  ⚡ Auto-fill Test (Ramesh Kumar)
+                  Cancel
                 </button>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
-                  >
-                    {isSubmitting ? 'Creating...' : 'Create Customer'}
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Customer'}
+                </button>
               </div>
             </form>
           </div>

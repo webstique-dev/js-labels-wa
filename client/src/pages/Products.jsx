@@ -98,15 +98,6 @@ export default function Products() {
                   <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-medium text-xs">
                     <Tag size={18} />
                   </div>
-                  {canDelete && (
-                    <button
-                      onClick={() => handleDeleteProduct(p._id, p.name)}
-                      className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                      title="Move to Trash"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
                 </div>
                 <h3 className="font-semibold text-slate-900 text-sm mt-3">{p.name}</h3>
                 <p className="text-xs text-slate-500 font-normal">Category: {p.category || 'General Labels'}</p>

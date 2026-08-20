@@ -40,8 +40,8 @@ export function NotificationProvider({ children }) {
   return (
     <NotificationContext.Provider value={notify}>
       {children}
-      {/* Floating Toast Notification Container */}
-      <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+      {/* Floating Toast Notification Container (Positioned at Bottom) */}
+      <div className="fixed bottom-5 right-5 sm:right-6 z-[999999] flex flex-col-reverse gap-3 max-w-sm w-full px-4 sm:px-0 pointer-events-none">
         {notifications.map((n) => (
           <ToastItem key={n.id} notification={n} onDismiss={() => dismiss(n.id)} />
         ))}

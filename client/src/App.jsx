@@ -5,6 +5,7 @@ import { ConfirmDialogProvider } from './context/ConfirmContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleGuard from './components/RoleGuard';
 import AppLayout from './components/layout/AppLayout';
+import ErrorBoundary from './components/ErrorBoundary';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -20,12 +21,23 @@ import Reports from './pages/Reports';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 
+// Global error handlers to log unhandled errors & promise rejections cleanly in browser console
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    console.error('[Global JS Error]:', event.error || event.message);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('[Global Unhandled Rejection]:', event.reason);
+  });
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <NotificationProvider>
-        <ConfirmDialogProvider>
-          <BrowserRouter>
+    <ErrorBoundary>
+      <AuthProvider>
+        <NotificationProvider>
+          <ConfirmDialogProvider>
+            <BrowserRouter>
             <Routes>
               {/* Public Route */}
               <Route path="/login" element={<Login />} />
@@ -158,5 +170,6 @@ export default function App() {
         </ConfirmDialogProvider>
       </NotificationProvider>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }

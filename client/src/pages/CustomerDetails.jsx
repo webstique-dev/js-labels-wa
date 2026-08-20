@@ -10,7 +10,6 @@ import {
   Mail,
   MapPin,
   Calendar,
-  Package,
   Clock,
   TrendingUp,
   Award,
@@ -51,9 +50,8 @@ export default function CustomerDetails() {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Star / Favorite toggle state
-  const [isStarred, setIsStarred] = useState(true);
+  const [isStarred, setIsStarred] = useState(false);
   const [showActionsDropdown, setShowActionsDropdown] = useState(false);
-  const [timelineFilter, setTimelineFilter] = useState('All Activities');
 
   // Edit Mode States
   const [isEditing, setIsEditing] = useState(false);
@@ -69,7 +67,7 @@ export default function CustomerDetails() {
     pincode: '',
     customerType: '',
     paymentTerms: '',
-    creditLimit: 500000
+    creditLimit: ''
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -85,13 +83,13 @@ export default function CustomerDetails() {
 
       const custData = custRes.status === 'fulfilled' ? custRes.value.data : null;
       const sumData = sumRes.status === 'fulfilled' ? sumRes.value.data : null;
-      const ordData = ordRes.status === 'fulfilled' ? ordRes.value.data : [];
+      const ordData = ordRes.status === 'fulfilled' ? custRes.value.data : [];
       const timeData = timeRes.status === 'fulfilled' ? timeRes.value.data : [];
 
       setCustomer(custData);
       setSummary(sumData);
-      setOrders(ordData);
-      setTimeline(timeData);
+      setOrders(Array.isArray(ordData) ? ordData : []);
+      setTimeline(Array.isArray(timeData) ? timeData : []);
 
       if (custData) {
         setFormData({
@@ -99,14 +97,14 @@ export default function CustomerDetails() {
           company: custData.company || '',
           phone: custData.phone || '',
           email: custData.email || '',
-          gstNo: custData.gstNo || 'GST 33AABCA1234A1Z5',
+          gstNo: custData.gstNo || '',
           address: custData.address || '',
           city: custData.city || '',
           state: custData.state || '',
           pincode: custData.pincode || '',
-          customerType: custData.customerType || 'Distributor',
-          paymentTerms: custData.paymentTerms || '30 Days',
-          creditLimit: custData.creditLimit || 500000
+          customerType: custData.customerType || '',
+          paymentTerms: custData.paymentTerms || '',
+          creditLimit: custData.creditLimit !== undefined && custData.creditLimit !== null ? custData.creditLimit : ''
         });
       }
     } catch (err) {
@@ -138,7 +136,7 @@ export default function CustomerDetails() {
   };
 
   const getInitials = (nameStr) => {
-    if (!nameStr) return 'RK';
+    if (!nameStr) return 'CU';
     const parts = nameStr.trim().split(' ');
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return nameStr.substring(0, 2).toUpperCase();
@@ -146,7 +144,7 @@ export default function CustomerDetails() {
 
   if (loading) {
     return (
-      <div className="space-y-6 pb-12 animate-fadeIn">
+      <div className="space-y-6 pb-12 animate-fadeIn font-sans">
         <Skeleton className="h-6 w-48" />
         <SkeletonCard className="h-14" />
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -160,7 +158,7 @@ export default function CustomerDetails() {
 
   if (!customer) {
     return (
-      <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-3">
+      <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-3 font-sans">
         <h3 className="text-base font-semibold text-slate-800">Customer Not Found</h3>
         <p className="text-xs text-slate-500 font-normal">The requested customer profile could not be found.</p>
         <Link to="/customers" className="inline-block px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-semibold">
@@ -170,37 +168,55 @@ export default function CustomerDetails() {
     );
   }
 
-  // Pre-formatted reference values matching sample image
-  const customerName = customer.name || 'Ramesh Kumar';
-  const customerCompany = customer.company || 'Apex Traders Pvt. Ltd.';
-  const customerPhone = customer.phone || '98765 43210';
-  const customerEmail = customer.email || 'ramesh.kumar@apextraders.com';
-  const customerGst = customer.gstNo || 'GST 33AABCA1234A1Z5';
-  const customerAddress = customer.address || '21, Industrial Estate, Guindy, Chennai - 600032';
-  const customerType = customer.customerType || 'Distributor';
-  const paymentTerms = customer.paymentTerms || '30 Days';
-  const creditLimit = customer.creditLimit || 500000;
-  const currentBalance = customer.currentBalance || 18450;
-  const reorderProb = customer.reorderProbability || 85;
+  // Pure DB values - no hardcoded fallbacks
+  const customerName = customer.name || 'No Name';
+  const customerCompany = customer.company || 'No Company';
+  const customerPhone = customer.phone || 'No phone';
+  const customerEmail = customer.email || 'No email provided';
+  const customerGst = customer.gstNo || 'No GST number';
+  const customerAddress = customer.address || 'No address provided';
+  const customerType = customer.customerType || 'No customer type';
+  const paymentTerms = customer.paymentTerms || 'No payment terms';
+  const creditLimitStr = customer.creditLimit !== undefined && customer.creditLimit !== null ? `₹ ${customer.creditLimit.toLocaleString('en-IN')}` : 'N/A';
+  const currentBalanceStr = customer.currentBalance !== undefined && customer.currentBalance !== null ? `₹ ${customer.currentBalance.toLocaleString('en-IN')}` : '₹ 0';
+  const reorderProb = customer.reorderProbability !== undefined ? customer.reorderProbability : 0;
+  const salesExecName = customer.salesExecutive?.name || 'Not Assigned';
+  const salesExecInitials = customer.salesExecutive?.name ? getInitials(customer.salesExecutive.name) : 'NA';
+  const customerSinceStr = customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
 
-  // Timeline list fallback matching reference image exactly
-  const sampleTimelineList = [
-    { id: '1', icon: <User size={16} />, bg: 'bg-emerald-50 text-emerald-600 border-emerald-100', title: 'New lead assigned to Tele Caller 1', subtext: 'Lead Source: Website', date: 'May 15, 2025', time: '10:30 AM' },
-    { id: '2', icon: <Phone size={16} />, bg: 'bg-orange-50 text-orange-600 border-orange-100', title: 'Follow-up call completed', subtext: 'Interested in premium quality labels.', date: 'May 15, 2025', time: '11:15 AM' },
-    { id: '3', icon: <FileText size={16} />, bg: 'bg-purple-50 text-purple-600 border-purple-100', title: 'Quotation QTN-0205 sent', subtext: 'Quotation for 3 items worth ₹ 18,450', date: 'May 16, 2025', time: '09:45 AM' },
-    { id: '4', icon: <MessageCircle size={16} />, bg: 'bg-emerald-50 text-emerald-600 border-emerald-100', title: 'WhatsApp discussion', subtext: 'Shared material samples and discussed pricing.', date: 'May 16, 2025', time: '12:20 PM' },
-    { id: '5', icon: <ShoppingBag size={16} />, bg: 'bg-blue-50 text-blue-600 border-blue-100', title: 'Order ORD-2456 created', subtext: 'Order value: ₹ 18,450', date: 'May 16, 2025', time: '03:10 PM' },
-    { id: '6', icon: <Truck size={16} />, bg: 'bg-emerald-50 text-emerald-600 border-emerald-100', title: 'Order delivered successfully', subtext: 'Delivered via DTDC', date: 'May 20, 2025', time: '05:30 PM' },
-    { id: '7', icon: <PhoneCall size={16} />, bg: 'bg-blue-50 text-blue-600 border-blue-100', title: 'Post delivery follow-up call', subtext: 'Customer is satisfied with quality.', date: 'May 21, 2025', time: '11:00 AM' },
-    { id: '8', icon: <Bell size={16} />, bg: 'bg-amber-50 text-amber-600 border-amber-100', title: 'Reorder reminder scheduled', subtext: 'Expected reorder on June 12, 2025', date: 'May 21, 2025', time: '02:45 PM' }
-  ];
+  // Business Summary Metrics derived dynamically from DB
+  const totalOrdersCount = summary?.totalOrders ?? orders.length;
+  const totalSpentAmt = summary?.totalSpent ?? orders.reduce((sum, o) => sum + (o.amount || 0), 0);
+  const lastOrderDateStr = summary?.lastOrder?.orderDate
+    ? new Date(summary.lastOrder.orderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : (orders.length > 0
+        ? new Date(orders[0].orderDate || orders[0].createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : 'No orders');
+  const avgOrderVal = summary?.avgOrderValue ?? (totalOrdersCount > 0 ? Math.round(totalSpentAmt / totalOrdersCount) : 0);
+  const repeatOrdersCount = summary?.repeatOrders ?? (totalOrdersCount > 1 ? totalOrdersCount - 1 : 0);
+  const repeatOrderRatePct = summary?.repeatOrderRate ?? (totalOrdersCount > 0 ? Math.round((repeatOrdersCount / totalOrdersCount) * 100) : 0);
 
-  // Top Purchased Products matching reference image
-  const topProductsList = summary?.topProducts?.length > 0 ? summary.topProducts : [
-    { name: 'Premium BOPP Labels', qty: '12,500 Pcs', amount: '₹ 62,500', img: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=100&auto=format&fit=crop&q=60' },
-    { name: 'Barcode Labels 50x25mm', qty: '9,000 Pcs', amount: '₹ 31,500', img: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=60' },
-    { name: 'Transparent Labels', qty: '6,500 Pcs', amount: '₹ 21,125', img: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=100&auto=format&fit=crop&q=60' }
-  ];
+  // Next Reorder Prediction Date
+  const expectedDate = customer.expectedReorderDate ? new Date(customer.expectedReorderDate) : null;
+  const monthAbbr = expectedDate ? expectedDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '';
+  const dayNum = expectedDate ? expectedDate.getDate() : '';
+  const dayOfWeek = expectedDate ? expectedDate.toLocaleDateString('en-US', { weekday: 'long' }) : '';
+  const fullExpectedDateStr = expectedDate ? expectedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+
+  const getActivityIcon = (type) => {
+    switch (type) {
+      case 'call':
+        return <Phone size={15} />;
+      case 'email':
+        return <Mail size={15} />;
+      case 'whatsapp':
+        return <MessageCircle size={15} />;
+      case 'status_change':
+        return <ShoppingBag size={15} />;
+      default:
+        return <User size={15} />;
+    }
+  };
 
   return (
     <div className="space-y-6 pb-12 font-sans">
@@ -229,7 +245,7 @@ export default function CustomerDetails() {
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            Timeline
+            Timeline ({timeline.length})
           </button>
 
           <button
@@ -240,40 +256,7 @@ export default function CustomerDetails() {
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            Orders
-          </button>
-
-          <button
-            onClick={() => setActiveTab('followups')}
-            className={`py-3 px-1 border-b-2 transition font-medium cursor-pointer whitespace-nowrap ${
-              activeTab === 'followups'
-                ? 'border-red-600 text-red-600 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            Follow-ups
-          </button>
-
-          <button
-            onClick={() => setActiveTab('documents')}
-            className={`py-3 px-1 border-b-2 transition font-medium cursor-pointer whitespace-nowrap ${
-              activeTab === 'documents'
-                ? 'border-red-600 text-red-600 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            Documents
-          </button>
-
-          <button
-            onClick={() => setActiveTab('notes')}
-            className={`py-3 px-1 border-b-2 transition font-medium cursor-pointer whitespace-nowrap ${
-              activeTab === 'notes'
-                ? 'border-red-600 text-red-600 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            Notes
+            Orders ({orders.length})
           </button>
         </div>
 
@@ -291,31 +274,24 @@ export default function CustomerDetails() {
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden z-30 p-1 space-y-0.5 text-xs">
               <button
                 onClick={() => { setShowActionsDropdown(false); setIsEditing(true); }}
-                className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2 cursor-pointer"
               >
                 <Edit2 size={14} className="text-slate-400" />
                 <span>Edit Profile</span>
               </button>
               <button
                 onClick={() => { setShowActionsDropdown(false); navigate('/orders'); }}
-                className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2 cursor-pointer"
               >
                 <ShoppingBag size={14} className="text-slate-400" />
                 <span>Create New Order</span>
-              </button>
-              <button
-                onClick={() => { setShowActionsDropdown(false); navigate('/followups'); }}
-                className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2"
-              >
-                <Calendar size={14} className="text-slate-400" />
-                <span>Schedule Follow-up</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Overview Tab Content (3 Columns matching exact image layout) */}
+      {/* Overview Tab Content */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6">
           
@@ -351,24 +327,30 @@ export default function CustomerDetails() {
                   <button
                     onClick={() => setIsEditing(!isEditing)}
                     className="p-1 hover:text-slate-700 transition cursor-pointer"
-                    title="More Options"
+                    title="Edit Profile"
                   >
-                    <MoreVertical size={18} />
+                    <Edit2 size={16} />
                   </button>
                 </div>
               </div>
 
-              {/* Tag Badges */}
-              <div className="flex items-center gap-2 pt-1">
-                <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-semibold rounded-md">
-                  High Value
-                </span>
-                <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold rounded-md">
-                  Chennai
-                </span>
-              </div>
+              {/* Dynamic Tag Badges if available */}
+              {(customer.city || customer.priority) && (
+                <div className="flex items-center gap-2 pt-1">
+                  {customer.priority && (
+                    <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-semibold rounded-md uppercase">
+                      {customer.priority} Priority
+                    </span>
+                  )}
+                  {customer.city && (
+                    <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold rounded-md">
+                      {customer.city}
+                    </span>
+                  )}
+                </div>
+              )}
 
-              {/* Contact Information List with Lucide Icons */}
+              {/* Contact Information List */}
               <div className="space-y-3 pt-2 text-xs">
                 {/* Phone */}
                 <div className="flex items-center justify-between">
@@ -376,15 +358,17 @@ export default function CustomerDetails() {
                     <Phone size={15} className="text-slate-400 shrink-0" />
                     <span>{customerPhone}</span>
                   </div>
-                  <a
-                    href={`https://wa.me/91${customerPhone.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-emerald-500 hover:scale-110 transition p-1"
-                    title="Chat on WhatsApp"
-                  >
-                    <MessageCircle size={18} className="fill-emerald-500 text-white" />
-                  </a>
+                  {customer.phone && (
+                    <a
+                      href={`https://wa.me/91${customer.phone.replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-emerald-500 hover:scale-110 transition p-1"
+                      title="Chat on WhatsApp"
+                    >
+                      <MessageCircle size={18} className="fill-emerald-500 text-white" />
+                    </a>
+                  )}
                 </div>
 
                 {/* Email */}
@@ -412,7 +396,7 @@ export default function CustomerDetails() {
               {/* Customer Since */}
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 font-medium">Customer Since</span>
-                <span className="text-slate-900 font-semibold">May 15, 2025</span>
+                <span className="text-slate-900 font-semibold">{customerSinceStr}</span>
               </div>
 
               {/* Sales Executive */}
@@ -420,9 +404,9 @@ export default function CustomerDetails() {
                 <span className="text-slate-500 font-medium">Sales Executive</span>
                 <div className="flex items-center gap-1.5">
                   <div className="w-5 h-5 rounded-full bg-slate-800 text-white text-[9px] font-bold flex items-center justify-center">
-                    TC
+                    {salesExecInitials}
                   </div>
-                  <span className="text-slate-900 font-semibold">Tele Caller 1</span>
+                  <span className="text-slate-900 font-semibold">{salesExecName}</span>
                 </div>
               </div>
 
@@ -441,63 +425,66 @@ export default function CustomerDetails() {
               {/* Credit Limit */}
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 font-medium">Credit Limit</span>
-                <span className="text-slate-900 font-semibold">₹ {creditLimit.toLocaleString('en-IN')}</span>
+                <span className="text-slate-900 font-semibold">{creditLimitStr}</span>
               </div>
 
               {/* Current Balance */}
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 font-medium">Current Balance</span>
-                <span className="text-emerald-600 font-bold">₹ {currentBalance.toLocaleString('en-IN')}</span>
+                <span className="text-emerald-600 font-bold">{currentBalanceStr}</span>
               </div>
 
               {/* Reorder Probability Progress Bar */}
               <div className="pt-2 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 font-medium">Reorder Probability</span>
-                  <span className="text-emerald-600 font-bold">High ({reorderProb}%)</span>
+                  <span className="text-emerald-600 font-bold">{reorderProb}%</span>
                 </div>
                 <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex items-center">
-                  <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${reorderProb}%` }}></div>
+                  <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, reorderProb))}%` }}></div>
                 </div>
               </div>
 
             </div>
           </div>
 
-          {/* COLUMN 2: Timeline Activity Feed */}
+          {/* COLUMN 2: Dynamic Live Timeline Activity Feed */}
           <div className="xl:col-span-4 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-4">
             
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-900 text-sm tracking-tight">Timeline</h3>
-              <div className="relative inline-block">
-                <button className="px-3 py-1 bg-white border border-slate-200/90 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-2xs cursor-pointer">
-                  <span>{timelineFilter}</span>
-                  <ChevronDown size={14} className="text-slate-400" />
-                </button>
-              </div>
+              <span className="text-[11px] font-semibold text-slate-400">{timeline.length} Activities</span>
             </div>
 
             {/* Vertical Timeline Feed */}
-            <div className="relative pl-6 space-y-4 pt-1 pb-2 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-              {sampleTimelineList.map((item) => (
-                <div key={item.id} className="relative flex items-start justify-between gap-2 text-xs">
-                  {/* Node icon */}
-                  <div className={`absolute -left-[31px] top-0.5 w-7 h-7 rounded-full ${item.bg} flex items-center justify-center shrink-0 shadow-2xs border`}>
-                    {item.icon}
-                  </div>
+            {timeline.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-xs font-normal bg-slate-50 rounded-xl border border-slate-100">
+                No activity recorded yet for this customer.
+              </div>
+            ) : (
+              <div className="relative pl-6 space-y-4 pt-1 pb-2 max-h-[460px] overflow-y-auto scrollbar-hide before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                {timeline.map((item) => (
+                  <div key={item._id || item.id} className="relative flex items-start justify-between gap-2 text-xs">
+                    {/* Node icon */}
+                    <div className="absolute -left-[31px] top-0.5 w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0 shadow-2xs">
+                      {getActivityIcon(item.type)}
+                    </div>
 
-                  <div className="min-w-0 pr-2">
-                    <p className="font-bold text-slate-900 leading-tight">{item.title}</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5 font-normal">{item.subtext}</p>
-                  </div>
+                    <div className="min-w-0 pr-2">
+                      <p className="font-bold text-slate-900 leading-tight">{item.description || item.title || 'Activity'}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
+                        {item.createdBy?.name ? `By ${item.createdBy.name}` : ''}
+                      </p>
+                    </div>
 
-                  <div className="text-right text-[11px] text-slate-400 font-medium shrink-0 leading-tight">
-                    <div>{item.date}</div>
-                    <div className="text-[10px] mt-0.5">{item.time}</div>
+                    <div className="text-right text-[11px] text-slate-400 font-medium shrink-0 leading-tight">
+                      <div>{item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}</div>
+                      <div className="text-[10px] mt-0.5">{item.createdAt ? new Date(item.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : ''}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
             <button
               onClick={() => setActiveTab('timeline')}
@@ -508,7 +495,7 @@ export default function CustomerDetails() {
 
           </div>
 
-          {/* COLUMN 3: Business Summary & Reorder Prediction (4 / 12 cols) */}
+          {/* COLUMN 3: Dynamic Business Summary & Reorder Prediction */}
           <div className="xl:col-span-4 md:col-span-2 space-y-5">
             
             {/* Card 1: Business Summary Metrics Grid */}
@@ -524,7 +511,7 @@ export default function CustomerDetails() {
                     </div>
                     <span className="text-[10px] font-medium text-slate-500 uppercase">Total Orders</span>
                   </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">{summary?.totalOrders ?? 8}</div>
+                  <div className="text-lg font-bold text-slate-900 pl-1">{totalOrdersCount}</div>
                 </div>
 
                 {/* 2. Total Spent */}
@@ -535,7 +522,7 @@ export default function CustomerDetails() {
                     </div>
                     <span className="text-[10px] font-medium text-slate-500 uppercase">Total Spent</span>
                   </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">₹ {(summary?.totalSpent ?? 125000).toLocaleString('en-IN')}</div>
+                  <div className="text-lg font-bold text-slate-900 pl-1">₹ {totalSpentAmt.toLocaleString('en-IN')}</div>
                 </div>
 
                 {/* 3. Last Order */}
@@ -546,7 +533,7 @@ export default function CustomerDetails() {
                     </div>
                     <span className="text-[10px] font-medium text-slate-500 uppercase">Last Order</span>
                   </div>
-                  <div className="text-xs font-bold text-slate-900 pl-1 pt-1">May 30, 2025</div>
+                  <div className="text-xs font-bold text-slate-900 pl-1 pt-1">{lastOrderDateStr}</div>
                 </div>
 
                 {/* 4. Avg Order Value */}
@@ -557,7 +544,7 @@ export default function CustomerDetails() {
                     </div>
                     <span className="text-[10px] font-medium text-slate-500 uppercase">Avg. Order Value</span>
                   </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">₹ {(summary?.avgOrderValue ?? 15625).toLocaleString('en-IN')}</div>
+                  <div className="text-lg font-bold text-slate-900 pl-1">₹ {avgOrderVal.toLocaleString('en-IN')}</div>
                 </div>
 
                 {/* 5. Repeat Orders */}
@@ -568,7 +555,7 @@ export default function CustomerDetails() {
                     </div>
                     <span className="text-[10px] font-medium text-slate-500 uppercase">Repeat Orders</span>
                   </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">{summary?.repeatOrders ?? 7}</div>
+                  <div className="text-lg font-bold text-slate-900 pl-1">{repeatOrdersCount}</div>
                 </div>
 
                 {/* 6. Repeat Order Rate */}
@@ -579,7 +566,7 @@ export default function CustomerDetails() {
                     </div>
                     <span className="text-[10px] font-medium text-slate-500 uppercase">Repeat Order Rate</span>
                   </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">{summary?.repeatOrderRate ?? 87.5}%</div>
+                  <div className="text-lg font-bold text-slate-900 pl-1">{repeatOrderRatePct}%</div>
                 </div>
               </div>
             </div>
@@ -588,35 +575,73 @@ export default function CustomerDetails() {
             <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
               <h3 className="font-bold text-slate-900 text-sm tracking-tight">Next Reorder Prediction</h3>
               
-              <div className="flex items-center gap-4 pt-1">
-                {/* Red Date Box */}
-                <div className="w-16 text-center shadow-2xs rounded-xl overflow-hidden border border-slate-200">
-                  <div className="bg-red-600 text-white text-[11px] font-bold py-0.5 tracking-wider uppercase">JUN</div>
-                  <div className="bg-slate-50 text-slate-900 text-xl font-bold py-1">12</div>
-                  <div className="bg-white text-[9px] text-slate-400 py-0.5 border-t border-slate-100">Thursday</div>
-                </div>
+              {expectedDate ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4 pt-1">
+                    {/* Red Date Box */}
+                    <div className="w-16 text-center shadow-2xs rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                      <div className="bg-red-600 text-white text-[11px] font-bold py-0.5 tracking-wider uppercase">{monthAbbr}</div>
+                      <div className="bg-slate-50 text-slate-900 text-xl font-bold py-1">{dayNum}</div>
+                      <div className="bg-white text-[9px] text-slate-400 py-0.5 border-t border-slate-100">{dayOfWeek}</div>
+                    </div>
 
-                <div className="space-y-1 text-xs">
-                  <span className="text-slate-400 font-medium">Expected Reorder Date</span>
-                  <div className="text-slate-900 font-bold text-sm">June 12, 2025</div>
-                  <div className="text-emerald-600 font-semibold text-xs flex items-center gap-1 pt-0.5">
-                    <span>Probability</span>
-                    <span className="font-bold">High (85%)</span>
+                    <div className="space-y-1 text-xs">
+                      <span className="text-slate-400 font-medium">Expected Reorder Date</span>
+                      <div className="text-slate-900 font-bold text-sm">{fullExpectedDateStr}</div>
+                      <div className="text-emerald-600 font-semibold text-xs flex items-center gap-1 pt-0.5">
+                        <span>Probability</span>
+                        <span className="font-bold">({reorderProb}%)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="pt-2 space-y-1">
+                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                      <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, reorderProb))}%` }}></div>
+                    </div>
+                    <div className="text-right text-[10px] text-slate-400 font-semibold">{reorderProb}%</div>
                   </div>
                 </div>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="pt-2 space-y-1">
-                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500 h-full rounded-full w-[85%]"></div>
+              ) : (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-slate-400 text-xs font-normal">
+                  No reorder prediction scheduled
                 </div>
-                <div className="text-right text-[10px] text-slate-400 font-semibold">85%</div>
-              </div>
+              )}
             </div>
 
           </div>
 
+        </div>
+      )}
+
+      {/* Timeline Tab */}
+      {activeTab === 'timeline' && (
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+          <h3 className="font-bold text-slate-900 text-sm">Full Activity Timeline</h3>
+          {timeline.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-xs font-normal">No activity recorded for this customer.</div>
+          ) : (
+            <div className="relative pl-6 space-y-4 pt-1 pb-2 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+              {timeline.map((item) => (
+                <div key={item._id || item.id} className="relative flex items-start justify-between gap-2 text-xs">
+                  <div className="absolute -left-[31px] top-0.5 w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0 shadow-2xs">
+                    {getActivityIcon(item.type)}
+                  </div>
+                  <div className="min-w-0 pr-2">
+                    <p className="font-bold text-slate-900 leading-tight">{item.description || item.title || 'Activity'}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
+                      {item.createdBy?.name ? `By ${item.createdBy.name}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-right text-[11px] text-slate-400 font-medium shrink-0 leading-tight">
+                    <div>{item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
+                    <div className="text-[10px] mt-0.5">{item.createdAt ? new Date(item.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : ''}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -641,7 +666,7 @@ export default function CustomerDetails() {
                 orders.map((ord) => (
                   <tr key={ord._id} className="hover:bg-slate-50 transition">
                     <td className="p-4 font-bold text-slate-900">{ord.orderNo || `ORD-${ord._id.slice(-6)}`}</td>
-                    <td className="p-4 font-medium text-slate-600">{new Date(ord.orderDate).toLocaleDateString('en-IN')}</td>
+                    <td className="p-4 font-medium text-slate-600">{new Date(ord.orderDate || ord.createdAt).toLocaleDateString('en-IN')}</td>
                     <td className="p-4 font-bold text-slate-900">₹ {(ord.amount || 0).toLocaleString('en-IN')}</td>
                     <td className="p-4">
                       <span className="px-2.5 py-0.5 border text-[10px] font-semibold rounded-md uppercase bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -656,97 +681,101 @@ export default function CustomerDetails() {
         </div>
       )}
 
-      {/* Follow-ups Tab */}
-      {activeTab === 'followups' && (
-        <div className="bg-white rounded-2xl p-8 border border-slate-200/80 shadow-2xs text-center space-y-4 max-w-2xl mx-auto">
-          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-100">
-            <Calendar size={28} />
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-bold text-slate-900 text-base">No Open Follow-ups Scheduled</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              There are no pending or overdue follow-up calls scheduled for {customerName}.
-            </p>
-          </div>
-          <button
-            onClick={() => navigate('/followups')}
-            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-xl shadow-2xs transition inline-flex items-center gap-2 cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Schedule Follow-up</span>
-          </button>
-        </div>
-      )}
+      {/* Edit Profile Modal */}
+      {isEditing && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Edit Customer Profile</h3>
+              <button onClick={() => setIsEditing(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
 
-      {/* Documents Tab */}
-      {activeTab === 'documents' && (
-        <div className="bg-white rounded-2xl p-8 border border-slate-200/80 shadow-2xs text-center space-y-4 max-w-2xl mx-auto">
-          <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto border border-purple-100">
-            <FileText size={28} />
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-bold text-slate-900 text-base">No Documents Uploaded</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              No quotation PDFs, GST certificates, or tax invoices attached to this customer profile yet.
-            </p>
-          </div>
-          <button
-            onClick={() => notify.info('Document attachment feature coming soon')}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-2xs transition inline-flex items-center gap-2 cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Upload Document</span>
-          </button>
-        </div>
-      )}
+            <form onSubmit={handleSaveProfile} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Customer Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                />
+              </div>
 
-      {/* Notes Tab */}
-      {activeTab === 'notes' && (
-        <div className="bg-white rounded-2xl p-8 border border-slate-200/80 shadow-2xs text-center space-y-4 max-w-2xl mx-auto">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100">
-            <MessageCircle size={28} />
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-bold text-slate-900 text-base">No Internal Notes Added</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              No internal executive comments or account notes recorded for {customerName} yet.
-            </p>
-          </div>
-          <button
-            onClick={() => notify.info('Add note feature available in actions menu')}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-2xs transition inline-flex items-center gap-2 cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Add Internal Note</span>
-          </button>
-        </div>
-      )}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Company Name</label>
+                <input
+                  type="text"
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                />
+              </div>
 
-      {/* Timeline Tab */}
-      {activeTab === 'timeline' && (
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
-          <h3 className="font-bold text-slate-900 text-base">Full Interaction Timeline</h3>
-          <div className="relative pl-6 space-y-6 pt-2 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-            {sampleTimelineList.map((item) => (
-              <div key={item.id} className="relative flex items-start justify-between gap-4 text-xs">
-                <div className={`absolute -left-[31px] top-0.5 w-8 h-8 rounded-full ${item.bg} flex items-center justify-center shrink-0 border`}>
-                  {item.icon}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Phone Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  />
                 </div>
                 <div>
-                  <p className="font-bold text-slate-900 text-sm">{item.title}</p>
-                  <p className="text-xs text-slate-500 mt-1">{item.subtext}</p>
-                </div>
-                <div className="text-right text-xs text-slate-400 font-medium shrink-0">
-                  <div>{item.date}</div>
-                  <div>{item.time}</div>
+                  <label className="block font-semibold text-slate-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  />
                 </div>
               </div>
-            ))}
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">GST Number</label>
+                <input
+                  type="text"
+                  value={formData.gstNo}
+                  onChange={(e) => setFormData({ ...formData, gstNo: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
+                >
+                  {isSaving ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
-
     </div>
   );
 }
-

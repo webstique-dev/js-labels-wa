@@ -22,19 +22,44 @@ const getOrders = async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const [orders, total] = await Promise.all([
+    const [orders, total, allOrdersForSummary] = await Promise.all([
       Order.find(queryFilter)
         .populate('customerId', 'name company phone email city')
         .populate('salesExecutive', 'name email avatarUrl role')
         .sort({ orderDate: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
-      Order.countDocuments(queryFilter)
+      Order.countDocuments(queryFilter),
+      Order.find(req.scopeFilter || {})
     ]);
+
+    const summary = {
+      totalOrders: allOrdersForSummary.length,
+      statusCounts: {
+        pending: 0,
+        confirmed: 0,
+        production: 0,
+        quality_check: 0,
+        dispatched: 0,
+        delivered: 0,
+        cancelled: 0
+      },
+      totalRevenue: 0
+    };
+
+    allOrdersForSummary.forEach((o) => {
+      if (summary.statusCounts[o.status] !== undefined) {
+        summary.statusCounts[o.status] += 1;
+      }
+      if (o.status !== 'cancelled') {
+        summary.totalRevenue += (o.amount || 0);
+      }
+    });
 
     return res.json({
       orders,
       total,
+      summary,
       page: parseInt(page),
       pages: Math.ceil(total / parseInt(limit))
     });
@@ -90,7 +115,20 @@ const getOrdersSummary = async (req, res) => {
 // POST /api/orders
 const createOrder = async (req, res) => {
   try {
-    let { customerId, newCustomer, lineItems, deliveryDate, usageCycleDays, leadId } = req.body;
+    let {
+      customerId,
+      newCustomer,
+      lineItems,
+      deliveryDate,
+      usageCycleDays,
+      leadId,
+      poNumber,
+      advanceReceived,
+      advanceAmount,
+      deliveryAddress,
+      notes,
+      totalAmount: customTotalAmount
+    } = req.body;
 
     if (!lineItems || !Array.isArray(lineItems) || lineItems.length === 0) {
       return res.status(400).json({ message: 'At least one line item is required' });
@@ -108,7 +146,7 @@ const createOrder = async (req, res) => {
         phone: newCustomer.phone,
         email: newCustomer.email,
         city: newCustomer.city || 'Mumbai',
-        address: newCustomer.address,
+        address: deliveryAddress || newCustomer.address,
         gstNo: newCustomer.gstNo,
         leadId: leadId || newCustomer.leadId,
         salesExecutive: req.user.id,
@@ -119,32 +157,42 @@ const createOrder = async (req, res) => {
       customerId = createdCustomer._id;
     }
 
-    // 2. Fetch products and compute line items & total amount
+    // 2. Compute custom line items & total amount
     let computedAmount = 0;
-    let defaultUsageCycle = 30;
     const processedLineItems = [];
 
     for (const item of lineItems) {
-      const prod = await Product.findById(item.productId);
-      if (!prod) {
-        return res.status(400).json({ message: `Product not found for ID: ${item.productId}` });
+      const name = (item.description || item.name || '').trim() || 'Custom Label Spec';
+      const qty = parseInt(item.qty) || 0;
+      const rate = parseFloat(item.rate) || 0;
+
+      let lineTotal = item.lineTotal !== undefined && item.lineTotal !== '' ? parseFloat(item.lineTotal) : 0;
+      if (!lineTotal && rate > 0 && qty > 0) {
+        lineTotal = (qty / 1000) * rate;
+      }
+      if (!lineTotal && item.price && qty > 0) {
+        lineTotal = qty * parseFloat(item.price);
       }
 
-      const qty = parseInt(item.qty) || 1;
-      const price = item.price !== undefined ? parseFloat(item.price) : prod.unitPrice;
-      const lineTotal = qty * price;
       computedAmount += lineTotal;
 
-      if (prod.defaultUsageCycleDays) {
-        defaultUsageCycle = prod.defaultUsageCycleDays;
-      }
-
       processedLineItems.push({
-        productId: prod._id,
-        name: prod.name,
+        productId: item.productId || undefined,
+        name,
+        description: name,
         qty,
-        price
+        rate,
+        price: rate > 0 ? (rate / 1000) : (qty > 0 ? lineTotal / qty : 0),
+        lineTotal
       });
+    }
+
+    const finalOrderAmount = customTotalAmount !== undefined && parseFloat(customTotalAmount) > 0
+      ? parseFloat(customTotalAmount)
+      : computedAmount;
+
+    if (finalOrderAmount <= 0) {
+      return res.status(400).json({ message: 'Order Total Amount must be greater than ₹0' });
     }
 
     // 3. Auto-generate Order Number
@@ -155,11 +203,16 @@ const createOrder = async (req, res) => {
       orderNo,
       customerId,
       orderDate: new Date(),
-      amount: computedAmount,
+      amount: finalOrderAmount,
       status: 'confirmed',
       deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
       salesExecutive: req.user.id,
-      usageCycleDays: usageCycleDays || defaultUsageCycle,
+      usageCycleDays: parseInt(usageCycleDays) || 30,
+      poNumber: poNumber || undefined,
+      advanceReceived: Boolean(advanceReceived),
+      advanceAmount: parseFloat(advanceAmount) || 0,
+      deliveryAddress: deliveryAddress || undefined,
+      notes: notes || undefined,
       lineItems: processedLineItems
     });
 
