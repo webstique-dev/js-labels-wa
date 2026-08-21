@@ -31,8 +31,35 @@ const getLeads = async (req, res) => {
       Lead.countDocuments(queryFilter)
     ]);
 
+    // Enrich follow_up leads with open FollowUp document dates if missing
+    const leadIds = leads.map(l => l._id);
+    const openFollowUps = await FollowUp.find({
+      relatedType: 'lead',
+      relatedId: { $in: leadIds },
+      status: 'open'
+    }).sort({ dueDate: -1 });
+
+    const followUpMap = {};
+    openFollowUps.forEach(f => {
+      followUpMap[f.relatedId.toString()] = f;
+    });
+
+    const enrichedLeads = leads.map(l => {
+      const leadObj = l.toObject();
+      const fu = followUpMap[l._id.toString()];
+      if (fu) {
+        if (!leadObj.nextFollowUpDate && fu.dueDate) {
+          leadObj.nextFollowUpDate = fu.dueDate;
+        }
+        if (!leadObj.followUpNotes && fu.notes) {
+          leadObj.followUpNotes = fu.notes;
+        }
+      }
+      return leadObj;
+    });
+
     return res.json({
-      leads,
+      leads: enrichedLeads,
       total,
       page: parseInt(page),
       pages: Math.ceil(total / parseInt(limit))
@@ -150,8 +177,6 @@ const updateLeadStatus = async (req, res) => {
       lead.cancelReason = undefined;
     }
 
-    await lead.save();
-
     // If moving to follow_up, create a FollowUp document to sync with Followups List and Details pages
     if (status === 'follow_up') {
       let dueDate = new Date();
@@ -161,15 +186,24 @@ const updateLeadStatus = async (req, res) => {
         dueDate = new Date(followUpDate);
       }
 
+      const validDueDate = isNaN(dueDate.getTime()) ? new Date() : dueDate;
+
+      lead.nextFollowUpDate = validDueDate;
+      lead.followUpDate = followUpDate;
+      lead.followUpTime = followUpTime;
+      lead.followUpNotes = notes || '';
+
       await FollowUp.create({
         relatedType: 'lead',
         relatedId: lead._id,
-        dueDate: isNaN(dueDate.getTime()) ? new Date() : dueDate,
+        dueDate: validDueDate,
         notes: notes || '',
         status: 'open',
         assignedTo: lead.assignedTo || req.user.id
       });
     }
+
+    await lead.save();
 
     // If moving to won, create a Customer document if not already existing
     if (status === 'won') {

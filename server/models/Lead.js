@@ -11,7 +11,11 @@ const leadSchema = new mongoose.Schema({
   status: { type: String, enum: ['new', 'contacted', 'follow_up', 'won', 'cancelled'], default: 'new' },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  cancelReason: { type: String }
+  cancelReason: { type: String },
+  nextFollowUpDate: { type: Date },
+  followUpDate: { type: String },
+  followUpTime: { type: String },
+  followUpNotes: { type: String }
 }, {
   timestamps: true
 });

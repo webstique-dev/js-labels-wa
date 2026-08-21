@@ -126,16 +126,90 @@ const formatLeadTime = (dateString) => {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 };
 
+const formatFollowUpBadgeTime = (lead) => {
+  if (!lead) return null;
+  const rawDate = lead.nextFollowUpDate || lead.dueDate || lead.followUpDate;
+
+  if (!rawDate && !lead.followUpTime) return null;
+
+  try {
+    let dt = null;
+    if (lead.nextFollowUpDate) {
+      dt = new Date(lead.nextFollowUpDate);
+    } else if (lead.followUpDate && lead.followUpTime) {
+      dt = new Date(`${lead.followUpDate}T${lead.followUpTime}`);
+    } else if (rawDate) {
+      dt = new Date(rawDate);
+    }
+
+    if (!dt || isNaN(dt.getTime())) {
+      if (lead.followUpDate) return `${lead.followUpDate} ${lead.followUpTime || ''}`.trim();
+      return null;
+    }
+
+    const formattedDate = dt.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    let formattedTime = lead.followUpTime;
+    if (!formattedTime || formattedTime.includes(':')) {
+      formattedTime = dt.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+
+    return `${formattedDate} at ${formattedTime}`;
+  } catch (e) {
+    return lead.followUpDate ? `${lead.followUpDate} ${lead.followUpTime || ''}` : null;
+  }
+};
+
+const getFollowUpStatusInfo = (lead) => {
+  if (!lead) return { isUrgent: false, isOverdue: false, label: 'Follow-up Scheduled' };
+
+  let targetDate = null;
+  if (lead.nextFollowUpDate) {
+    targetDate = new Date(lead.nextFollowUpDate);
+  } else if (lead.followUpDate && lead.followUpTime) {
+    targetDate = new Date(`${lead.followUpDate}T${lead.followUpTime}`);
+  } else if (lead.followUpDate) {
+    targetDate = new Date(lead.followUpDate);
+  }
+
+  if (!targetDate || isNaN(targetDate.getTime())) {
+    return { isUrgent: false, isOverdue: false, label: 'Follow-up Scheduled' };
+  }
+
+  const now = new Date();
+  const diffInMs = targetDate.getTime() - now.getTime();
+  const diffInMinutes = diffInMs / (1000 * 60);
+
+  // If follow-up is within 30 minutes (or overdue), mark as urgent (RED)
+  if (diffInMinutes <= 30) {
+    if (diffInMinutes < 0) {
+      return { isUrgent: true, isOverdue: true, label: 'Overdue Follow-up' };
+    }
+    return { isUrgent: true, isOverdue: false, label: 'Due in < 30 Mins' };
+  }
+
+  return { isUrgent: false, isOverdue: false, label: 'Follow-up Scheduled' };
+};
+
 const calculateColumnTotal = (columnLeads) => {
   const sum = columnLeads.reduce((acc, lead) => {
-    const val = lead.orderAmount || lead.estimatedValue || lead.amount || 25000;
+    const val = lead.orderAmount || lead.estimatedValue || lead.amount || 0;
     return acc + val;
   }, 0);
 
+  if (sum === 0) return null;
   if (sum >= 10000000) return `₹ ${(sum / 10000000).toFixed(1)} Cr`;
   if (sum >= 100000) return `₹ ${(sum / 100000).toFixed(1)} Lakhs`;
   if (sum >= 1000) return `₹ ${(sum / 1000).toFixed(1)} K`;
-  return `₹ ${sum}`;
+  return `₹ ${sum.toLocaleString('en-IN')}`;
 };
 
 export default function Leads() {
@@ -214,6 +288,7 @@ export default function Leads() {
   const [followUpDateInput, setFollowUpDateInput] = useState(getLiveDateStr());
   const [followUpTimeInput, setFollowUpTimeInput] = useState(getLiveTimeStr());
   const [followUpNotesInput, setFollowUpNotesInput] = useState('');
+  const [isSchedulingFollowUp, setIsSchedulingFollowUp] = useState(false);
 
   const canCreate = permissions.leads?.includes('create');
   const canDelete = permissions.leads?.includes('delete') || role === 'super_admin' || role === 'manager';
@@ -400,22 +475,31 @@ export default function Leads() {
     }
 
     const { leadId, destStatus } = pendingFollowUpMove;
-    const updatedLeads = leads.map(l => l._id === leadId ? { ...l, status: destStatus } : l);
+    const computedNextDate = new Date(`${followUpDateInput}T${followUpTimeInput}`);
+    const updatedLeads = leads.map(l => l._id === leadId ? {
+      ...l,
+      status: destStatus,
+      followUpDate: followUpDateInput,
+      followUpTime: followUpTimeInput,
+      nextFollowUpDate: isNaN(computedNextDate.getTime()) ? new Date() : computedNextDate
+    } : l);
     setLeads(updatedLeads);
 
     try {
+      setIsSchedulingFollowUp(true);
       await api.patch(`/leads/${leadId}/status`, {
         status: destStatus,
         followUpDate: followUpDateInput,
         followUpTime: followUpTimeInput,
         notes: followUpNotesInput
       });
-      notify.success('Follow-up scheduled & lead moved!');
-      fetchLeads();
+      notify.success('Follow-up scheduled successfully & lead moved!');
+      await fetchLeads();
     } catch (err) {
       setLeads(leads);
       notify.error(err.response?.data?.message || 'Failed to schedule follow-up');
     } finally {
+      setIsSchedulingFollowUp(false);
       setPendingFollowUpMove(null);
     }
   };
@@ -704,7 +788,27 @@ export default function Leads() {
         <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex md:grid md:grid-cols-4 lg:grid-cols-4 gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide">
             {COLUMNS.filter(c => c.id !== 'cancelled').map((column) => {
-              const columnLeads = filteredLeads.filter(l => l.status === column.id);
+              let columnLeads = filteredLeads.filter(l => l.status === column.id);
+
+              // Automatically position and sort follow-up cards chronologically by scheduled time
+              if (column.id === 'follow_up') {
+                columnLeads = [...columnLeads].sort((a, b) => {
+                  const getTimestamp = (lead) => {
+                    if (lead.nextFollowUpDate) {
+                      const t = new Date(lead.nextFollowUpDate).getTime();
+                      if (!isNaN(t)) return t;
+                    }
+                    if (lead.followUpDate) {
+                      const dt = new Date(`${lead.followUpDate}T${lead.followUpTime || '00:00'}`);
+                      const t = dt.getTime();
+                      if (!isNaN(t)) return t;
+                    }
+                    return 9999999999999;
+                  };
+                  return getTimestamp(a) - getTimestamp(b);
+                });
+              }
+
               const columnTotalStr = calculateColumnTotal(columnLeads);
               const IconComp = column.icon;
 
@@ -744,9 +848,11 @@ export default function Leads() {
                             </span>
                           )}
                         </h3>
-                        <span className="text-xs text-slate-500 font-medium block">
-                          {columnTotalStr}
-                        </span>
+                        {columnTotalStr && (
+                          <span className="text-xs text-slate-500 font-medium block">
+                            {columnTotalStr}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1429,9 +1535,17 @@ export default function Leads() {
                 </button>
                 <button
                   type="submit"
-                  className="w-full sm:w-auto px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-2xs transition cursor-pointer text-center"
+                  disabled={isSchedulingFollowUp}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl text-xs font-bold shadow-2xs transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer text-center"
                 >
-                  Confirm & Schedule
+                  {isSchedulingFollowUp ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Scheduling...</span>
+                    </>
+                  ) : (
+                    <span>Confirm & Schedule</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -1483,13 +1597,18 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
 
   const isFollowUpStage = lead.status === 'follow_up';
   const isWonStage = lead.status === 'won';
+  const followUpStatusInfo = isFollowUpStage ? getFollowUpStatusInfo(lead) : { isUrgent: false, isOverdue: false, label: '' };
 
   return (
     <div
       ref={provided?.innerRef}
       {...(provided?.draggableProps || {})}
       {...(provided?.dragHandleProps || {})}
-      className={`bg-white p-4.5 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-md transition min-h-[145px] flex flex-col justify-between space-y-3.5 relative group ${snapshot?.isDragging ? 'shadow-2xl ring-2 ring-red-500 rotate-1 z-30' : ''
+      className={`bg-white p-4.5 sm:p-5 rounded-2xl border shadow-2xs hover:shadow-md transition min-h-[145px] flex flex-col justify-between space-y-3.5 relative group ${
+        followUpStatusInfo.isUrgent
+          ? 'border-rose-300 ring-2 ring-rose-500/20 bg-rose-50/10'
+          : 'border-slate-200/90'
+      } ${snapshot?.isDragging ? 'shadow-2xl ring-2 ring-red-500 rotate-1 z-30' : ''
         }`}
     >
       {/* Lead Card Header: Avatar Initials + Lead Name + Company + Profile Workspace Button */}
@@ -1529,11 +1648,38 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
           </span>
         </div>
 
-        {/* Follow-up Today Badge if in Follow-up Column */}
+        {/* Scheduled Follow-up Date & Time Badge */}
         {isFollowUpStage && (
-          <div className="flex items-center gap-1.5 text-xs text-rose-600 font-semibold pt-0.5">
-            <Calendar size={14} className="text-rose-500" />
-            <span>Follow-up today</span>
+          <div className={`flex flex-col gap-1 text-xs p-2.5 rounded-xl font-semibold w-full mt-1 transition-all ${
+            followUpStatusInfo.isUrgent
+              ? 'bg-rose-50 border border-rose-300 text-rose-950 shadow-xs ring-1 ring-rose-400/30'
+              : 'bg-amber-50/90 border border-amber-200/90 text-amber-900 shadow-2xs'
+          }`}>
+            <div className={`flex items-center justify-between text-[10px] font-bold uppercase tracking-wider ${
+              followUpStatusInfo.isUrgent ? 'text-rose-700' : 'text-amber-700'
+            }`}>
+              <span className="flex items-center gap-1">
+                {followUpStatusInfo.isUrgent ? (
+                  <AlertTriangle size={12} className="text-rose-600 shrink-0 animate-bounce" />
+                ) : (
+                  <Calendar size={12} className="text-amber-600 shrink-0" />
+                )}
+                <span>{followUpStatusInfo.label}</span>
+              </span>
+              <Clock size={11} className={followUpStatusInfo.isUrgent ? 'text-rose-600 shrink-0' : 'text-amber-500 shrink-0'} />
+            </div>
+            <div className={`text-xs font-bold leading-tight ${
+              followUpStatusInfo.isUrgent ? 'text-rose-950 font-extrabold' : 'text-amber-950'
+            }`}>
+              {formatFollowUpBadgeTime(lead) || (lead.followUpDate ? `${lead.followUpDate} ${lead.followUpTime || ''}` : 'Follow-up Scheduled')}
+            </div>
+            {lead.followUpNotes && (
+              <p className={`text-[11px] font-normal line-clamp-1 italic pt-1 border-t mt-0.5 ${
+                followUpStatusInfo.isUrgent ? 'text-rose-800 border-rose-200/70' : 'text-slate-600 border-amber-200/60'
+              }`}>
+                "{lead.followUpNotes}"
+              </p>
+            )}
           </div>
         )}
 
