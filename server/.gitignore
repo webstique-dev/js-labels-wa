@@ -1,16 +1,12 @@
 node_modules
 .env
-seeds/
 tests/
 test/
 __tests__/
-**/seeds/
 **/tests/
 **/test/
 **/__tests__/
-seed*.js
 test*.js
-**/seed*.js
 **/test*.js
 **/*.test.*
 **/*.spec.*
