@@ -12,6 +12,22 @@ dist
 dist-ssr
 *.local
 
+# Seed & Test scripts / data
+seeds/
+tests/
+test/
+__tests__/
+**/seeds/
+**/tests/
+**/test/
+**/__tests__/
+seed*.js
+test*.js
+**/seed*.js
+**/test*.js
+**/*.test.*
+**/*.spec.*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

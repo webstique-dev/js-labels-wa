@@ -12,14 +12,20 @@ server/.env
 Dump
 
 # Seed & Test scripts / data
-server/seeds/
-server/tests/
 seeds/
 tests/
-server/seed*.js
-server/test*.js
+test/
+__tests__/
+**/seeds/
+**/tests/
+**/test/
+**/__tests__/
 seed*.js
 test*.js
+**/seed*.js
+**/test*.js
+**/*.test.*
+**/*.spec.*
 
 # Build Outputs
 dist/
