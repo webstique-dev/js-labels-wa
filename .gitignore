@@ -11,14 +11,18 @@ server/.env
 !.env.example
 Dump
 
-# Test scripts & data
+# Seed & Test scripts / data
+seeds/
 tests/
 test/
 __tests__/
+**/seeds/
 **/tests/
 **/test/
 **/__tests__/
+seed*.js
 test*.js
+**/seed*.js
 **/test*.js
 **/*.test.*
 **/*.spec.*
