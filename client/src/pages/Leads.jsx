@@ -934,7 +934,7 @@ export default function Leads() {
                   required
                   value={newLeadForm.name}
                   onChange={(e) => setNewLeadForm({ ...newLeadForm, name: e.target.value })}
-                  placeholder="e.g. Ramesh Kumar"
+                  placeholder="e.g. John Doe"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
@@ -947,7 +947,7 @@ export default function Leads() {
                   type="text"
                   value={newLeadForm.company}
                   onChange={(e) => setNewLeadForm({ ...newLeadForm, company: e.target.value })}
-                  placeholder="e.g. Apex Traders Pvt. Ltd."
+                  placeholder="e.g. Acme Corporation"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
@@ -993,7 +993,7 @@ export default function Leads() {
                     type="email"
                     value={newLeadForm.email}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, email: e.target.value })}
-                    placeholder="ramesh@apex.com (Optional)"
+                    placeholder="john@company.com (Optional)"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>

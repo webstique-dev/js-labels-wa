@@ -301,7 +301,7 @@ export default function Login() {
                     required
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder="e.g. Ramesh Kumar"
+                    placeholder="e.g. John Doe"
                     className="w-full h-[38px] pl-9 pr-3 bg-white border border-[#E5E7EB] rounded-[10px] text-xs text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                   />
                 </div>
@@ -319,7 +319,7 @@ export default function Login() {
                     required
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="e.g. ramesh@jslabels.com"
+                    placeholder="e.g. john@jslabels.com"
                     className="w-full h-[38px] pl-9 pr-3 bg-white border border-[#E5E7EB] rounded-[10px] text-xs text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                   />
                 </div>

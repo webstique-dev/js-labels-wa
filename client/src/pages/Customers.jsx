@@ -378,7 +378,7 @@ export default function Customers() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Ramesh Kumar"
+                  placeholder="e.g. John Doe"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
                 />
               </div>
@@ -389,7 +389,7 @@ export default function Customers() {
                   type="text"
                   value={formData.company}
                   onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  placeholder="e.g. Apex Traders Pvt. Ltd."
+                  placeholder="e.g. Acme Corporation"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
                 />
               </div>
@@ -433,7 +433,7 @@ export default function Customers() {
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="ramesh.kumar@apextraders.com"
+                  placeholder="john.doe@company.com"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
                 />
               </div>
