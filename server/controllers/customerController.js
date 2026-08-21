@@ -20,9 +20,7 @@ const syncWonLeadsToCustomers = async () => {
           leadId: lead._id,
           salesExecutive: lead.assignedTo,
           customerType: 'Regular',
-          paymentTerms: '30 Days',
-          reorderProbability: 75,
-          expectedReorderDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+          paymentTerms: '30 Days'
         });
       }
     }
@@ -109,9 +107,7 @@ const createCustomer = async (req, res) => {
       creditLimit: creditLimit || 100000,
       currentBalance: 0,
       tags: tags || ['Customer'],
-      salesExecutive: req.user.id,
-      reorderProbability: 75,
-      expectedReorderDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      salesExecutive: req.user.id
     });
 
     await Activity.create({
@@ -172,14 +168,22 @@ const getCustomerSummary = async (req, res) => {
 
     // Aggregate Top Products across customer's orders
     const topProducts = await Order.aggregate([
-      { $match: { customerId: customerObjId } },
+      { $match: { customerId: customerObjId, status: { $ne: 'cancelled' } } },
       { $unwind: "$lineItems" },
       {
         $group: {
           _id: "$lineItems.name",
           name: { $first: "$lineItems.name" },
           totalQty: { $sum: "$lineItems.qty" },
-          totalAmount: { $sum: { $multiply: ["$lineItems.qty", "$lineItems.price"] } }
+          totalAmount: {
+            $sum: {
+              $cond: [
+                { $gt: ["$lineItems.lineTotal", 0] },
+                "$lineItems.lineTotal",
+                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
+              ]
+            }
+          }
         }
       },
       { $sort: { totalQty: -1 } },
@@ -222,26 +226,30 @@ const getCustomerTimeline = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [activities, orders] = await Promise.all([
-      Activity.find({ relatedType: 'customer', relatedId: id })
-        .populate('createdBy', 'name email avatarUrl role')
-        .sort({ createdAt: -1 }),
-      Order.find({ customerId: id }).sort({ orderDate: -1 })
-    ]);
+    const customer = await Customer.findById(id);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
 
-    // Map order updates to activity format
-    const orderEvents = orders.map(o => ({
-      _id: `ord-${o._id}`,
-      type: 'status_change',
-      description: `Order ${o.orderNo || ''} (${o.status.toUpperCase()}) created for ₹${o.amount.toLocaleString('en-IN')}`,
-      createdAt: o.orderDate,
-      createdBy: o.salesExecutive ? { name: 'Sales Executive' } : { name: 'System' }
-    }));
+    const customerOrders = await Order.find({ customerId: id }).select('_id');
+    const orderIds = customerOrders.map(o => o._id);
 
-    // Merge and sort newest first
-    const combined = [...activities, ...orderEvents].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const queryFilter = {
+      $or: [
+        { relatedType: 'customer', relatedId: id },
+        { relatedType: 'order', relatedId: { $in: orderIds } }
+      ]
+    };
 
-    return res.json(combined);
+    if (customer.leadId) {
+      queryFilter.$or.push({ relatedType: 'lead', relatedId: customer.leadId });
+    }
+
+    const activities = await Activity.find(queryFilter)
+      .populate('createdBy', 'name email avatarUrl role')
+      .sort({ createdAt: -1 });
+
+    return res.json(activities);
   } catch (error) {
     console.error('Error fetching customer timeline:', error);
     return res.status(500).json({ message: 'Server error fetching customer timeline' });

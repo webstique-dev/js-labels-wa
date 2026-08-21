@@ -186,6 +186,27 @@ const seedCustomers = async () => {
 
     console.log('Seeded 6 Orders with line items.');
 
+    // Seed Activity entries for seeded orders
+    const ordersToSeedActivity = [
+      { cust: cust1, no: 'ORD-2026-001', amt: 68500, status: 'delivered', date: '2026-06-10', by: caller._id },
+      { cust: cust1, no: 'ORD-2026-002', amt: 74000, status: 'delivered', date: '2026-07-12', by: caller._id },
+      { cust: cust1, no: 'ORD-2026-003', amt: 82000, status: 'dispatched', date: '2026-08-14', by: caller._id },
+      { cust: cust2, no: 'ORD-2026-004', amt: 32000, status: 'delivered', date: '2026-07-01', by: caller._id },
+      { cust: cust2, no: 'ORD-2026-005', amt: 35500, status: 'production', date: '2026-08-05', by: caller._id },
+      { cust: cust3, no: 'ORD-2026-006', amt: 125000, status: 'delivered', date: '2026-05-20', by: manager._id }
+    ];
+
+    for (const o of ordersToSeedActivity) {
+      await Activity.create({
+        relatedType: 'customer',
+        relatedId: o.cust._id,
+        type: 'status_change',
+        description: `Order ${o.no} (${o.status.toUpperCase()}) created for ₹${o.amt.toLocaleString('en-IN')}`,
+        createdAt: new Date(o.date),
+        createdBy: o.by
+      });
+    }
+
     // Seed initial Activity entries for Customer 1
     await Activity.create({
       relatedType: 'customer',

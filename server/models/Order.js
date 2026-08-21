@@ -22,6 +22,8 @@ const orderSchema = new mongoose.Schema({
     default: 'confirmed'
   },
   deliveryDate: { type: Date },
+  expectedReorderDate: { type: Date },
+  isExpectedReorderDateOverridden: { type: Boolean, default: false },
   salesExecutive: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   usageCycleDays: { type: Number },
   poNumber: { type: String },

@@ -3,7 +3,39 @@ const Order = require('../models/Order');
 const Activity = require('../models/Activity');
 const User = require('../models/User');
 
-// Derive priority from probability score
+// Calculate live reorder probability (0 - 100%) dynamically from expectedReorderDate
+const getLiveReorderProbability = (customer) => {
+  if (!customer || !customer.expectedReorderDate) {
+    return customer?.reorderProbability ?? 50;
+  }
+  const expDate = new Date(customer.expectedReorderDate);
+  if (isNaN(expDate.getTime())) {
+    return customer?.reorderProbability ?? 50;
+  }
+  const now = new Date();
+  const diffTime = expDate.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  let score = 0;
+  if (diffDays <= 0 && diffDays >= -14) {
+    score = 95 + diffDays;
+  } else if (diffDays < -14) {
+    score = Math.max(10, 80 + diffDays);
+  } else if (diffDays <= 3) {
+    score = 95 - (diffDays * 2);
+  } else if (diffDays <= 14) {
+    score = 88 - Math.round((diffDays - 3) * 1.6);
+  } else if (diffDays <= 30) {
+    score = 69 - Math.round((diffDays - 14) * 1.5);
+  } else if (diffDays <= 60) {
+    score = 44 - Math.round((diffDays - 30) * 0.8);
+  } else {
+    score = 15;
+  }
+  return Math.max(5, Math.min(100, Math.round(score)));
+};
+
+// Derive priority strictly from reorder probability percentage score
 const derivePriority = (score) => {
   if (score >= 80) return 'high';
   if (score >= 50) return 'medium';
@@ -25,12 +57,14 @@ const getReminders = async (req, res) => {
       .populate('salesExecutive', 'name email avatarUrl role');
 
     const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     // Map customers into computed reminder objects
     let reminders = customers.map((c) => {
       const expDate = new Date(c.expectedReorderDate);
-      const daysUntilReorder = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      const probScore = c.reorderProbability || 0;
+      const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
+      const daysUntilReorder = Math.round((expDateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+      const probScore = getLiveReorderProbability(c);
       const derivedPrio = derivePriority(probScore);
 
       return {
@@ -75,6 +109,8 @@ const getRemindersSummary = async (req, res) => {
     const customers = await Customer.find(queryFilter);
 
     const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
     const summary = {
       total: customers.length,
       overdue: 0,
@@ -85,19 +121,30 @@ const getRemindersSummary = async (req, res) => {
     };
 
     for (const c of customers) {
+      if (!c.expectedReorderDate) continue;
       const expDate = new Date(c.expectedReorderDate);
-      const daysUntil = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      const prio = derivePriority(c.reorderProbability || 0);
+      if (isNaN(expDate.getTime())) continue;
 
-      if (daysUntil < 0) summary.overdue += 1;
-      summary[prio] += 1;
+      // Overdue if expected date is strictly before today
+      if (expDate < todayStart) {
+        summary.overdue += 1;
+      }
 
-      // Check if order exists after expectedReorderDate
+      const probScore = getLiveReorderProbability(c);
+      const prio = derivePriority(probScore);
+      if (summary[prio] !== undefined) {
+        summary[prio] += 1;
+      }
+
+      // Completed: Check if customer placed an order on/after their previous reorder window
       const recentOrder = await Order.findOne({
         customerId: c._id,
-        orderDate: { $gte: new Date(c.expectedReorderDate.getTime() - 7 * 24 * 60 * 60 * 1000) }
+        orderDate: { $gte: new Date(expDate.getTime() - 14 * 24 * 60 * 60 * 1000) },
+        status: { $ne: 'cancelled' }
       });
-      if (recentOrder) summary.completed += 1;
+      if (recentOrder) {
+        summary.completed += 1;
+      }
     }
 
     return res.json(summary);

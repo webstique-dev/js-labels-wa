@@ -31,9 +31,20 @@ import {
   User,
   UserCheck,
   ExternalLink,
-  Plus
+  Plus,
+  Package,
+  Eye,
+  Pencil,
+  Trash2
 } from 'lucide-react';
-import { Skeleton, SkeletonCard } from '../components/ui/Skeleton';
+import { SkeletonCustomer360 } from '../components/ui/Skeleton';
+import NewOrderModal from '../components/NewOrderModal';
+import {
+  getLiveReorderProbability,
+  getProbabilityColorClass,
+  getProbabilityTextColorClass,
+  getProbabilityBadgeClass
+} from '../utils/reorderHelper';
 
 export default function CustomerDetails() {
   const { id } = useParams();
@@ -53,6 +64,13 @@ export default function CustomerDetails() {
   const [isStarred, setIsStarred] = useState(false);
   const [showActionsDropdown, setShowActionsDropdown] = useState(false);
 
+  // New Order Popup Modal State
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+
+  // Activity Note State
+  const [newNoteText, setNewNoteText] = useState('');
+  const [submittingNote, setSubmittingNote] = useState(false);
+
   // Edit Mode States
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -71,6 +89,70 @@ export default function CustomerDetails() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
+  // Order View & Edit Modal States
+  const [viewingOrder, setViewingOrder] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [editOrderForm, setEditOrderForm] = useState({
+    status: '',
+    deliveryAddress: '',
+    notes: '',
+    expectedReorderDate: ''
+  });
+  const [submittingOrderEdit, setSubmittingOrderEdit] = useState(false);
+
+  const handleDeleteOrder = async (orderId, orderNo) => {
+    const isConfirmed = await confirm({
+      title: 'Delete Order',
+      message: `Are you sure you want to delete Order ${orderNo}? This action will soft-delete the order.`,
+      confirmText: 'Delete Order',
+      cancelText: 'Cancel',
+      variant: 'danger'
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      await api.delete(`/orders/${orderId}`);
+      notify.success(`Order ${orderNo} deleted successfully`);
+      setOrders((prev) => prev.filter((o) => o._id !== orderId));
+      fetchSummary();
+      fetchTimeline();
+    } catch (err) {
+      console.error('Error deleting order:', err);
+      notify.error(err.response?.data?.message || 'Failed to delete order');
+    }
+  };
+
+  const handleOpenEditOrder = (ord) => {
+    setEditingOrder(ord);
+    setEditOrderForm({
+      status: ord.status || 'pending',
+      deliveryAddress: ord.deliveryAddress || '',
+      notes: ord.notes || '',
+      expectedReorderDate: ord.expectedReorderDate ? new Date(ord.expectedReorderDate).toISOString().split('T')[0] : ''
+    });
+  };
+
+  const handleSaveOrderEdit = async (e) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+
+    try {
+      setSubmittingOrderEdit(true);
+      const res = await api.put(`/orders/${editingOrder._id}`, editOrderForm);
+      notify.success(`Order ${editingOrder.orderNo || ''} updated successfully`);
+      setOrders((prev) => prev.map((o) => (o._id === editingOrder._id ? res.data : o)));
+      setEditingOrder(null);
+      fetchSummary();
+      fetchTimeline();
+    } catch (err) {
+      console.error('Error updating order:', err);
+      notify.error(err.response?.data?.message || 'Failed to update order');
+    } finally {
+      setSubmittingOrderEdit(false);
+    }
+  };
+
   const fetchCustomer360 = useCallback(async () => {
     try {
       setLoading(true);
@@ -83,7 +165,7 @@ export default function CustomerDetails() {
 
       const custData = custRes.status === 'fulfilled' ? custRes.value.data : null;
       const sumData = sumRes.status === 'fulfilled' ? sumRes.value.data : null;
-      const ordData = ordRes.status === 'fulfilled' ? custRes.value.data : [];
+      const ordData = ordRes.status === 'fulfilled' ? ordRes.value.data : [];
       const timeData = timeRes.status === 'fulfilled' ? timeRes.value.data : [];
 
       setCustomer(custData);
@@ -142,18 +224,27 @@ export default function CustomerDetails() {
     return nameStr.substring(0, 2).toUpperCase();
   };
 
+  const getStatusBadgeClass = (statusStr) => {
+    switch (statusStr) {
+      case 'delivered':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'dispatched':
+        return 'bg-cyan-50 text-cyan-700 border-cyan-200';
+      case 'production':
+        return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'quality_check':
+        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'confirmed':
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'cancelled':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      default:
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+  };
+
   if (loading) {
-    return (
-      <div className="space-y-6 pb-12 animate-fadeIn font-sans">
-        <Skeleton className="h-6 w-48" />
-        <SkeletonCard className="h-14" />
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <SkeletonCard className="lg:col-span-4 h-[600px]" />
-          <SkeletonCard className="lg:col-span-4 h-[600px]" />
-          <SkeletonCard className="lg:col-span-4 h-[600px]" />
-        </div>
-      </div>
-    );
+    return <SkeletonCustomer360 />;
   }
 
   if (!customer) {
@@ -168,21 +259,21 @@ export default function CustomerDetails() {
     );
   }
 
-  // Pure DB values - no hardcoded fallbacks
-  const customerName = customer.name || 'No Name';
-  const customerCompany = customer.company || 'No Company';
-  const customerPhone = customer.phone || 'No phone';
-  const customerEmail = customer.email || 'No email provided';
-  const customerGst = customer.gstNo || 'No GST number';
-  const customerAddress = customer.address || 'No address provided';
-  const customerType = customer.customerType || 'No customer type';
-  const paymentTerms = customer.paymentTerms || 'No payment terms';
-  const creditLimitStr = customer.creditLimit !== undefined && customer.creditLimit !== null ? `₹ ${customer.creditLimit.toLocaleString('en-IN')}` : 'N/A';
-  const currentBalanceStr = customer.currentBalance !== undefined && customer.currentBalance !== null ? `₹ ${customer.currentBalance.toLocaleString('en-IN')}` : '₹ 0';
-  const reorderProb = customer.reorderProbability !== undefined ? customer.reorderProbability : 0;
-  const salesExecName = customer.salesExecutive?.name || 'Not Assigned';
-  const salesExecInitials = customer.salesExecutive?.name ? getInitials(customer.salesExecutive.name) : 'NA';
-  const customerSinceStr = customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
+  // Pure DB values - only provided information rendered
+  const customerName = customer.name || 'Customer';
+  const customerCompany = customer.company || '';
+  const customerPhone = customer.phone || '';
+  const customerEmail = customer.email || '';
+  const customerGst = customer.gstNo || '';
+  const customerAddress = customer.address || '';
+  const customerType = customer.customerType || '';
+  const paymentTerms = customer.paymentTerms || '';
+  const creditLimitStr = customer.creditLimit !== undefined && customer.creditLimit !== null ? `₹ ${customer.creditLimit.toLocaleString('en-IN')}` : null;
+  const currentBalanceStr = customer.currentBalance !== undefined && customer.currentBalance !== null ? `₹ ${customer.currentBalance.toLocaleString('en-IN')}` : null;
+  const reorderProb = getLiveReorderProbability(customer);
+  const salesExecName = customer.salesExecutive?.name || null;
+  const salesExecInitials = customer.salesExecutive?.name ? getInitials(customer.salesExecutive.name) : null;
+  const customerSinceStr = customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
 
   // Business Summary Metrics derived dynamically from DB
   const totalOrdersCount = summary?.totalOrders ?? orders.length;
@@ -206,21 +297,132 @@ export default function CustomerDetails() {
   const getActivityIcon = (type) => {
     switch (type) {
       case 'call':
-        return <Phone size={15} />;
+        return <Phone size={14} className="text-indigo-600" />;
       case 'email':
-        return <Mail size={15} />;
+        return <Mail size={14} className="text-purple-600" />;
       case 'whatsapp':
-        return <MessageCircle size={15} />;
+        return <MessageCircle size={14} className="text-emerald-600" />;
       case 'status_change':
-        return <ShoppingBag size={15} />;
+        return <ShoppingBag size={14} className="text-emerald-600" />;
+      case 'note':
+        return <FileText size={14} className="text-blue-600" />;
       default:
-        return <User size={15} />;
+        return <User size={14} className="text-slate-600" />;
+    }
+  };
+
+  const getActivityBadgeBg = (type) => {
+    switch (type) {
+      case 'call':
+        return 'bg-indigo-50 border-indigo-200';
+      case 'email':
+        return 'bg-purple-50 border-purple-200';
+      case 'whatsapp':
+        return 'bg-emerald-50 border-emerald-200';
+      case 'status_change':
+        return 'bg-emerald-50 border-emerald-200';
+      case 'note':
+        return 'bg-blue-50 border-blue-200';
+      default:
+        return 'bg-slate-100 border-slate-200';
+    }
+  };
+
+  const handleAddActivityNote = async (e) => {
+    e.preventDefault();
+    if (!newNoteText.trim()) return;
+
+    try {
+      setSubmittingNote(true);
+      const res = await api.post('/activities', {
+        relatedType: 'customer',
+        relatedId: id,
+        type: 'note',
+        description: newNoteText.trim()
+      });
+      setTimeline((prev) => [res.data, ...prev]);
+      setNewNoteText('');
+      notify.success('Activity note added to timeline');
+    } catch (err) {
+      console.error('Error adding activity note:', err);
+      notify.error(err.response?.data?.message || 'Failed to add activity note');
+    } finally {
+      setSubmittingNote(false);
+    }
+  };
+
+  const handleWhatsAppClick = async () => {
+    if (!customerPhone) return;
+    const cleanPhone = customerPhone.replace(/\D/g, '');
+    const expDateStr = customer?.expectedReorderDate
+      ? new Date(customer.expectedReorderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'soon';
+
+    let message = '';
+    if (reorderProb >= 80) {
+      message = `Hi ${customerName}, this is JS Labels. Your label supply is expected to need an urgent reorder around ${expDateStr} (${reorderProb}% reorder probability). Would you like us to process your next batch of custom labels today?`;
+    } else if (reorderProb >= 50) {
+      message = `Hi ${customerName}, greetings from JS Labels! Based on your usage cycle, your next label reorder is expected around ${expDateStr}. Please let us know if you'd like us to prepare your upcoming order!`;
+    } else {
+      message = `Hi ${customerName}, hope you are doing well! JS Labels is following up to check on your label inventory. Feel free to reach out whenever you're ready for your next reorder!`;
+    }
+
+    const waUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    notify.success(`Opening WhatsApp chat for ${customerName}...`);
+
+    try {
+      await api.post('/activities', {
+        relatedType: 'customer',
+        relatedId: id,
+        type: 'whatsapp',
+        description: `WhatsApp reminder opened for reorder (Reorder Probability: ${reorderProb}%)`
+      });
+      fetchTimeline();
+    } catch (err) {
+      console.error('Error logging WhatsApp activity:', err);
     }
   };
 
   return (
     <div className="space-y-6 pb-12 font-sans">
       
+      {/* Top Breadcrumb & Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
+        <div>
+          <button
+            onClick={() => navigate('/customers')}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition mb-1 cursor-pointer"
+          >
+            <ArrowLeft size={14} />
+            <span>Back to Customers</span>
+          </button>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">{customerName}</h1>
+            <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-semibold rounded-md uppercase">
+              Active Customer
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsEditing(true)}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <Edit2 size={14} />
+            <span>Edit Profile</span>
+          </button>
+          <button
+            onClick={() => setShowNewOrderModal(true)}
+            className="px-3.5 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <ShoppingBag size={14} />
+            <span>+ New Order</span>
+          </button>
+        </div>
+      </div>
+
       {/* Top Header Navigation Tabs & Action Menu */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-0">
         
@@ -280,7 +482,7 @@ export default function CustomerDetails() {
                 <span>Edit Profile</span>
               </button>
               <button
-                onClick={() => { setShowActionsDropdown(false); navigate('/orders'); }}
+                onClick={() => { setShowActionsDropdown(false); setShowNewOrderModal(true); }}
                 className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2 cursor-pointer"
               >
                 <ShoppingBag size={14} className="text-slate-400" />
@@ -293,10 +495,10 @@ export default function CustomerDetails() {
 
       {/* Overview Tab Content */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           
           {/* COLUMN 1: Customer Profile & Attributes */}
-          <div className="xl:col-span-4 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-6 flex flex-col justify-between">
+          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-6">
             
             {/* Header Profile Info */}
             <div className="space-y-4">
@@ -312,7 +514,9 @@ export default function CustomerDetails() {
                         Customer
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 font-normal mt-0.5">{customerCompany}</p>
+                    {customerCompany && (
+                      <p className="text-xs text-slate-500 font-normal mt-0.5">{customerCompany}</p>
+                    )}
                   </div>
                 </div>
 
@@ -335,113 +539,116 @@ export default function CustomerDetails() {
               </div>
 
               {/* Dynamic Tag Badges if available */}
-              {(customer.city || customer.priority) && (
+              {customer.priority && (
                 <div className="flex items-center gap-2 pt-1">
-                  {customer.priority && (
-                    <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-semibold rounded-md uppercase">
-                      {customer.priority} Priority
-                    </span>
-                  )}
-                  {customer.city && (
-                    <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold rounded-md">
-                      {customer.city}
-                    </span>
-                  )}
+                  <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-semibold rounded-md uppercase">
+                    {customer.priority} Priority
+                  </span>
                 </div>
               )}
 
-              {/* Contact Information List */}
+              {/* Contact Information List - Only rendered if present */}
               <div className="space-y-3 pt-2 text-xs">
                 {/* Phone */}
-                <div className="flex items-center justify-between">
+                {customerPhone && (
                   <div className="flex items-center gap-2.5 text-slate-700 font-medium">
                     <Phone size={15} className="text-slate-400 shrink-0" />
                     <span>{customerPhone}</span>
                   </div>
-                  {customer.phone && (
-                    <a
-                      href={`https://wa.me/91${customer.phone.replace(/\D/g, '')}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-emerald-500 hover:scale-110 transition p-1"
-                      title="Chat on WhatsApp"
-                    >
-                      <MessageCircle size={18} className="fill-emerald-500 text-white" />
-                    </a>
-                  )}
-                </div>
+                )}
 
                 {/* Email */}
-                <div className="flex items-center gap-2.5 text-slate-700 font-medium truncate">
-                  <Mail size={15} className="text-slate-400 shrink-0" />
-                  <span className="truncate">{customerEmail}</span>
-                </div>
+                {customerEmail && (
+                  <div className="flex items-center gap-2.5 text-slate-700 font-medium truncate">
+                    <Mail size={15} className="text-slate-400 shrink-0" />
+                    <span className="truncate">{customerEmail}</span>
+                  </div>
+                )}
 
                 {/* GST */}
-                <div className="flex items-center gap-2.5 text-slate-700 font-medium">
-                  <FileText size={15} className="text-slate-400 shrink-0" />
-                  <span>{customerGst}</span>
-                </div>
+                {customerGst && (
+                  <div className="flex items-center gap-2.5 text-slate-700 font-medium">
+                    <FileText size={15} className="text-slate-400 shrink-0" />
+                    <span>{customerGst}</span>
+                  </div>
+                )}
 
                 {/* Address */}
-                <div className="flex items-start gap-2.5 text-slate-700 font-medium">
-                  <MapPin size={15} className="text-slate-400 shrink-0 mt-0.5" />
-                  <span className="leading-relaxed">{customerAddress}</span>
-                </div>
+                {customerAddress && (
+                  <div className="flex items-start gap-2.5 text-slate-700 font-medium">
+                    <MapPin size={15} className="text-slate-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{customerAddress}</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="border-t border-slate-100 pt-4 space-y-3 text-xs">
               
               {/* Customer Since */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Customer Since</span>
-                <span className="text-slate-900 font-semibold">{customerSinceStr}</span>
-              </div>
+              {customerSinceStr && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Customer Since</span>
+                  <span className="text-slate-900 font-semibold">{customerSinceStr}</span>
+                </div>
+              )}
 
               {/* Sales Executive */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Sales Executive</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-5 h-5 rounded-full bg-slate-800 text-white text-[9px] font-bold flex items-center justify-center">
-                    {salesExecInitials}
+              {salesExecName && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Sales Executive</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-5 h-5 rounded-full bg-slate-800 text-white text-[9px] font-bold flex items-center justify-center">
+                      {salesExecInitials}
+                    </div>
+                    <span className="text-slate-900 font-semibold">{salesExecName}</span>
                   </div>
-                  <span className="text-slate-900 font-semibold">{salesExecName}</span>
                 </div>
-              </div>
+              )}
 
               {/* Customer Type */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Customer Type</span>
-                <span className="text-slate-900 font-semibold">{customerType}</span>
-              </div>
+              {customerType && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Customer Type</span>
+                  <span className="text-slate-900 font-semibold">{customerType}</span>
+                </div>
+              )}
 
               {/* Payment Terms */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Payment Terms</span>
-                <span className="text-slate-900 font-semibold">{paymentTerms}</span>
-              </div>
+              {paymentTerms && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Payment Terms</span>
+                  <span className="text-slate-900 font-semibold">{paymentTerms}</span>
+                </div>
+              )}
 
               {/* Credit Limit */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Credit Limit</span>
-                <span className="text-slate-900 font-semibold">{creditLimitStr}</span>
-              </div>
+              {creditLimitStr && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Credit Limit</span>
+                  <span className="text-slate-900 font-semibold">{creditLimitStr}</span>
+                </div>
+              )}
 
               {/* Current Balance */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Current Balance</span>
-                <span className="text-emerald-600 font-bold">{currentBalanceStr}</span>
-              </div>
+              {currentBalanceStr && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Current Balance</span>
+                  <span className="text-emerald-600 font-bold">{currentBalanceStr}</span>
+                </div>
+              )}
 
               {/* Reorder Probability Progress Bar */}
               <div className="pt-2 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 font-medium">Reorder Probability</span>
-                  <span className="text-emerald-600 font-bold">{reorderProb}%</span>
+                  <span className={getProbabilityTextColorClass(reorderProb)}>{reorderProb}%</span>
                 </div>
                 <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex items-center">
-                  <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, reorderProb))}%` }}></div>
+                  <div
+                    className={`${getProbabilityColorClass(reorderProb)} h-full rounded-full transition-all duration-500`}
+                    style={{ width: `${Math.min(100, Math.max(0, reorderProb))}%` }}
+                  ></div>
                 </div>
               </div>
 
@@ -449,29 +656,47 @@ export default function CustomerDetails() {
           </div>
 
           {/* COLUMN 2: Dynamic Live Timeline Activity Feed */}
-          <div className="xl:col-span-4 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-4">
+          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
             
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-900 text-sm tracking-tight">Timeline</h3>
               <span className="text-[11px] font-semibold text-slate-400">{timeline.length} Activities</span>
             </div>
 
-            {/* Vertical Timeline Feed */}
+            {/* Quick Note Input Form */}
+            <form onSubmit={handleAddActivityNote} className="flex gap-2">
+              <input
+                type="text"
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                placeholder="Log activity or note..."
+                className="flex-1 min-w-0 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={submittingNote || !newNoteText.trim()}
+                className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold disabled:opacity-50 transition cursor-pointer shrink-0"
+              >
+                {submittingNote ? 'Posting...' : 'Post Note'}
+              </button>
+            </form>
+
+            {/* Timeline Feed */}
             {timeline.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-xs font-normal bg-slate-50 rounded-xl border border-slate-100">
                 No activity recorded yet for this customer.
               </div>
             ) : (
-              <div className="relative pl-6 space-y-4 pt-1 pb-2 max-h-[460px] overflow-y-auto scrollbar-hide before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+              <div className="divide-y divide-slate-100 border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-2xs max-h-[460px] overflow-y-auto scrollbar-hide">
                 {timeline.map((item) => (
-                  <div key={item._id || item.id} className="relative flex items-start justify-between gap-2 text-xs">
+                  <div key={item._id || item.id} className="p-3.5 flex items-start gap-3.5 text-xs hover:bg-slate-50/60 transition">
                     {/* Node icon */}
-                    <div className="absolute -left-[31px] top-0.5 w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0 shadow-2xs">
+                    <div className={`w-8 h-8 rounded-full border flex items-center justify-center shrink-0 shadow-2xs mt-0.5 ${getActivityBadgeBg(item.type)}`}>
                       {getActivityIcon(item.type)}
                     </div>
 
-                    <div className="min-w-0 pr-2">
-                      <p className="font-bold text-slate-900 leading-tight">{item.description || item.title || 'Activity'}</p>
+                    <div className="min-w-0 pr-2 flex-1">
+                      <p className="font-bold text-slate-900 leading-snug break-words">{item.description || item.title || 'Activity'}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
                         {item.createdBy?.name ? `By ${item.createdBy.name}` : ''}
                       </p>
@@ -495,8 +720,8 @@ export default function CustomerDetails() {
 
           </div>
 
-          {/* COLUMN 3: Dynamic Business Summary & Reorder Prediction */}
-          <div className="xl:col-span-4 md:col-span-2 space-y-5">
+          {/* COLUMN 3: Dynamic Business Summary, Reorder Prediction & Top Products */}
+          <div className="space-y-5">
             
             {/* Card 1: Business Summary Metrics Grid */}
             <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
@@ -572,11 +797,11 @@ export default function CustomerDetails() {
             </div>
 
             {/* Card 2: Next Reorder Prediction Card */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
               <h3 className="font-bold text-slate-900 text-sm tracking-tight">Next Reorder Prediction</h3>
               
               {expectedDate ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex items-center gap-4 pt-1">
                     {/* Red Date Box */}
                     <div className="w-16 text-center shadow-2xs rounded-xl overflow-hidden border border-slate-200 shrink-0">
@@ -588,7 +813,7 @@ export default function CustomerDetails() {
                     <div className="space-y-1 text-xs">
                       <span className="text-slate-400 font-medium">Expected Reorder Date</span>
                       <div className="text-slate-900 font-bold text-sm">{fullExpectedDateStr}</div>
-                      <div className="text-emerald-600 font-semibold text-xs flex items-center gap-1 pt-0.5">
+                      <div className={`font-semibold text-xs flex items-center gap-1 pt-0.5 ${getProbabilityTextColorClass(reorderProb)}`}>
                         <span>Probability</span>
                         <span className="font-bold">({reorderProb}%)</span>
                       </div>
@@ -596,16 +821,104 @@ export default function CustomerDetails() {
                   </div>
 
                   {/* Progress Bar */}
-                  <div className="pt-2 space-y-1">
+                  <div className="space-y-1">
                     <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                      <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, reorderProb))}%` }}></div>
+                      <div
+                        className={`${getProbabilityColorClass(reorderProb)} h-full rounded-full transition-all duration-500`}
+                        style={{ width: `${Math.min(100, Math.max(0, reorderProb))}%` }}
+                      ></div>
                     </div>
-                    <div className="text-right text-[10px] text-slate-400 font-semibold">{reorderProb}%</div>
+                  </div>
+
+                  {/* Action Buttons Row matching UI design (Call, WhatsApp) */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                    {/* Call Button */}
+                    <a
+                      href={customerPhone ? `tel:+91${customerPhone.toString().replace(/\D/g, '')}` : '#'}
+                      onClick={(e) => {
+                        if (!customerPhone) {
+                          e.preventDefault();
+                          notify.info(`No phone number recorded for ${customerName}`);
+                        } else {
+                          notify.success(`Initiating call to ${customerName}...`);
+                        }
+                      }}
+                      className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 shadow-2xs transition hover:border-slate-300 cursor-pointer"
+                    >
+                      <Phone size={14} className="text-emerald-600" />
+                      <span>Call</span>
+                    </a>
+
+                    {/* WhatsApp Button */}
+                    <button
+                      type="button"
+                      onClick={handleWhatsAppClick}
+                      className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-semibold text-emerald-600 flex items-center justify-center gap-2 shadow-2xs transition hover:border-slate-300 cursor-pointer"
+                    >
+                      <svg className="w-4 h-4 fill-emerald-600" viewBox="0 0 24 24">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                      </svg>
+                      <span>WhatsApp</span>
+                    </button>
                   </div>
                 </div>
               ) : (
+                <div className="space-y-3">
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-slate-400 text-xs font-normal">
+                    No reorder prediction scheduled
+                  </div>
+
+                  {/* Action Buttons Row even if no date */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                    <a
+                      href={customerPhone ? `tel:+91${customerPhone.toString().replace(/\D/g, '')}` : '#'}
+                      onClick={(e) => {
+                        if (!customerPhone) {
+                          e.preventDefault();
+                          notify.info(`No phone number recorded for ${customerName}`);
+                        } else {
+                          notify.success(`Initiating call to ${customerName}...`);
+                        }
+                      }}
+                      className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 shadow-2xs transition hover:border-slate-300 cursor-pointer"
+                    >
+                      <Phone size={14} className="text-emerald-600" />
+                      <span>Call</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleWhatsAppClick}
+                      className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-semibold text-emerald-600 flex items-center justify-center gap-2 shadow-2xs transition hover:border-slate-300 cursor-pointer"
+                    >
+                      <svg className="w-4 h-4 fill-emerald-600" viewBox="0 0 24 24">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                      </svg>
+                      <span>WhatsApp</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Card 3: Top Purchased Products Card */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
+              <h3 className="font-bold text-slate-900 text-sm tracking-tight">Top Purchased Products</h3>
+              {summary?.topProducts && summary.topProducts.length > 0 ? (
+                <div className="space-y-2 pt-1 text-xs">
+                  {summary.topProducts.map((prod, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-xl">
+                      <div className="min-w-0 pr-2">
+                        <p className="font-semibold text-slate-900 truncate">{prod.name}</p>
+                        <p className="text-[10px] text-slate-400 font-normal">{prod.totalQty.toLocaleString('en-IN')} units purchased</p>
+                      </div>
+                      <span className="font-bold text-slate-800 shrink-0">₹ {prod.totalAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
                 <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-slate-400 text-xs font-normal">
-                  No reorder prediction scheduled
+                  No product purchase history yet
                 </div>
               )}
             </div>
@@ -617,21 +930,48 @@ export default function CustomerDetails() {
 
       {/* Timeline Tab */}
       {activeTab === 'timeline' && (
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
-          <h3 className="font-bold text-slate-900 text-sm">Full Activity Timeline</h3>
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm">Full Activity Timeline</h3>
+              <p className="text-xs text-slate-500 font-normal">Complete audit trail of customer interactions, status updates, and note entries</p>
+            </div>
+            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg self-start sm:self-auto">
+              {timeline.length} Total Activities
+            </span>
+          </div>
+
+          {/* Quick Note Input Form */}
+          <form onSubmit={handleAddActivityNote} className="flex gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <input
+              type="text"
+              value={newNoteText}
+              onChange={(e) => setNewNoteText(e.target.value)}
+              placeholder="Log a new activity note or update for this customer account..."
+              className="flex-1 min-w-0 px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={submittingNote || !newNoteText.trim()}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold disabled:opacity-50 transition cursor-pointer shrink-0"
+            >
+              {submittingNote ? 'Saving...' : 'Add Note'}
+            </button>
+          </form>
+
           {timeline.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-xs font-normal">No activity recorded for this customer.</div>
+            <div className="p-8 text-center text-slate-400 text-xs font-normal">No activity recorded for this customer account yet.</div>
           ) : (
-            <div className="relative pl-6 space-y-4 pt-1 pb-2 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+            <div className="divide-y divide-slate-100 border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-2xs">
               {timeline.map((item) => (
-                <div key={item._id || item.id} className="relative flex items-start justify-between gap-2 text-xs">
-                  <div className="absolute -left-[31px] top-0.5 w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0 shadow-2xs">
+                <div key={item._id || item.id} className="p-4 flex items-start gap-4 text-xs hover:bg-slate-50/60 transition">
+                  <div className={`w-8 h-8 rounded-full border flex items-center justify-center shrink-0 shadow-2xs mt-0.5 ${getActivityBadgeBg(item.type)}`}>
                     {getActivityIcon(item.type)}
                   </div>
-                  <div className="min-w-0 pr-2">
-                    <p className="font-bold text-slate-900 leading-tight">{item.description || item.title || 'Activity'}</p>
+                  <div className="min-w-0 pr-2 flex-1">
+                    <p className="font-bold text-slate-900 leading-snug break-words">{item.description || item.title || 'Activity'}</p>
                     <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
-                      {item.createdBy?.name ? `By ${item.createdBy.name}` : ''}
+                      {item.createdBy?.name ? `Logged by ${item.createdBy.name}` : ''}
                     </p>
                   </div>
                   <div className="text-right text-[11px] text-slate-400 font-medium shrink-0 leading-tight">
@@ -648,36 +988,283 @@ export default function CustomerDetails() {
       {/* Orders Tab */}
       {activeTab === 'orders' && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-x-auto scrollbar-hide">
-          <table className="w-full text-left border-collapse text-xs min-w-[500px]">
+          <table className="w-full text-left border-collapse text-xs min-w-[750px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-semibold text-[11px]">
                 <th className="p-4">Order No</th>
                 <th className="p-4">Order Date</th>
-                <th className="p-4">Amount</th>
+                <th className="p-4">Line Items</th>
+                <th className="p-4">Total Amount</th>
                 <th className="p-4">Status</th>
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-slate-400 font-normal">No orders recorded for this customer account.</td>
+                  <td colSpan={6} className="p-8 text-center text-slate-400 font-normal">No orders recorded for this customer account.</td>
                 </tr>
               ) : (
                 orders.map((ord) => (
                   <tr key={ord._id} className="hover:bg-slate-50 transition">
                     <td className="p-4 font-bold text-slate-900">{ord.orderNo || `ORD-${ord._id.slice(-6)}`}</td>
-                    <td className="p-4 font-medium text-slate-600">{new Date(ord.orderDate || ord.createdAt).toLocaleDateString('en-IN')}</td>
+                    <td className="p-4 font-medium text-slate-600">{new Date(ord.orderDate || ord.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                    <td className="p-4 text-slate-700">
+                      {ord.lineItems && ord.lineItems.length > 0 ? (
+                        <div className="space-y-0.5">
+                          {ord.lineItems.map((li, idx) => (
+                            <div key={idx} className="font-medium text-slate-800">
+                              {li.name || li.description} <span className="text-slate-400 font-normal">({li.qty} units)</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic">No line items specified</span>
+                      )}
+                    </td>
                     <td className="p-4 font-bold text-slate-900">₹ {(ord.amount || 0).toLocaleString('en-IN')}</td>
                     <td className="p-4">
-                      <span className="px-2.5 py-0.5 border text-[10px] font-semibold rounded-md uppercase bg-emerald-50 text-emerald-700 border-emerald-200">
+                      <span className={`px-2.5 py-0.5 border text-[10px] font-semibold rounded-md uppercase ${getStatusBadgeClass(ord.status)}`}>
                         {ord.status}
                       </span>
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setViewingOrder(ord)}
+                          className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                          title="View Order Details"
+                        >
+                          <Eye size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteOrder(ord._id, ord.orderNo || `ORD-${ord._id.slice(-6)}`)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="Delete Order"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* View Order Modal Card */}
+      {viewingOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide font-sans">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Order Details</span>
+                <h3 className="text-base font-bold text-slate-900">{viewingOrder.orderNo || `ORD-${viewingOrder._id.slice(-6)}`}</h3>
+              </div>
+              <button onClick={() => setViewingOrder(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                <div>
+                  <p className="text-[10px] text-slate-400 font-medium mb-0.5">Order Status</p>
+                  <span className={`px-2.5 py-0.5 border text-[10px] font-semibold rounded-md uppercase ${getStatusBadgeClass(viewingOrder.status)}`}>
+                    {viewingOrder.status}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 font-medium">Order Date</p>
+                  <p className="font-semibold text-slate-800">
+                    {new Date(viewingOrder.orderDate || viewingOrder.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+
+              {viewingOrder.expectedReorderDate && (
+                <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl flex items-center justify-between">
+                  <span className="font-medium text-slate-700">Expected Reorder Date:</span>
+                  <span className="font-bold text-red-600">
+                    {new Date(viewingOrder.expectedReorderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+
+              {viewingOrder.deliveryDate && (
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span className="font-medium text-slate-600">Delivery Date:</span>
+                  <span className="font-semibold text-slate-900">
+                    {new Date(viewingOrder.deliveryDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+
+              {viewingOrder.poNumber && (
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span className="font-medium text-slate-600">PO Number:</span>
+                  <span className="font-semibold text-slate-900">{viewingOrder.poNumber}</span>
+                </div>
+              )}
+
+              {viewingOrder.advanceReceived && viewingOrder.advanceAmount > 0 && (
+                <div className="flex items-center justify-between p-2.5 bg-emerald-50/60 border border-emerald-100 rounded-xl">
+                  <span className="font-medium text-emerald-800">Advance Received:</span>
+                  <span className="font-bold text-emerald-700">₹ {viewingOrder.advanceAmount.toLocaleString('en-IN')}</span>
+                </div>
+              )}
+
+              {/* Line Items */}
+              {viewingOrder.lineItems && viewingOrder.lineItems.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-slate-700 mb-2">Order Line Items</h4>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-[10px]">
+                          <th className="p-2.5">Item Description</th>
+                          <th className="p-2.5 text-right">Qty</th>
+                          <th className="p-2.5 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {viewingOrder.lineItems.map((item, idx) => {
+                          const lineAmt = item.lineTotal !== undefined && item.lineTotal !== null
+                            ? item.lineTotal
+                            : (item.amount || (item.rate && item.qty ? (item.qty / 1000) * item.rate : 0));
+                          return (
+                            <tr key={idx}>
+                              <td className="p-2.5 font-medium text-slate-800">{item.name || item.description}</td>
+                              <td className="p-2.5 text-right text-slate-600">{item.qty?.toLocaleString('en-IN')}</td>
+                              <td className="p-2.5 text-right font-bold text-slate-900">₹ {lineAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 font-bold text-sm text-slate-900">
+                <span>Total Order Value</span>
+                <span className="text-red-600">₹ {(viewingOrder.amount || 0).toLocaleString('en-IN')}</span>
+              </div>
+
+              {viewingOrder.deliveryAddress && (
+                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600">
+                  <span className="font-semibold text-slate-800 block mb-1">Delivery Address:</span>
+                  {viewingOrder.deliveryAddress}
+                </div>
+              )}
+
+              {viewingOrder.notes && (
+                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600">
+                  <span className="font-semibold text-slate-800 block mb-1">Order Notes:</span>
+                  {viewingOrder.notes}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setViewingOrder(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Order Modal Card */}
+      {editingOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Update Order</span>
+                <h3 className="text-base font-bold text-slate-900">{editingOrder.orderNo || `ORD-${editingOrder._id.slice(-6)}`}</h3>
+              </div>
+              <button onClick={() => setEditingOrder(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOrderEdit} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Order Status</label>
+                <select
+                  value={editOrderForm.status}
+                  onChange={(e) => setEditOrderForm({ ...editOrderForm, status: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="production">In Production</option>
+                  <option value="quality_check">Quality Check</option>
+                  <option value="dispatched">Dispatched</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Expected Reorder Date</label>
+                <input
+                  type="date"
+                  value={editOrderForm.expectedReorderDate}
+                  onChange={(e) => setEditOrderForm({ ...editOrderForm, expectedReorderDate: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Delivery Address</label>
+                <textarea
+                  rows={2}
+                  value={editOrderForm.deliveryAddress}
+                  onChange={(e) => setEditOrderForm({ ...editOrderForm, deliveryAddress: e.target.value })}
+                  placeholder="Delivery address..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Order Notes</label>
+                <textarea
+                  rows={2}
+                  value={editOrderForm.notes}
+                  onChange={(e) => setEditOrderForm({ ...editOrderForm, notes: e.target.value })}
+                  placeholder="Special instructions or notes..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingOrder(null)}
+                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingOrderEdit}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold disabled:opacity-50 transition cursor-pointer"
+                >
+                  {submittingOrderEdit ? 'Saving...' : 'Save Order'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -775,6 +1362,21 @@ export default function CustomerDetails() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* New Order Popup Modal */}
+      {showNewOrderModal && (
+        <NewOrderModal
+          isOpen={showNewOrderModal}
+          onClose={() => setShowNewOrderModal(false)}
+          onSuccess={() => {
+            notify.success('New order created successfully');
+            fetchCustomerDetails();
+            fetchTimeline();
+            fetchOrders();
+          }}
+          initialCustomer={customer}
+        />
       )}
     </div>
   );

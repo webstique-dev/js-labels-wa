@@ -21,10 +21,18 @@ import {
   ArrowDown,
   Hexagon,
   ChevronRight as ChevronRightIcon,
-  Plus
+  Plus,
+  ShoppingBag,
+  User
 } from 'lucide-react';
 import { SkeletonCard, SkeletonTable } from '../components/ui/Skeleton';
 import { initiatePhoneCall, openWhatsApp, openEmail, WhatsAppIcon } from '../utils/contactUtils';
+import NewOrderModal from '../components/NewOrderModal';
+import {
+  getLiveReorderProbability,
+  getProbabilityColorClass,
+  getProbabilityTextColorClass
+} from '../utils/reorderHelper';
 
 export default function Reminders() {
   const navigate = useNavigate();
@@ -36,6 +44,10 @@ export default function Reminders() {
   const [reminders, setReminders] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // New Order Modal State
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+  const [selectedOrderCustomer, setSelectedOrderCustomer] = useState(null);
 
   // Calendar Filter State
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
@@ -72,10 +84,22 @@ export default function Reminders() {
     return name.substring(0, 2).toUpperCase();
   };
 
+  const getItemPriority = (item) => {
+    const cust = item.customer || {};
+    const probScore = getLiveReorderProbability(cust);
+    if (probScore >= 80) return 'high';
+    if (probScore >= 50) return 'medium';
+    return 'low';
+  };
+
+  const highCount = reminders.filter(r => getItemPriority(r) === 'high').length;
+  const mediumCount = reminders.filter(r => getItemPriority(r) === 'medium').length;
+  const lowCount = reminders.filter(r => getItemPriority(r) === 'low').length;
+
   // Build map of YYYY-MM-DD -> set of priority strings for calendar dots
   const reminderDotsMap = {};
   reminders.forEach((r) => {
-    const rawDate = r.expectedReorderDate || r.dueDate || r.date;
+    const rawDate = r.customer?.expectedReorderDate || r.expectedReorderDate;
     if (rawDate) {
       const d = new Date(rawDate);
       if (!isNaN(d.getTime())) {
@@ -84,20 +108,24 @@ export default function Reminders() {
         const dd = String(d.getDate()).padStart(2, '0');
         const key = `${yyyy}-${mm}-${dd}`;
         if (!reminderDotsMap[key]) reminderDotsMap[key] = new Set();
-        reminderDotsMap[key].add((r.priority || 'medium').toLowerCase());
+        reminderDotsMap[key].add(getItemPriority(r));
       }
     }
   });
 
   // Filter reminder cards according to top tab selection & calendar date
   const filteredCards = reminders.filter((item) => {
-    const prio = (item.priority || '').toLowerCase();
-    if (activeFilterTab === 'high' && prio !== 'high') return false;
-    if (activeFilterTab === 'medium' && prio !== 'medium') return false;
-    if (activeFilterTab === 'low' && prio !== 'low') return false;
+    const prio = getItemPriority(item);
+
+    // If calendar date is selected, display all reminders for that date regardless of priority view
+    if (!selectedCalendarDate) {
+      if (activeFilterTab === 'high' && prio !== 'high') return false;
+      if (activeFilterTab === 'medium' && prio !== 'medium') return false;
+      if (activeFilterTab === 'low' && prio !== 'low') return false;
+    }
 
     if (selectedCalendarDate) {
-      const rawDate = item.expectedReorderDate || item.dueDate || item.date;
+      const rawDate = item.customer?.expectedReorderDate || item.expectedReorderDate;
       if (!rawDate) return false;
       const d = new Date(rawDate);
       if (isNaN(d.getTime())) return false;
@@ -111,10 +139,43 @@ export default function Reminders() {
     return true;
   });
 
-  const overdueReminders = reminders.filter((r) => r.isOverdue || (r.daysUntilReorder < 0));
+  const overdueReminders = reminders.filter((r) => {
+    const cust = r.customer || {};
+    const expDateStr = cust.expectedReorderDate || r.expectedReorderDate;
+    if (!expDateStr) return false;
+    const expDate = new Date(expDateStr);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return expDate < todayStart || r.daysUntilReorder < 0;
+  });
 
-  const handleActionClick = (name, actionType) => {
-    notify.success(`Action "${actionType}" initiated for ${name}`);
+  const handleWhatsAppClick = async (cust) => {
+    if (!cust || !cust.phone) {
+      notify.info(`No phone number recorded for ${cust?.name || 'customer'}`);
+      return;
+    }
+
+    const cleanPhone = cust.phone.toString().replace(/\D/g, '');
+    const expDateFormatted = cust.expectedReorderDate
+      ? new Date(cust.expectedReorderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'soon';
+
+    const message = `Hi ${cust.name || 'Customer'}, this is JS Labels. Your label supply is expected to need a reorder around ${expDateFormatted}. Would you like us to prepare your next order? Happy to help whenever you're ready!`;
+
+    const waUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    notify.success(`Opening WhatsApp chat for ${cust.name}...`);
+
+    try {
+      await api.post('/activities', {
+        relatedType: 'customer',
+        relatedId: cust._id,
+        type: 'whatsapp',
+        description: 'WhatsApp reminder opened for reorder'
+      });
+    } catch (err) {
+      console.error('Error logging WhatsApp activity:', err);
+    }
   };
 
   const handleAcknowledge = async (customerId, custName) => {
@@ -138,54 +199,43 @@ export default function Reminders() {
           <button
             onClick={() => setActiveFilterTab('all')}
             className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'all'
-                ? 'border-red-600 text-red-600 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+              ? 'border-red-600 text-red-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
               }`}
           >
-            All Reminders ({summary?.total ?? reminders.length})
+            All Reminders ({reminders.length})
           </button>
 
           <button
             onClick={() => setActiveFilterTab('high')}
             className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'high'
-                ? 'border-red-600 text-red-600 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+              ? 'border-red-600 text-red-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
               }`}
           >
-            High Priority ({summary?.high ?? reminders.filter(r => r.priority === 'high').length})
+            High Priority ({highCount})
           </button>
 
           <button
             onClick={() => setActiveFilterTab('medium')}
             className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'medium'
-                ? 'border-red-600 text-red-600 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+              ? 'border-red-600 text-red-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
               }`}
           >
-            Medium Priority ({summary?.medium ?? reminders.filter(r => r.priority === 'medium').length})
+            Medium Priority ({mediumCount})
           </button>
 
           <button
             onClick={() => setActiveFilterTab('low')}
             className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'low'
-                ? 'border-red-600 text-red-600 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+              ? 'border-red-600 text-red-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
               }`}
           >
-            Low Priority ({summary?.low ?? reminders.filter(r => r.priority === 'low').length})
+            Low Priority ({lowCount})
           </button>
         </div>
-
-        {/* Right Action Button */}
-        {/* <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <button
-            onClick={() => navigate('/customers')}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Manage Customers</span>
-          </button>
-        </div> */}
       </div>
 
       {/* Main Workspace Layout (12 Columns) */}
@@ -220,8 +270,8 @@ export default function Reminders() {
                 const custName = cust.name || 'N/A';
                 const company = cust.company || 'Individual Account';
                 const initials = getInitials(custName);
-                const probScore = card.probabilityScore || cust.reorderProbability || 75;
-                const prio = (card.priority || 'medium').toLowerCase();
+                const probScore = getLiveReorderProbability(cust);
+                const prio = getItemPriority(card);
 
                 let prioBadgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
                 if (prio === 'high') prioBadgeClass = 'bg-rose-50 text-rose-600 border-rose-200';
@@ -240,7 +290,7 @@ export default function Reminders() {
                 return (
                   <div key={card._id} className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-3">
 
-                    {/* Header: Avatar, Name, Priority Badge */}
+                    {/* Header: Avatar & Name & Priority Badge */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="w-9 h-9 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
@@ -257,13 +307,13 @@ export default function Reminders() {
                         </div>
                       </div>
 
-                      <span className={`px-2 py-0.5 border text-[10px] font-bold rounded-md uppercase ${prioBadgeClass} shrink-0`}>
+                      <span className={`px-2 py-0.5 border text-[10px] font-bold rounded-md uppercase shrink-0 ${prioBadgeClass}`}>
                         {prio}
                       </span>
                     </div>
 
                     {/* Body Details */}
-                    <div className="space-y-1.5 text-[11px] pt-1">
+                    <div className="space-y-2 text-[11px] pt-1">
                       <div className="flex items-center gap-1.5 text-slate-600 font-medium">
                         <CalendarIcon size={12} className="text-slate-400 shrink-0" />
                         <span>Expected Date: {expDateStr}</span>
@@ -273,39 +323,52 @@ export default function Reminders() {
                         {daysText}
                       </p>
 
-                      <p className="text-emerald-600 font-bold">
-                        Reorder Score: <span className="font-extrabold">{probScore}%</span>
-                      </p>
+                      {/* Reorder Probability Progress Bar */}
+                      <div className="space-y-1 pt-0.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 font-medium">Reorder Probability</span>
+                          <span className={getProbabilityTextColorClass(probScore)}>{probScore}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden flex items-center">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${getProbabilityColorClass(probScore)}`}
+                            style={{ width: `${Math.min(100, Math.max(0, probScore))}%` }}
+                          ></div>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Action Icon Buttons */}
                     <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                       <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => initiatePhoneCall(cust.phone, custName, notify)}
+                        <a
+                          href={cust.phone ? `tel:+91${cust.phone.toString().replace(/\D/g, '')}` : '#'}
+                          onClick={(e) => {
+                            if (!cust.phone) {
+                              e.preventDefault();
+                              notify.info(`No phone number recorded for ${custName}`);
+                            } else {
+                              notify.success(`Initiating call to ${custName}...`);
+                            }
+                          }}
                           className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
                           title="Call Customer"
                         >
                           <Phone size={13} />
-                        </button>
+                        </a>
                         <button
-                          onClick={() => openWhatsApp(cust.phone, custName, null, notify)}
+                          type="button"
+                          onClick={() => handleWhatsAppClick(cust)}
                           className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
                           title="Send WhatsApp"
                         >
                           <WhatsAppIcon size={13} className="text-slate-500 hover:text-emerald-600" />
                         </button>
-                        <button
-                          onClick={() => openEmail(cust.email, custName, null, null, notify)}
-                          className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
-                          title="Send Email"
-                        >
-                          <Mail size={13} />
-                        </button>
                       </div>
 
                       <div className="relative">
                         <button
+                          type="button"
                           onClick={() => setActiveDropdownId(activeDropdownId === card._id ? null : card._id)}
                           className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
                         >
@@ -313,18 +376,34 @@ export default function Reminders() {
                         </button>
 
                         {activeDropdownId === card._id && (
-                          <div className="absolute right-0 bottom-8 w-36 bg-white rounded-xl border border-slate-200 shadow-lg p-1 z-20 text-xs">
+                          <div className="absolute right-0 bottom-8 w-44 bg-white rounded-2xl border border-slate-200 shadow-xl p-1 z-30 text-xs font-medium space-y-0.5">
                             <button
-                              onClick={() => { setActiveDropdownId(null); handleAcknowledge(cust._id, custName); }}
-                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 rounded-lg text-slate-700 font-medium"
+                              type="button"
+                              onClick={() => { setActiveDropdownId(null); navigate(`/customers/${cust._id}`); }}
+                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 rounded-xl text-slate-700 font-medium flex items-center gap-2 cursor-pointer"
                             >
-                              Acknowledge
+                              <User size={13} className="text-slate-400" />
+                              <span>View Customer 360</span>
                             </button>
                             <button
-                              onClick={() => { setActiveDropdownId(null); navigate(`/customers/${cust._id}`); }}
-                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 rounded-lg text-slate-700 font-medium"
+                              type="button"
+                              onClick={() => {
+                                setActiveDropdownId(null);
+                                setSelectedOrderCustomer(cust);
+                                setShowNewOrderModal(true);
+                              }}
+                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 rounded-xl text-slate-700 font-medium flex items-center gap-2 cursor-pointer"
                             >
-                              View Profile
+                              <ShoppingBag size={13} className="text-slate-400" />
+                              <span>Create Order</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setActiveDropdownId(null); handleAcknowledge(cust._id, custName); }}
+                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 rounded-xl text-slate-700 font-medium flex items-center gap-2 cursor-pointer text-emerald-700"
+                            >
+                              <CheckCircle2 size={13} className="text-emerald-600" />
+                              <span>Dismiss / Handled</span>
                             </button>
                           </div>
                         )}
@@ -408,15 +487,24 @@ export default function Reminders() {
                           {/* Action Icon Buttons */}
                           <td className="p-3 text-center">
                             <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => initiatePhoneCall(cust.phone, custName, notify)}
+                              <a
+                                href={cust.phone ? `tel:+91${cust.phone.toString().replace(/\D/g, '')}` : '#'}
+                                onClick={(e) => {
+                                  if (!cust.phone) {
+                                    e.preventDefault();
+                                    notify.info(`No phone number recorded for ${custName}`);
+                                  } else {
+                                    notify.success(`Initiating call to ${custName}...`);
+                                  }
+                                }}
                                 className="w-6 h-6 rounded-md border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
                                 title="Call Customer"
                               >
                                 <Phone size={12} />
-                              </button>
+                              </a>
                               <button
-                                onClick={() => openWhatsApp(cust.phone, custName, null, notify)}
+                                type="button"
+                                onClick={() => handleWhatsAppClick(cust)}
                                 className="w-6 h-6 rounded-md border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
                                 title="Send WhatsApp"
                               >
@@ -443,7 +531,7 @@ export default function Reminders() {
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-900 text-sm tracking-tight">Reminder Summary</h3>
-              <span className="text-[11px] font-semibold text-slate-500">Live DB Metrics</span>
+              {/* <span className="text-[11px] font-semibold text-slate-500">Live DB Metrics</span> */}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -626,15 +714,15 @@ export default function Reminders() {
                           setSelectedCalendarDate(null);
                         } else {
                           setSelectedCalendarDate(dateKey);
+                          setActiveFilterTab('all');
                         }
                       }}
-                      className={`h-8 w-full rounded-xl flex flex-col items-center justify-center relative transition cursor-pointer text-xs font-semibold ${
-                        isSelected
+                      className={`h-8 w-full rounded-xl flex flex-col items-center justify-center relative transition cursor-pointer text-xs font-semibold ${isSelected
                           ? 'bg-indigo-600 text-white shadow-md font-bold'
                           : isToday
-                          ? 'bg-red-50 text-red-600 font-bold border border-red-200'
-                          : 'text-slate-700 hover:bg-slate-100'
-                      }`}
+                            ? 'bg-red-50 text-red-600 font-bold border border-red-200'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
                     >
                       <span>{day}</span>
                       {/* Priority Indicator Dots */}
@@ -671,6 +759,19 @@ export default function Reminders() {
           </div>
         </div>
       </div>
+
+      {/* New Order Popup Modal */}
+      {showNewOrderModal && (
+        <NewOrderModal
+          isOpen={showNewOrderModal}
+          onClose={() => setShowNewOrderModal(false)}
+          onSuccess={() => {
+            notify.success('New order created successfully');
+            fetchReminders();
+          }}
+          initialCustomer={selectedOrderCustomer}
+        />
+      )}
     </div>
   );
 }

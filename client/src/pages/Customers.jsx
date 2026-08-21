@@ -4,8 +4,15 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X } from 'lucide-react';
-import { SkeletonTable } from '../components/ui/Skeleton';
+import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X, ShoppingBag } from 'lucide-react';
+import { SkeletonCustomerDirectory } from '../components/ui/Skeleton';
+import NewOrderModal from '../components/NewOrderModal';
+import {
+  getLiveReorderProbability,
+  getProbabilityColorClass,
+  getProbabilityBadgeClass,
+  getOrderButtonClass
+} from '../utils/reorderHelper';
 
 export default function Customers() {
   const navigate = useNavigate();
@@ -20,6 +27,10 @@ export default function Customers() {
   // Add Customer Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // New Order Modal State for direct popup from Customers page
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+  const [selectedOrderCustomer, setSelectedOrderCustomer] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     company: '',
@@ -126,8 +137,9 @@ export default function Customers() {
   };
 
   const getProbabilityBadgeClass = (score) => {
-    if (score >= 80) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    if (score >= 50) return 'bg-amber-50 text-amber-700 border-amber-200';
+    const safeScore = score ?? 0;
+    if (safeScore >= 80) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (safeScore >= 50) return 'bg-amber-50 text-amber-700 border-amber-200';
     return 'bg-rose-50 text-rose-700 border-rose-200';
   };
 
@@ -163,6 +175,17 @@ export default function Customers() {
 
           <button
             onClick={() => {
+              setSelectedOrderCustomer(null);
+              setShowNewOrderModal(true);
+            }}
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-2xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <ShoppingBag size={16} />
+            <span>+ New Order</span>
+          </button>
+
+          <button
+            onClick={() => {
               setFormData({ name: '', company: '', phone: '', email: '', city: '', gstNo: '', customerType: 'Distributor' });
               setShowAddModal(true);
             }}
@@ -176,7 +199,7 @@ export default function Customers() {
 
       {/* Main Content Area */}
       {loading ? (
-        <SkeletonTable rows={6} cols={5} />
+        <SkeletonCustomerDirectory rows={6} />
       ) : safeCustomers.length === 0 ? (
         <div className="py-20 text-center bg-white rounded-2xl border border-slate-200/80 space-y-3">
           <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
@@ -241,26 +264,26 @@ export default function Customers() {
                     </td>
 
                     <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${c.reorderProbability >= 80
-                                ? 'bg-emerald-500'
-                                : c.reorderProbability >= 50
-                                  ? 'bg-amber-500'
-                                  : 'bg-rose-500'
-                              }`}
-                            style={{ width: `${c.reorderProbability || 75}%` }}
-                          ></div>
-                        </div>
-                        <span
-                          className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
-                            c.reorderProbability || 75
-                          )}`}
-                        >
-                          {c.reorderProbability || 75}%
-                        </span>
-                      </div>
+                      {(() => {
+                        const prob = getLiveReorderProbability(c);
+                        return (
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${getProbabilityColorClass(prob)}`}
+                                style={{ width: `${Math.min(100, Math.max(0, prob))}%` }}
+                              ></div>
+                            </div>
+                            <span
+                              className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
+                                prob
+                              )}`}
+                            >
+                              {prob}%
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     <td className="p-4 font-medium text-slate-800">
@@ -270,11 +293,26 @@ export default function Customers() {
                           month: 'short',
                           year: 'numeric'
                         })
-                        : 'Jun 12, 2025'}
+                        : 'N/A'}
                     </td>
 
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          title={`Create order for ${c.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedOrderCustomer(c);
+                            setShowNewOrderModal(true);
+                          }}
+                          className={`px-2.5 py-1 font-semibold rounded-xl text-xs transition inline-flex items-center gap-1 cursor-pointer shadow-2xs ${getOrderButtonClass(
+                            getLiveReorderProbability(c)
+                          )}`}
+                        >
+                          <ShoppingBag size={13} />
+                          <span>+ Order</span>
+                        </button>
                         <button
                           type="button"
                           title={`Delete ${c.name}`}
@@ -291,7 +329,7 @@ export default function Customers() {
                             e.stopPropagation();
                             navigate(`/customers/${c._id}`);
                           }}
-                          className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-xl border border-red-200 text-xs transition inline-flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl border border-slate-200 text-xs transition inline-flex items-center gap-1 cursor-pointer"
                         >
                           <span>View 360°</span>
                           <ArrowRight size={12} />
@@ -334,20 +372,25 @@ export default function Customers() {
                     >
                       <Trash2 size={14} />
                     </button>
-                    <span
-                      className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
-                        c.reorderProbability || 75
-                      )}`}
-                    >
-                      {c.reorderProbability || 75}% Reorder
-                    </span>
+                    {(() => {
+                      const prob = getLiveReorderProbability(c);
+                      return (
+                        <span
+                          className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
+                            prob
+                          )}`}
+                        >
+                          {prob}% Reorder
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
                   <span className="text-slate-500 font-normal">{c.phone}</span>
                   <span className="font-medium text-slate-700">
-                    {c.expectedReorderDate ? new Date(c.expectedReorderDate).toLocaleDateString('en-IN') : 'Jun 12, 2025'}
+                    {c.expectedReorderDate ? new Date(c.expectedReorderDate).toLocaleDateString('en-IN') : 'N/A'}
                   </span>
                 </div>
               </div>
@@ -457,6 +500,19 @@ export default function Customers() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* New Order Popup Modal */}
+      {showNewOrderModal && (
+        <NewOrderModal
+          isOpen={showNewOrderModal}
+          onClose={() => setShowNewOrderModal(false)}
+          onSuccess={() => {
+            notify.success('New order created successfully');
+            fetchCustomers();
+          }}
+          initialCustomer={selectedOrderCustomer}
+        />
       )}
     </div>
   );

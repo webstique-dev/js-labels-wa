@@ -16,7 +16,7 @@ import {
   XCircle,
   ArrowUpDown,
   Eye,
-  MoreHorizontal,
+  X,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -34,7 +34,7 @@ export default function Orders() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeDropdownId, setActiveDropdownId] = useState(null);
+  const [viewingOrder, setViewingOrder] = useState(null);
 
   const canDelete = role === 'super_admin';
 
@@ -136,7 +136,7 @@ export default function Orders() {
 
   return (
     <div className="space-y-6 pb-12 font-sans">
-      
+
       {/* Top Controls Row */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -146,13 +146,13 @@ export default function Orders() {
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
           {/* Export Button */}
-          <button
+          {/* <button
             onClick={() => notify.success('Orders report exported successfully')}
             className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-2xs transition cursor-pointer"
           >
             <Download size={14} className="text-slate-400" />
             <span>Export CSV</span>
-          </button>
+          </button> */}
 
           {/* New Order Button */}
           <button
@@ -167,7 +167,7 @@ export default function Orders() {
 
       {/* Top 6 KPI Metric Summary Cards Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        
+
         {/* 1. Total Orders */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
@@ -272,7 +272,7 @@ export default function Orders() {
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden scrollbar-hide">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
-              
+
               {/* Table Header */}
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500 font-semibold text-[11px] bg-slate-50/50">
@@ -328,17 +328,11 @@ export default function Orders() {
 
                   return (
                     <tr key={ord._id} className="hover:bg-slate-50/80 transition group">
-                      
+
                       {/* Order ID */}
                       <td
                         className="p-4 font-bold text-blue-600 hover:underline cursor-pointer"
-                        onClick={() => {
-                          if (ord.customerId?._id) {
-                            navigate(`/customers/${ord.customerId._id}`);
-                          } else {
-                            navigate('/customers');
-                          }
-                        }}
+                        onClick={() => setViewingOrder(ord)}
                       >
                         {formattedOrderNo}
                       </td>
@@ -384,43 +378,16 @@ export default function Orders() {
                         </div>
                       </td>
 
-                      {/* Actions */}
+                      {/* Actions - Eye View Only */}
                       <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center">
                           <button
-                            onClick={() => {
-                              if (ord.customerId?._id) {
-                                navigate(`/customers/${ord.customerId._id}`);
-                              } else {
-                                navigate('/customers');
-                              }
-                            }}
-                            className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
-                            title="View Customer 360"
+                            onClick={() => setViewingOrder(ord)}
+                            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+                            title="View Order Details"
                           >
-                            <Eye size={14} />
+                            <Eye size={15} />
                           </button>
-
-                          <div className="relative">
-                            <button
-                              onClick={() => setActiveDropdownId(activeDropdownId === ord._id ? null : ord._id)}
-                              className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
-                              title="More Options"
-                            >
-                              <MoreHorizontal size={14} />
-                            </button>
-
-                            {activeDropdownId === ord._id && (
-                              <div className="absolute right-0 mt-1 w-36 bg-white rounded-xl border border-slate-200 shadow-lg p-1 z-20 text-xs text-left">
-                                <button
-                                  onClick={() => { setActiveDropdownId(null); notify.success(`Viewing order details for ${formattedOrderNo}`); }}
-                                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 rounded-lg text-slate-700 font-medium"
-                                >
-                                  Order Details
-                                </button>
-                              </div>
-                            )}
-                          </div>
                         </div>
                       </td>
 
@@ -436,6 +403,157 @@ export default function Orders() {
             <span className="text-slate-500 font-medium">Showing {orders.length} of {summary?.totalOrders || orders.length} orders</span>
           </div>
 
+        </div>
+      )}
+
+      {/* View Order Details Popup Modal */}
+      {viewingOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide font-sans">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Order Details</span>
+                <h3 className="text-base font-bold text-slate-900">{viewingOrder.orderNo || `ORD-${viewingOrder._id?.slice(-6)}`}</h3>
+              </div>
+              <button onClick={() => setViewingOrder(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              
+              {/* Customer Account Info */}
+              <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] text-slate-400 font-medium">Customer Account</p>
+                  <p className="font-bold text-slate-900">{viewingOrder.customerId?.name || viewingOrder.customerName || 'Customer Account'}</p>
+                  {viewingOrder.customerId?.company && (
+                    <p className="text-[11px] text-slate-500 font-normal">{viewingOrder.customerId.company}</p>
+                  )}
+                </div>
+                {viewingOrder.customerId?._id && (
+                  <button
+                    onClick={() => {
+                      setViewingOrder(null);
+                      navigate(`/customers/${viewingOrder.customerId._id}`);
+                    }}
+                    className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Customer 360 →
+                  </button>
+                )}
+              </div>
+
+              {/* Status & Order Date */}
+              <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                <div>
+                  <p className="text-[10px] text-slate-400 font-medium mb-0.5">Order Status</p>
+                  {renderStatusBadge(viewingOrder.status)}
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 font-medium">Order Date</p>
+                  <p className="font-semibold text-slate-800">
+                    {new Date(viewingOrder.orderDate || viewingOrder.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+
+              {viewingOrder.expectedReorderDate && (
+                <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl flex items-center justify-between">
+                  <span className="font-medium text-slate-700">Expected Reorder Date:</span>
+                  <span className="font-bold text-red-600">
+                    {new Date(viewingOrder.expectedReorderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+
+              {viewingOrder.deliveryDate && (
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span className="font-medium text-slate-600">Delivery Date:</span>
+                  <span className="font-semibold text-slate-900">
+                    {new Date(viewingOrder.deliveryDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+
+              {viewingOrder.poNumber && (
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span className="font-medium text-slate-600">PO Number:</span>
+                  <span className="font-semibold text-slate-900">{viewingOrder.poNumber}</span>
+                </div>
+              )}
+
+              {viewingOrder.salesExecutive?.name && (
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                  <span className="font-medium text-slate-600">Sales Executive:</span>
+                  <span className="font-semibold text-slate-900">{viewingOrder.salesExecutive.name}</span>
+                </div>
+              )}
+
+              {/* Line Items Table */}
+              {viewingOrder.lineItems && viewingOrder.lineItems.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-slate-700 mb-2">Order Line Items</h4>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-[10px]">
+                          <th className="p-2.5">Item Description</th>
+                          <th className="p-2.5 text-right">Qty</th>
+                          <th className="p-2.5 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {viewingOrder.lineItems.map((item, idx) => {
+                          const lineAmt = item.lineTotal !== undefined && item.lineTotal !== null
+                            ? item.lineTotal
+                            : (item.amount || (item.rate && item.qty ? (item.qty / 1000) * item.rate : 0));
+                          return (
+                            <tr key={idx}>
+                              <td className="p-2.5 font-medium text-slate-800">{item.name || item.description}</td>
+                              <td className="p-2.5 text-right text-slate-600">{item.qty?.toLocaleString('en-IN')}</td>
+                              <td className="p-2.5 text-right font-bold text-slate-900">₹ {lineAmt.toLocaleString('en-IN')}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 font-bold text-sm text-slate-900">
+                <span>Total Order Value</span>
+                <span className="text-red-600">₹ {(viewingOrder.amount || 0).toLocaleString('en-IN')}</span>
+              </div>
+
+              {viewingOrder.deliveryAddress && (
+                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600">
+                  <span className="font-semibold text-slate-800 block mb-1">Delivery Address:</span>
+                  {viewingOrder.deliveryAddress}
+                </div>
+              )}
+
+              {viewingOrder.notes && (
+                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600">
+                  <span className="font-semibold text-slate-800 block mb-1">Order Notes:</span>
+                  {viewingOrder.notes}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setViewingOrder(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

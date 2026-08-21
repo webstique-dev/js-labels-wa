@@ -3,11 +3,32 @@ const Order = require('../models/Order');
 const Customer = require('../models/Customer');
 const Lead = require('../models/Lead');
 const User = require('../models/User');
+const { generateExcelReport } = require('../utils/excelExporter');
 
-const parseDates = (fromStr, toStr) => {
+const parseDates = (fromStr, toStr, periodStr) => {
   const now = new Date();
-  let from = fromStr ? new Date(fromStr) : new Date(now.getFullYear(), now.getMonth(), 1);
-  let to = toStr ? new Date(toStr) : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  let from, to;
+
+  if (periodStr === 'this_month') {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+    to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  } else if (periodStr === 'last_30_days') {
+    from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  } else if (periodStr === 'this_quarter') {
+    const qMonth = Math.floor(now.getMonth() / 3) * 3;
+    from = new Date(now.getFullYear(), qMonth, 1);
+    to = new Date(now.getFullYear(), qMonth + 3, 0, 23, 59, 59);
+  } else if (periodStr === 'this_year') {
+    from = new Date(now.getFullYear(), 0, 1);
+    to = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+  } else if (periodStr === 'all_time') {
+    from = new Date(2020, 0, 1);
+    to = new Date(2035, 11, 31, 23, 59, 59);
+  } else {
+    from = fromStr ? new Date(fromStr) : new Date(now.getFullYear(), now.getMonth(), 1);
+    to = toStr ? new Date(toStr) : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  }
 
   const durationMs = to.getTime() - from.getTime();
   const prevTo = new Date(from.getTime() - 1);
@@ -24,7 +45,7 @@ const calcChange = (thisVal, prevVal) => {
 // GET /api/reports/overview
 const getReportsOverview = async (req, res) => {
   try {
-    const { from, to, prevFrom, prevTo } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate);
+    const { from, to, prevFrom, prevTo } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate, req.query.period);
 
     const [allOrders, periodOrders, prevPeriodOrders, totalCustomers, totalLeads, wonLeads] = await Promise.all([
       Order.find({ isDeleted: { $ne: true } }),
@@ -107,7 +128,7 @@ const getReportsOverview = async (req, res) => {
 // GET /api/reports/revenue-trend
 const getRevenueTrend = async (req, res) => {
   try {
-    const { from, to } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate);
+    const { from, to } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate, req.query.period);
 
     const trend = await Order.aggregate([
       {
@@ -335,38 +356,132 @@ const getExecutivePerformance = async (req, res) => {
   }
 };
 
-// GET /api/reports/export?type=orders|customers|leads
+// GET /api/reports/export?type=orders|customers|leads&period=this_month|last_30_days|...
 const exportReportCSV = async (req, res) => {
   try {
-    const { type = 'orders' } = req.query;
-    let csvContent = '';
+    const { type = 'orders', period = 'this_month' } = req.query;
+    const { from, to } = parseDates(req.query.from, req.query.to, period);
 
     if (type === 'customers') {
-      const customers = await Customer.find({ isDeleted: { $ne: true } });
-      csvContent = 'ID,Name,Company,Phone,Email,City,Customer Type,Created At\n';
-      customers.forEach(c => {
-        csvContent += `"${c._id}","${c.name}","${c.company || ''}","${c.phone || ''}","${c.email || ''}","${c.city || ''}","${c.customerType || ''}","${c.createdAt}"\n`;
-      });
-    } else if (type === 'leads') {
-      const leads = await Lead.find({ isDeleted: { $ne: true } }).populate('assignedTo', 'name');
-      csvContent = 'ID,Name,Company,Phone,Email,Source,Priority,Status,Assigned Executive,Created At\n';
-      leads.forEach(l => {
-        csvContent += `"${l._id}","${l.name}","${l.company || ''}","${l.phone || ''}","${l.email || ''}","${l.source || ''}","${l.priority || ''}","${l.status || ''}","${l.assignedTo?.name || ''}","${l.createdAt}"\n`;
-      });
-    } else {
-      const orders = await Order.find({ isDeleted: { $ne: true } }).populate('customerId', 'name company');
-      csvContent = 'Order No,Customer Name,Company,Order Date,Amount,Status,Created At\n';
-      orders.forEach(o => {
-        csvContent += `"${o.orderNo || o._id}","${o.customerId?.name || ''}","${o.customerId?.company || ''}","${o.orderDate || o.createdAt}",${o.amount},"${o.status}","${o.createdAt}"\n`;
+      const headers = [
+        { name: 'Customer Name', key: 'name', width: 25, align: 'left' },
+        { name: 'Company', key: 'company', width: 22, align: 'left' },
+        { name: 'Phone Number', key: 'phone', width: 16, align: 'left', isText: true },
+        { name: 'Email Address', key: 'email', width: 26, align: 'left' },
+        { name: 'Reorder Prob (%)', key: 'probability', width: 18, align: 'center', isNum: true },
+        { name: 'Expected Reorder', key: 'reorderDate', width: 18, align: 'center', isDate: true },
+        { name: 'Registration Date', key: 'createdAt', width: 18, align: 'center', isDate: true }
+      ];
+
+      const customers = await Customer.find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 });
+      const dataRows = customers.map(c => [
+        c.name || 'Unnamed',
+        c.company || '—',
+        c.phone ? String(c.phone) : '—',
+        c.email || '—',
+        c.reorderProbability !== undefined ? c.reorderProbability : 50,
+        c.expectedReorderDate ? new Date(c.expectedReorderDate) : '—',
+        c.createdAt ? new Date(c.createdAt) : new Date()
+      ]);
+
+      return await generateExcelReport(res, {
+        title: 'JS LABELS — CUSTOMER DIRECTORY REPORT',
+        sheetName: 'Customers Directory',
+        headers,
+        dataRows,
+        period,
+        filenamePrefix: 'customers'
       });
     }
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="${type}_report_${Date.now()}.csv"`);
-    return res.send(csvContent);
+    if (type === 'leads') {
+      const headers = [
+        { name: 'Lead Contact Name', key: 'name', width: 25, align: 'left' },
+        { name: 'Company Name', key: 'company', width: 22, align: 'left' },
+        { name: 'Phone Number', key: 'phone', width: 16, align: 'left', isText: true },
+        { name: 'Email Address', key: 'email', width: 26, align: 'left' },
+        { name: 'Lead Source', key: 'source', width: 16, align: 'center' },
+        { name: 'Priority', key: 'priority', width: 14, align: 'center', isBadge: true },
+        { name: 'Pipeline Status', key: 'status', width: 16, align: 'center', isBadge: true },
+        { name: 'Assigned Executive', key: 'assigned', width: 22, align: 'left' },
+        { name: 'Created Date', key: 'createdAt', width: 18, align: 'center', isDate: true }
+      ];
+
+      const leads = await Lead.find({ isDeleted: { $ne: true } }).populate('assignedTo', 'name').sort({ createdAt: -1 });
+      const dataRows = leads.map(l => [
+        l.name || 'Unnamed Lead',
+        l.company || '—',
+        l.phone ? String(l.phone) : '—',
+        l.email || '—',
+        l.source || 'Direct',
+        l.priority || 'medium',
+        l.status || 'new',
+        l.assignedTo?.name || 'Unassigned',
+        l.createdAt ? new Date(l.createdAt) : new Date()
+      ]);
+
+      return await generateExcelReport(res, {
+        title: 'JS LABELS — LEADS PIPELINE REPORT',
+        sheetName: 'Leads Pipeline',
+        headers,
+        dataRows,
+        period,
+        filenamePrefix: 'leads'
+      });
+    }
+
+    // Default: Orders
+    const headers = [
+      { name: 'Order No', key: 'orderNo', width: 18, align: 'left' },
+      { name: 'Customer Name', key: 'customerName', width: 24, align: 'left' },
+      { name: 'Company', key: 'company', width: 22, align: 'left' },
+      { name: 'Order Date', key: 'orderDate', width: 16, align: 'center', isDate: true },
+      { name: 'Expected Reorder', key: 'expectedReorder', width: 18, align: 'center', isDate: true },
+      { name: 'Order Total (₹)', key: 'amount', width: 18, align: 'right', isCurrency: true },
+      { name: 'Order Status', key: 'status', width: 16, align: 'center', isBadge: true },
+      { name: 'Sales Executive', key: 'executive', width: 20, align: 'left' }
+    ];
+
+    const query = { isDeleted: { $ne: true } };
+    if (from && to && period !== 'all_time') {
+      query.createdAt = { $gte: from, $lte: to };
+    }
+
+    let orders = await Order.find(query)
+      .populate('customerId', 'name company')
+      .populate('salesExecutive', 'name')
+      .sort({ orderDate: -1 });
+
+    if (orders.length === 0 && period !== 'all_time') {
+      orders = await Order.find({ isDeleted: { $ne: true } })
+        .populate('customerId', 'name company')
+        .populate('salesExecutive', 'name')
+        .sort({ orderDate: -1 });
+    }
+
+    const dataRows = orders.map(o => [
+      o.orderNo || `ORD-${o._id.toString().slice(-6)}`,
+      o.customerId?.name || 'Customer Account',
+      o.customerId?.company || '—',
+      o.orderDate ? new Date(o.orderDate) : new Date(o.createdAt),
+      o.expectedReorderDate ? new Date(o.expectedReorderDate) : '—',
+      Number(o.amount) || 0,
+      o.status || 'confirmed',
+      o.salesExecutive?.name || 'Executive'
+    ]);
+
+    return await generateExcelReport(res, {
+      title: 'JS LABELS — EXECUTIVE ORDERS REPORT',
+      sheetName: 'Orders Summary',
+      headers,
+      dataRows,
+      period,
+      isOrdersSummary: true,
+      filenamePrefix: 'orders'
+    });
   } catch (error) {
-    console.error('Error exporting report CSV:', error);
-    return res.status(500).json({ message: 'Server error exporting report CSV' });
+    console.error('Error exporting Excel report:', error);
+    return res.status(500).json({ message: 'Server error exporting Excel report' });
   }
 };
 

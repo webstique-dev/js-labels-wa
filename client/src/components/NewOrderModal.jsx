@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { Plus, Trash2, X, ChevronDown, ChevronUp, FileText, CreditCard, MapPin, AlignLeft } from 'lucide-react';
 import CustomDatePicker from './ui/DatePicker';
+import { useNotification } from '../context/NotificationContext';
 
-export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead }) {
+export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead, initialCustomer }) {
+  const notify = useNotification();
   const [existingCustomers, setExistingCustomers] = useState([]);
   const [loadingResources, setLoadingResources] = useState(false);
 
@@ -17,7 +19,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
     company: initialLead?.company || '',
     phone: initialLead?.phone || '',
     email: initialLead?.email || '',
-    city: 'Mumbai',
+        city: '',
     address: ''
   });
 
@@ -29,6 +31,23 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
   // Order Details
   const [deliveryDate, setDeliveryDate] = useState('');
   const [usageCycleDays, setUsageCycleDays] = useState(30);
+  const [expectedReorderDate, setExpectedReorderDate] = useState('');
+  const [isManualReorderOverride, setIsManualReorderOverride] = useState(false);
+
+  // Auto-calculate expectedReorderDate when deliveryDate or usageCycleDays changes (if not manually overridden)
+  useEffect(() => {
+    if (!isManualReorderOverride && deliveryDate) {
+      const d = new Date(deliveryDate);
+      if (!isNaN(d.getTime())) {
+        const cycle = parseInt(usageCycleDays) || 30;
+        const calcDate = new Date(d.getTime() + cycle * 24 * 60 * 60 * 1000);
+        const yyyy = calcDate.getFullYear();
+        const mm = String(calcDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(calcDate.getDate()).padStart(2, '0');
+        setExpectedReorderDate(`${yyyy}-${mm}-${dd}`);
+      }
+    }
+  }, [deliveryDate, usageCycleDays, isManualReorderOverride]);
 
   // Collapsible "+ More Details" State
   const [showMoreDetails, setShowMoreDetails] = useState(false);
@@ -39,9 +58,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
   const [notes, setNotes] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
 
-  // Sync initialLead prop when modal opens or initialLead changes
+  // Sync initialLead or initialCustomer props when modal opens
   useEffect(() => {
     if (initialLead) {
       setCustomerMode('new');
@@ -50,11 +68,18 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
         company: initialLead.company || '',
         phone: initialLead.phone || '',
         email: initialLead.email || '',
-        city: 'Mumbai',
+            city: '',
         address: ''
       });
+    } else if (initialCustomer) {
+      setCustomerMode('existing');
+      const custId = typeof initialCustomer === 'string' ? initialCustomer : (initialCustomer._id || initialCustomer.id);
+      setSelectedCustomerId(custId || '');
+      if (initialCustomer.address) {
+        setDeliveryAddress(initialCustomer.address);
+      }
     }
-  }, [initialLead]);
+  }, [initialLead, initialCustomer]);
 
   // Load Existing Customers on Modal Open
   useEffect(() => {
@@ -118,27 +143,26 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorMessage('');
 
     if (customerMode === 'existing' && !selectedCustomerId) {
-      setErrorMessage('Please select an existing customer');
+      notify.error('Please select an existing customer');
       return;
     }
 
     if (customerMode === 'new') {
       if (!newCustomerForm.name || !newCustomerForm.phone) {
-        setErrorMessage('Customer name and phone number are required');
+        notify.error('Customer name and phone number are required');
         return;
       }
       const cleanPhone = newCustomerForm.phone.replace(/\D/g, '');
       if (cleanPhone.length !== 10) {
-        setErrorMessage('Phone number must be exactly 10 digits');
+        notify.error('Phone number must be exactly 10 digits');
         return;
       }
       if (newCustomerForm.email && newCustomerForm.email.trim()) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(newCustomerForm.email.trim())) {
-          setErrorMessage('Please enter a valid email address');
+          notify.error('Please enter a valid email address');
           return;
         }
       }
@@ -148,21 +172,26 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
     for (let i = 0; i < lineItems.length; i++) {
       const item = lineItems[i];
       if (!item.description || !item.description.trim()) {
-        setErrorMessage(`Item ${i + 1}: Label Description is required`);
+        notify.error(`Item ${i + 1}: Label Description is required`);
         return;
       }
       if (!item.qty || parseFloat(item.qty) <= 0) {
-        setErrorMessage(`Item ${i + 1}: Valid Quantity is required`);
+        notify.error(`Item ${i + 1}: Valid Quantity is required`);
         return;
       }
       if (!item.rate || parseFloat(item.rate) <= 0) {
-        setErrorMessage(`Item ${i + 1}: Valid Rate (per 1000 units) is required`);
+        notify.error(`Item ${i + 1}: Valid Rate (per 1000 units) is required`);
         return;
       }
     }
 
+    if (!expectedReorderDate) {
+      notify.error('Expected Reorder Date is required');
+      return;
+    }
+
     if (calculatedGrandTotal <= 0) {
-      setErrorMessage('Order Total Amount must be greater than ₹0');
+      notify.error('Order Total Amount must be greater than ₹0');
       return;
     }
 
@@ -182,6 +211,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
         })),
         totalAmount: calculatedGrandTotal,
         deliveryDate: deliveryDate || undefined,
+        expectedReorderDate: expectedReorderDate,
+        isExpectedReorderDateOverridden: isManualReorderOverride,
         usageCycleDays: parseInt(usageCycleDays) || 30,
         poNumber: poNumber.trim() || undefined,
         advanceReceived,
@@ -191,10 +222,12 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
       };
 
       const res = await api.post('/orders', payload);
+      notify.success('Order created successfully');
       onSuccess(res.data);
       onClose();
     } catch (err) {
-      setErrorMessage(err.response?.data?.message || 'Failed to create order');
+      console.error('Error creating order:', err);
+      notify.error(err.response?.data?.message || 'Failed to create order');
     } finally {
       setIsSubmitting(false);
     }
@@ -208,10 +241,14 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
             <h3 className="text-lg font-bold text-slate-900">
-              {initialLead ? `Create Order for ${initialLead.name}` : 'Create New Order'}
+              {initialCustomer?.name
+                ? `Create Order for ${initialCustomer.name}`
+                : (initialLead ? `Create Order for ${initialLead.name}` : 'Create New Order')}
             </h3>
             <p className="text-xs text-slate-500">
-              {initialLead ? 'Converts lead into an active Customer and logs confirmed order' : 'Select customer and specify custom label specifications'}
+              {initialCustomer?.name
+                ? `Create a custom label order directly for ${initialCustomer.name}`
+                : (initialLead ? 'Converts lead into an active Customer and logs confirmed order' : 'Select customer and specify custom label specifications')}
             </p>
           </div>
           <button
@@ -222,13 +259,6 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
             <X size={18} />
           </button>
         </div>
-
-        {/* Error Alert */}
-        {errorMessage && (
-          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl">
-            {errorMessage}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
 
@@ -435,28 +465,47 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead 
           </div>
 
           {/* Section 3: Delivery & Reorder Settings */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Target Delivery Date</label>
-              <CustomDatePicker
-                selectedDate={deliveryDate}
-                onChange={(val) => setDeliveryDate(val)}
-                placeholder="Select target delivery date"
-              />
+          <div className="space-y-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
+            <span className="text-xs font-semibold uppercase text-slate-600 block">3. Delivery & Reorder Settings</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Target Delivery Date</label>
+                <CustomDatePicker
+                  selectedDate={deliveryDate}
+                  onChange={(val) => setDeliveryDate(val)}
+                  placeholder="Select target delivery date"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Usage Cycle (Days)</label>
+                <select
+                  value={usageCycleDays}
+                  onChange={(e) => setUsageCycleDays(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-red-500 cursor-pointer"
+                >
+                  <option value={30}>30 Days (Standard Labels)</option>
+                  <option value={45}>45 Days (Extended Batch)</option>
+                  <option value={60}>60 Days (Bimonthly Supply)</option>
+                  <option value={90}>90 Days (Quarterly Supply)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Expected Reorder Date *
+                </label>
+                <CustomDatePicker
+                  selectedDate={expectedReorderDate}
+                  onChange={(val) => {
+                    setIsManualReorderOverride(true);
+                    setExpectedReorderDate(val);
+                  }}
+                  placeholder="Select expected reorder date"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Usage Cycle (Days)</label>
-              <select
-                value={usageCycleDays}
-                onChange={(e) => setUsageCycleDays(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-red-500 cursor-pointer"
-              >
-                <option value={30}>30 Days (Standard Labels)</option>
-                <option value={45}>45 Days (Extended Batch)</option>
-                <option value={60}>60 Days (Bimonthly Supply)</option>
-                <option value={90}>90 Days (Quarterly Supply)</option>
-              </select>
-            </div>
+            <p className="text-[10px] text-slate-500 font-normal">
+              Auto-calculated from delivery date + usage cycle — you can adjust if needed
+            </p>
           </div>
 
           {/* Collapsible "+ More Details" Section */}

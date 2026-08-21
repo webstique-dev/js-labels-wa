@@ -20,15 +20,28 @@ export const initiatePhoneCall = (phone, name, notify) => {
 };
 
 /**
- * Opens WhatsApp chat via wa.me with pre-formatted message
+ * Opens WhatsApp chat via wa.me with pre-formatted message based on reorder probability
  */
-export const openWhatsApp = (phone, name, customMsg, notify) => {
+export const openWhatsApp = (phone, name, customMsg, notify, reorderProb, expectedReorderDate) => {
   if (!phone) {
     if (notify) notify.info(`No phone number recorded for ${name || 'contact'}`);
     return false;
   }
   const cleanPhone = phone.toString().replace(/\D/g, '');
-  const defaultMsg = `Hi ${name || 'there'}, thank you for connecting with JS Labels! How can we assist you with your label and packaging requirements today?`;
+  const expDateStr = expectedReorderDate
+    ? new Date(expectedReorderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : 'soon';
+
+  let defaultMsg = '';
+  const prob = reorderProb ?? 0;
+  if (prob >= 80) {
+    defaultMsg = `Hi ${name || 'Customer'}, this is JS Labels. Your label supply is expected to need a reorder around ${expDateStr} (${prob}% reorder probability). Would you like us to prepare your next batch of custom labels today?`;
+  } else if (prob >= 50) {
+    defaultMsg = `Hi ${name || 'Customer'}, greetings from JS Labels! Based on your usage cycle, your next label reorder is expected around ${expDateStr}. Please let us know if you'd like us to prepare your upcoming order!`;
+  } else {
+    defaultMsg = `Hi ${name || 'Customer'}, hope you are doing well! JS Labels is following up to check on your label inventory. Feel free to reach out whenever you're ready for your next reorder!`;
+  }
+
   const msg = customMsg || defaultMsg;
   const waUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`;
   window.open(waUrl, '_blank', 'noopener,noreferrer');

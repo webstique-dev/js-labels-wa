@@ -4,6 +4,7 @@ const Customer = require('../models/Customer');
 const Product = require('../models/Product');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
+const { calculateCustomerReorderProbability } = require('../utils/reorderCalculator');
 
 // GET /api/orders
 const getOrders = async (req, res) => {
@@ -120,6 +121,8 @@ const createOrder = async (req, res) => {
       newCustomer,
       lineItems,
       deliveryDate,
+      expectedReorderDate,
+      isExpectedReorderDateOverridden,
       usageCycleDays,
       leadId,
       poNumber,
@@ -134,6 +137,14 @@ const createOrder = async (req, res) => {
       return res.status(400).json({ message: 'At least one line item is required' });
     }
 
+    if (!expectedReorderDate || isNaN(new Date(expectedReorderDate).getTime())) {
+      return res.status(400).json({ message: 'Expected Reorder Date is required and must be a valid date' });
+    }
+
+    const parsedExpectedReorderDate = new Date(expectedReorderDate);
+
+    const execId = req.user?.id || req.user?._id || undefined;
+
     // 1. If customerId is not provided, create Customer inline
     if (!customerId) {
       if (!newCustomer || !newCustomer.name || !newCustomer.phone) {
@@ -145,13 +156,12 @@ const createOrder = async (req, res) => {
         company: newCustomer.company,
         phone: newCustomer.phone,
         email: newCustomer.email,
-        city: newCustomer.city || 'Mumbai',
+        city: newCustomer.city || undefined,
         address: deliveryAddress || newCustomer.address,
         gstNo: newCustomer.gstNo,
         leadId: leadId || newCustomer.leadId,
-        salesExecutive: req.user.id,
-        reorderProbability: 80,
-        expectedReorderDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        salesExecutive: execId,
+        expectedReorderDate: parsedExpectedReorderDate
       });
 
       customerId = createdCustomer._id;
@@ -206,7 +216,9 @@ const createOrder = async (req, res) => {
       amount: finalOrderAmount,
       status: 'confirmed',
       deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
-      salesExecutive: req.user.id,
+      expectedReorderDate: parsedExpectedReorderDate,
+      isExpectedReorderDateOverridden: Boolean(isExpectedReorderDateOverridden),
+      salesExecutive: execId,
       usageCycleDays: parseInt(usageCycleDays) || 30,
       poNumber: poNumber || undefined,
       advanceReceived: Boolean(advanceReceived),
@@ -216,29 +228,41 @@ const createOrder = async (req, res) => {
       lineItems: processedLineItems
     });
 
-    // 5. Create Activity Entry for Customer
-    await Activity.create({
-      relatedType: 'customer',
-      relatedId: customerId,
-      type: 'status_change',
-      description: `Order ${orderNo} created for ₹${computedAmount.toLocaleString('en-IN')}`,
-      createdBy: req.user.id
-    });
+    // 5. IMMEDIATELY update related Customer's expectedReorderDate & reorderProbability
+    const customer = await Customer.findById(customerId);
+    if (customer) {
+      customer.expectedReorderDate = parsedExpectedReorderDate;
+      customer.reorderProbability = await calculateCustomerReorderProbability(customer._id, parsedExpectedReorderDate);
+      await customer.save();
+    }
 
-    // 6. If converted from Lead, update Lead status to 'won'
+    // 6. Create Activity Entry for Customer
+    if (execId) {
+      await Activity.create({
+        relatedType: 'customer',
+        relatedId: customerId,
+        type: 'status_change',
+        description: `Order ${orderNo} (${newOrder.status.toUpperCase()}) created for ₹${finalOrderAmount.toLocaleString('en-IN')}`,
+        createdBy: execId
+      });
+    }
+
+    // 7. If converted from Lead, update Lead status to 'won'
     if (leadId) {
       const lead = await Lead.findById(leadId);
       if (lead) {
         lead.status = 'won';
         await lead.save();
 
-        await Activity.create({
-          relatedType: 'lead',
-          relatedId: leadId,
-          type: 'status_change',
-          description: `Lead converted to Order ${orderNo}`,
-          createdBy: req.user.id
-        });
+        if (execId) {
+          await Activity.create({
+            relatedType: 'lead',
+            relatedId: leadId,
+            type: 'status_change',
+            description: `Lead converted to Order ${orderNo}`,
+            createdBy: execId
+          });
+        }
       }
     }
 
@@ -249,7 +273,71 @@ const createOrder = async (req, res) => {
     return res.status(201).json(populatedOrder);
   } catch (error) {
     console.error('Error creating order:', error);
-    return res.status(500).json({ message: 'Server error creating order' });
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: error.message });
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'A record with this phone number or details already exists' });
+    }
+    return res.status(500).json({ message: error.message || 'Server error creating order' });
+  }
+};
+
+// PATCH /api/orders/:id - Edit existing order details
+const updateOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      deliveryDate,
+      expectedReorderDate,
+      isExpectedReorderDateOverridden,
+      usageCycleDays,
+      poNumber,
+      deliveryAddress,
+      notes
+    } = req.body;
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (req.user.role === 'caller' && order.salesExecutive?.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Forbidden: You can only update your own orders' });
+    }
+
+    if (deliveryDate !== undefined) order.deliveryDate = deliveryDate ? new Date(deliveryDate) : undefined;
+    if (usageCycleDays !== undefined) order.usageCycleDays = parseInt(usageCycleDays) || 30;
+    if (poNumber !== undefined) order.poNumber = poNumber;
+    if (deliveryAddress !== undefined) order.deliveryAddress = deliveryAddress;
+    if (notes !== undefined) order.notes = notes;
+
+    if (expectedReorderDate && !isNaN(new Date(expectedReorderDate).getTime())) {
+      const parsedDate = new Date(expectedReorderDate);
+      order.expectedReorderDate = parsedDate;
+      if (isExpectedReorderDateOverridden !== undefined) {
+        order.isExpectedReorderDateOverridden = Boolean(isExpectedReorderDateOverridden);
+      }
+
+      // Sync customer expectedReorderDate & probability
+      const customer = await Customer.findById(order.customerId);
+      if (customer) {
+        customer.expectedReorderDate = parsedDate;
+        customer.reorderProbability = await calculateCustomerReorderProbability(customer._id, parsedDate);
+        await customer.save();
+      }
+    }
+
+    await order.save();
+
+    const updatedOrder = await Order.findById(order._id)
+      .populate('customerId', 'name company phone email city')
+      .populate('salesExecutive', 'name email avatarUrl role');
+
+    return res.json(updatedOrder);
+  } catch (error) {
+    console.error('Error updating order:', error);
+    return res.status(500).json({ message: 'Server error updating order' });
   }
 };
 
@@ -277,30 +365,51 @@ const updateOrderStatus = async (req, res) => {
     const oldStatus = order.status;
     order.status = status;
 
-    // CRITICAL: Delivered status automation
-    if (status === 'delivered') {
-      if (!order.deliveryDate) {
-        order.deliveryDate = new Date();
+    if (oldStatus !== status) {
+      // Delivered status handling
+      if (status === 'delivered') {
+        if (!order.deliveryDate) {
+          order.deliveryDate = new Date();
+        }
+
+        const customer = await Customer.findById(order.customerId);
+
+        if (order.isExpectedReorderDateOverridden) {
+          // If manually overridden, do NOT recalculate automatically. Log activity note.
+          if (customer) {
+            await Activity.create({
+              relatedType: 'customer',
+              relatedId: customer._id,
+              type: 'note',
+              description: 'Delivery date differs from original plan — expected reorder date was manually set and was not recalculated',
+              createdBy: req.user.id
+            });
+          }
+        } else {
+          // If NOT manually overridden, recalculate based on actual delivery date + usageCycleDays
+          const cycleDays = order.usageCycleDays || 30;
+          const recomputedReorderDate = new Date(order.deliveryDate.getTime() + (cycleDays * 24 * 60 * 60 * 1000));
+          order.expectedReorderDate = recomputedReorderDate;
+
+          if (customer) {
+            customer.expectedReorderDate = recomputedReorderDate;
+            customer.reorderProbability = await calculateCustomerReorderProbability(customer._id, recomputedReorderDate);
+            await customer.save();
+          }
+        }
       }
 
-      const cycleDays = order.usageCycleDays || 30;
-      const expectedReorderDate = new Date(order.deliveryDate.getTime() + (cycleDays * 24 * 60 * 60 * 1000));
+      const activityDesc = status === 'delivered'
+        ? `Order ${order.orderNo || ''} delivered.`
+        : `Order ${order.orderNo || ''} status updated from ${oldStatus.toUpperCase()} to ${status.toUpperCase()}`;
 
-      // Update related Customer's expectedReorderDate
-      const customer = await Customer.findById(order.customerId);
-      if (customer) {
-        customer.expectedReorderDate = expectedReorderDate;
-        customer.reorderProbability = Math.min(100, (customer.reorderProbability || 50) + 15);
-        await customer.save();
-
-        await Activity.create({
-          relatedType: 'customer',
-          relatedId: customer._id,
-          type: 'status_change',
-          description: `Order ${order.orderNo || ''} delivered. Next expected reorder date set to ${expectedReorderDate.toLocaleDateString('en-IN')}`,
-          createdBy: req.user.id
-        });
-      }
+      await Activity.create({
+        relatedType: 'customer',
+        relatedId: order.customerId,
+        type: 'status_change',
+        description: activityDesc,
+        createdBy: req.user.id
+      });
     }
 
     await order.save();
@@ -347,6 +456,7 @@ module.exports = {
   getOrders,
   getOrdersSummary,
   createOrder,
+  updateOrder,
   updateOrderStatus,
   deleteOrder
 };
