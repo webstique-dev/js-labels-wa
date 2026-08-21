@@ -343,10 +343,71 @@ const deleteLead = async (req, res) => {
   }
 };
 
+// PUT /api/leads/:id
+const updateLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, company, phone, email, source, priority } = req.body;
+
+    if (!name || !phone) {
+      return res.status(400).json({ message: 'Lead name and phone number are required' });
+    }
+
+    const cleanPhone = phone.toString().replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      return res.status(400).json({ message: 'Phone number must be exactly 10 digits' });
+    }
+
+    if (email && email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        return res.status(400).json({ message: 'Please enter a valid email address' });
+      }
+    }
+
+    const lead = await Lead.findById(id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    // Ownership check for caller
+    if (req.user.role === 'caller' && lead.assignedTo?.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Forbidden: You can only update leads assigned to you' });
+    }
+
+    lead.name = name.trim();
+    lead.company = company ? company.trim() : undefined;
+    lead.phone = cleanPhone;
+    lead.email = email ? email.trim().toLowerCase() : undefined;
+    if (source !== undefined) lead.source = (source && source.trim()) ? source.trim() : null;
+    if (priority) lead.priority = priority;
+
+    await lead.save();
+
+    await Activity.create({
+      relatedType: 'lead',
+      relatedId: lead._id,
+      type: 'status_change',
+      description: `Updated lead details (${lead.name})`,
+      createdBy: req.user.id
+    });
+
+    const updatedLead = await Lead.findById(lead._id)
+      .populate('assignedTo', 'name email avatarUrl role')
+      .populate('createdBy', 'name email avatarUrl role');
+
+    return res.json(updatedLead);
+  } catch (error) {
+    console.error('Error updating lead:', error);
+    return res.status(500).json({ message: 'Server error updating lead' });
+  }
+};
+
 module.exports = {
   getLeads,
   getLeadById,
   createLead,
+  updateLead,
   updateLeadStatus,
   reassignLead,
   addLeadActivity,
