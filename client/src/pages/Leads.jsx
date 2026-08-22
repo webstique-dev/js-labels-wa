@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import NewOrderModal from '../components/NewOrderModal';
+import LoadingButton from '../components/ui/LoadingButton';
 import {
   Kanban,
   LayoutGrid,
@@ -1472,13 +1473,14 @@ export default function Leads() {
                 >
                   Cancel
                 </button>
-                <button
+                <LoadingButton
                   type="submit"
-                  disabled={isUpdatingLead}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                  loading={isUpdatingLead}
+                  loadingText="Saving Changes..."
+                  className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition"
                 >
-                  {isUpdatingLead ? 'Saving Changes...' : 'Save Lead Details'}
-                </button>
+                  Save Lead Details
+                </LoadingButton>
               </div>
             </form>
           </div>

@@ -4,6 +4,7 @@ import api from '../api/axios';
 import {
   ArrowLeft,
   Edit,
+  Edit2,
   CheckCircle2,
   Star,
   MoreVertical,
@@ -26,12 +27,15 @@ import {
   Send,
   UploadCloud,
   FileCheck,
-  AlertCircle
+  AlertCircle,
+  ShoppingBag
 } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { initiatePhoneCall, openWhatsApp, openEmail, WhatsAppIcon } from '../utils/contactUtils';
-import { SkeletonCard } from '../components/ui/Skeleton';
+import SkeletonFollowUpDetails from '../components/ui/Skeleton';
+import NewOrderModal from '../components/NewOrderModal';
+import LoadingButton from '../components/ui/LoadingButton';
 import {
   getLiveReorderProbability,
   getProbabilityColorClass,
@@ -66,6 +70,10 @@ export default function FollowUpDetails() {
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAllFilesModalOpen, setIsAllFilesModalOpen] = useState(false);
+  const [show3DotMenu, setShow3DotMenu] = useState(false);
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   // Profile Edit Modal Form State
   const [editForm, setEditForm] = useState({
@@ -88,31 +96,65 @@ export default function FollowUpDetails() {
       try {
         res = await api.get(`/followups/${id}`);
       } catch (err) {
-        // Fallback fetch via /leads/:id
-        const leadRes = await api.get(`/leads/${id}`);
-        const actRes = await api.get(`/activities?relatedType=lead&relatedId=${id}`);
-        res = {
-          data: {
-            followup: {
-              _id: leadRes.data._id,
-              relatedType: 'lead',
-              relatedId: leadRes.data._id,
-              dueDate: leadRes.data.followUpDate || leadRes.data.nextFollowUpDate,
-              status: leadRes.data.status === 'won' ? 'done' : 'open',
-              assignedTo: leadRes.data.assignedTo
-            },
-            relatedRecord: leadRes.data,
-            history: Array.isArray(actRes.data) ? actRes.data : [],
-            summaryStats: {
-              totalFollowUps: (actRes.data || []).length,
-              openFollowUps: leadRes.data.status === 'won' ? 0 : 1,
-              lastContacted: (actRes.data || [])[0]?.createdAt || leadRes.data.updatedAt || leadRes.data.createdAt,
-              customerSince: leadRes.data.createdAt,
-              reorderProbability: getLiveReorderProbability(leadRes.data),
-              nextReorderDate: leadRes.data.followUpDate || leadRes.data.nextFollowUpDate
+        // Fallback 1: Try fetching as Customer record
+        try {
+          const custRes = await api.get(`/customers/${id}`);
+          const actRes = await api.get(`/activities?relatedType=customer&relatedId=${id}`);
+          const custData = custRes.data;
+          const actData = Array.isArray(actRes.data) ? actRes.data : [];
+
+          res = {
+            data: {
+              followup: {
+                _id: custData._id,
+                relatedType: 'customer',
+                relatedId: custData._id,
+                dueDate: custData.expectedReorderDate,
+                status: 'open',
+                assignedTo: custData.salesExecutive
+              },
+              relatedRecord: custData,
+              history: actData,
+              summaryStats: {
+                totalFollowUps: actData.length,
+                openFollowUps: 1,
+                lastContacted: actData[0]?.createdAt || custData.updatedAt || custData.createdAt,
+                customerSince: custData.createdAt,
+                reorderProbability: getLiveReorderProbability(custData),
+                nextReorderDate: custData.expectedReorderDate
+              }
             }
-          }
-        };
+          };
+        } catch (custErr) {
+          // Fallback 2: Try fetching as Lead record
+          const leadRes = await api.get(`/leads/${id}`);
+          const actRes = await api.get(`/activities?relatedType=lead&relatedId=${id}`);
+          const leadData = leadRes.data;
+          const actData = Array.isArray(actRes.data) ? actRes.data : [];
+
+          res = {
+            data: {
+              followup: {
+                _id: leadData._id,
+                relatedType: 'lead',
+                relatedId: leadData._id,
+                dueDate: leadData.followUpDate || leadData.nextFollowUpDate,
+                status: leadData.status === 'won' ? 'done' : 'open',
+                assignedTo: leadData.assignedTo
+              },
+              relatedRecord: leadData,
+              history: actData,
+              summaryStats: {
+                totalFollowUps: actData.length,
+                openFollowUps: leadData.status === 'won' ? 0 : 1,
+                lastContacted: actData[0]?.createdAt || leadData.updatedAt || leadData.createdAt,
+                customerSince: leadData.createdAt,
+                reorderProbability: getLiveReorderProbability(leadData),
+                nextReorderDate: leadData.followUpDate || leadData.nextFollowUpDate
+              }
+            }
+          };
+        }
       }
 
       if (res.data) {
@@ -181,12 +223,15 @@ export default function FollowUpDetails() {
     }
   };
 
+
+
   // Add Note action
   const handleAddNoteSubmit = async (e) => {
     e.preventDefault();
     if (!newNoteInput.trim()) return;
 
     try {
+      setIsSavingNote(true);
       const relType = followUpData?.relatedType || (entity?.leadId ? 'customer' : 'lead');
       const relId = entity?._id || (typeof followUpData?.relatedId === 'object' ? followUpData?.relatedId?._id : followUpData?.relatedId) || id;
 
@@ -216,6 +261,8 @@ export default function FollowUpDetails() {
     } catch (err) {
       console.error('Failed to save note:', err.response?.data || err);
       notify.error(err.response?.data?.message || 'Failed to save note');
+    } finally {
+      setIsSavingNote(false);
     }
   };
 
@@ -343,6 +390,7 @@ export default function FollowUpDetails() {
   const handleEditProfileSubmit = async (e) => {
     e.preventDefault();
     try {
+      setIsSavingProfile(true);
       const isCustomer = followUpData?.relatedType === 'customer' || (entity && (entity.leadId || entity.customerType || entity.gstNo !== undefined));
       const relId = entity?._id || (typeof followUpData?.relatedId === 'object' ? followUpData?.relatedId?._id : followUpData?.relatedId) || id;
       const endpoint = isCustomer ? `/customers/${relId}` : `/leads/${relId}`;
@@ -391,6 +439,8 @@ export default function FollowUpDetails() {
         errMsg = err.message;
       }
       notify.error(errMsg);
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -427,16 +477,74 @@ export default function FollowUpDetails() {
 
   if (loading) {
     return (
-      <div className="space-y-6 pb-12 font-sans max-w-7xl mx-auto px-2 sm:px-4">
-        <div className="flex items-center justify-between">
-          <Link to="/leads" className="text-xs font-semibold text-slate-600 flex items-center gap-1">
-            <ArrowLeft size={16} /> Back to Leads
-          </Link>
+      <div className="space-y-6 pb-16 font-sans text-slate-800 bg-slate-50/50 min-h-screen -mt-2 -mx-4 px-4 pt-4 sm:px-6">
+        {/* Top Header Bar Skeleton */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs animate-pulse">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-slate-200 rounded"></div>
+            <div className="h-4 bg-slate-200 rounded w-36"></div>
+          </div>
+          <div className="h-8 bg-slate-200 rounded-xl w-24"></div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
+
+        {/* 3-Column Responsive Skeleton Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
+          {/* Col 1 Skeleton: Profile Card (col-span-4) */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-slate-200 rounded-full shrink-0"></div>
+                <div className="space-y-2 flex-1 min-w-0">
+                  <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                </div>
+              </div>
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <div className="h-3.5 bg-slate-200 rounded w-full"></div>
+                <div className="h-3.5 bg-slate-200 rounded w-5/6"></div>
+                <div className="h-3.5 bg-slate-200 rounded w-4/6"></div>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3 animate-pulse">
+              <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+              <div className="h-3 bg-slate-200 rounded w-full"></div>
+              <div className="h-3 bg-slate-200 rounded w-full"></div>
+            </div>
+          </div>
+
+          {/* Col 2 Skeleton: Activity Feed & Timeline (col-span-5) */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4 animate-pulse min-h-[460px]">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <div className="h-6 bg-slate-200 rounded w-24"></div>
+                <div className="h-6 bg-slate-200 rounded w-16"></div>
+                <div className="h-6 bg-slate-200 rounded w-20"></div>
+              </div>
+              <div className="space-y-4 pt-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-slate-200 rounded-full shrink-0"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3.5 bg-slate-200 rounded w-1/2"></div>
+                      <div className="h-3 bg-slate-100 rounded w-3/4"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Col 3 Skeleton: Prediction, Notes, Files (col-span-3) */}
+          <div className="lg:col-span-3 md:col-span-2 lg:col-span-3 space-y-6">
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3 animate-pulse">
+              <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+              <div className="h-20 bg-slate-100 rounded-xl"></div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3 animate-pulse">
+              <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+              <div className="h-16 bg-slate-100 rounded-xl"></div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -529,11 +637,11 @@ export default function FollowUpDetails() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
         <div className="flex items-center gap-3">
           <Link
-            to="/leads"
+            to="/followups"
             className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer"
           >
             <ArrowLeft size={16} className="text-slate-500" />
-            <span>Back to Leads</span>
+            <span>Back to Follow-ups</span>
           </Link>
         </div>
 
@@ -590,18 +698,15 @@ export default function FollowUpDetails() {
                 </div>
               </div>
 
-              {/* Star & Actions Menu */}
-              <div className="flex items-center gap-1 shrink-0 text-slate-400">
+              {/* Edit Profile Pencil Action */}
+              <div className="shrink-0 text-slate-400">
                 <button
-                  onClick={() => setIsStarFav(!isStarFav)}
-                  className={`p-1.5 rounded-lg transition cursor-pointer hover:bg-slate-100 ${isStarFav ? 'text-amber-400 fill-amber-400' : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                  title="Favorite"
+                  type="button"
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="p-1 hover:text-slate-700 transition cursor-pointer"
+                  title="Edit Profile"
                 >
-                  <Star size={17} />
-                </button>
-                <button className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-                  <MoreVertical size={17} />
+                  <Edit2 size={16} />
                 </button>
               </div>
             </div>
@@ -1009,12 +1114,14 @@ export default function FollowUpDetails() {
                   >
                     Cancel
                   </button>
-                  <button
+                  <LoadingButton
                     type="submit"
+                    loading={isSavingNote}
+                    loadingText="Saving..."
                     className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer"
                   >
                     Save Note
-                  </button>
+                  </LoadingButton>
                 </div>
               </form>
             )}
@@ -1290,12 +1397,14 @@ export default function FollowUpDetails() {
                 >
                   Cancel
                 </button>
-                <button
+                <LoadingButton
                   type="submit"
+                  loading={isSavingProfile}
+                  loadingText="Saving..."
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-2xs cursor-pointer"
                 >
                   Save Changes
-                </button>
+                </LoadingButton>
               </div>
 
             </form>
@@ -1409,6 +1518,19 @@ export default function FollowUpDetails() {
 
           </div>
         </div>
+      )}
+
+      {/* New Order Modal */}
+      {showNewOrderModal && (
+        <NewOrderModal
+          isOpen={showNewOrderModal}
+          onClose={() => setShowNewOrderModal(false)}
+          onSuccess={() => {
+            notify.success('New order created successfully');
+            fetchFollowUpDetails();
+          }}
+          initialCustomer={entity}
+        />
       )}
 
     </div>

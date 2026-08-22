@@ -4,6 +4,8 @@ import { Plus, Trash2, X, ChevronDown, ChevronUp, FileText, CreditCard, MapPin, 
 import CustomDatePicker from './ui/DatePicker';
 import { useNotification } from '../context/NotificationContext';
 
+import LoadingButton from './ui/LoadingButton';
+
 export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead, initialCustomer }) {
   const notify = useNotification();
   const [existingCustomers, setExistingCustomers] = useState([]);
@@ -629,13 +631,15 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
             >
               Cancel
             </button>
-            <button
+            <LoadingButton
               type="submit"
-              disabled={isSubmitting || calculatedGrandTotal <= 0}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-xl shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              loading={isSubmitting}
+              loadingText="Creating Order..."
+              disabled={calculatedGrandTotal <= 0}
+              className="px-5 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-xl shadow-md transition"
             >
-              {isSubmitting ? 'Creating Order...' : 'Confirm & Create Order'}
-            </button>
+              Confirm & Create Order
+            </LoadingButton>
           </div>
 
         </form>

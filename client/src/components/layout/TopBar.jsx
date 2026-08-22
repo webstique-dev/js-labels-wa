@@ -18,8 +18,44 @@ import {
   Package,
   Building2,
   UserPlus,
-  ArrowRight
+  ArrowRight,
+  CheckCheck
 } from 'lucide-react';
+
+const READ_NOTIFS_KEY = 'js_labels_read_notif_ids';
+const READ_REMINDERS_KEY = 'js_labels_read_reminder_ids';
+
+const getReadIds = (key) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+const markIdAsReadInStorage = (key, id) => {
+  if (!id) return;
+  try {
+    const current = getReadIds(key);
+    if (!current.includes(id)) {
+      const updated = [...current, id];
+      localStorage.setItem(key, JSON.stringify(updated));
+    }
+  } catch (e) {
+    console.error('Error saving read status:', e);
+  }
+};
+
+const markAllIdsAsReadInStorage = (key, ids) => {
+  try {
+    const current = getReadIds(key);
+    const updated = Array.from(new Set([...current, ...ids]));
+    localStorage.setItem(key, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Error saving all read status:', e);
+  }
+};
 
 const getInitials = (name) => {
   if (!name) return 'JS';
@@ -58,9 +94,11 @@ export default function TopBar() {
 
   // Notification & Reminder Data
   const [recentLeads, setRecentLeads] = useState([]);
+  const [readNotifIds, setReadNotifIds] = useState(() => getReadIds(READ_NOTIFS_KEY));
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   const [remindersList, setRemindersList] = useState([]);
+  const [readReminderIds, setReadReminderIds] = useState(() => getReadIds(READ_REMINDERS_KEY));
   const [pendingRemindersCount, setPendingRemindersCount] = useState(0);
 
   // Click Outside References
@@ -70,27 +108,37 @@ export default function TopBar() {
   const messageRef = useRef(null);
 
   // Fetch Notifications & Messages Data
-  useEffect(() => {
-    const fetchTopBarData = async () => {
-      try {
-        if (permissions.leads?.includes('view')) {
-          const leadsRes = await api.get('/leads?limit=5');
-          const leadsData = leadsRes.data?.leads || [];
-          setRecentLeads(leadsData);
-          setUnreadNotifCount(leadsData.filter(l => l.status === 'new').length);
-        }
+  const fetchTopBarData = async () => {
+    try {
+      const storedReadNotifs = getReadIds(READ_NOTIFS_KEY);
+      const storedReadReminders = getReadIds(READ_REMINDERS_KEY);
+      setReadNotifIds(storedReadNotifs);
+      setReadReminderIds(storedReadReminders);
 
-        if (permissions.reminders?.includes('view')) {
-          const remRes = await api.get('/reminders');
-          const remData = remRes.data || [];
-          setRemindersList(remData.slice(0, 5));
-          setPendingRemindersCount(remData.length);
-        }
-      } catch (err) {
-        console.warn('Non-fatal error fetching TopBar notifications:', err);
+      if (permissions.leads?.includes('view')) {
+        const leadsRes = await api.get('/leads?limit=8');
+        const leadsData = leadsRes.data?.leads || [];
+        setRecentLeads(leadsData);
+        const unreadCount = leadsData.filter(l => !storedReadNotifs.includes(l._id)).length;
+        setUnreadNotifCount(unreadCount);
       }
-    };
 
+      if (permissions.reminders?.includes('view')) {
+        const remRes = await api.get('/reminders');
+        const remData = remRes.data || [];
+        setRemindersList(remData.slice(0, 8));
+        const unreadRemCount = remData.filter(r => {
+          const rId = r._id || r.customer?._id;
+          return !storedReadReminders.includes(rId);
+        }).length;
+        setPendingRemindersCount(unreadRemCount);
+      }
+    } catch (err) {
+      console.warn('Non-fatal error fetching TopBar notifications:', err);
+    }
+  };
+
+  useEffect(() => {
     fetchTopBarData();
     const interval = setInterval(fetchTopBarData, 45000);
     return () => clearInterval(interval);
@@ -157,6 +205,52 @@ export default function TopBar() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Notification Click Handlers
+  const handleNotificationItemClick = (ld) => {
+    const targetId = ld._id;
+    markIdAsReadInStorage(READ_NOTIFS_KEY, targetId);
+    setReadNotifIds(prev => [...prev, targetId]);
+    setUnreadNotifCount(prev => Math.max(0, prev - 1));
+    setIsNotifOpen(false);
+
+    // Route directly to exact record
+    if (ld.customer) {
+      navigate(`/customers/${ld.customer._id || ld.customer}`);
+    } else {
+      navigate(`/leads`);
+    }
+  };
+
+  const handleMarkAllNotifsRead = () => {
+    const allIds = recentLeads.map(l => l._id);
+    markAllIdsAsReadInStorage(READ_NOTIFS_KEY, allIds);
+    setReadNotifIds(prev => Array.from(new Set([...prev, ...allIds])));
+    setUnreadNotifCount(0);
+  };
+
+  // Reminder / Message Click Handlers
+  const handleReminderItemClick = (rem) => {
+    const rId = rem._id || rem.customer?._id;
+    markIdAsReadInStorage(READ_REMINDERS_KEY, rId);
+    setReadReminderIds(prev => [...prev, rId]);
+    setPendingRemindersCount(prev => Math.max(0, prev - 1));
+    setIsMessageOpen(false);
+
+    const targetCustId = rem.customer?._id || rem.customer;
+    if (targetCustId) {
+      navigate(`/followups/${targetCustId}`);
+    } else {
+      navigate('/reminders');
+    }
+  };
+
+  const handleMarkAllMessagesRead = () => {
+    const allIds = remindersList.map(r => r._id || r.customer?._id).filter(Boolean);
+    markAllIdsAsReadInStorage(READ_REMINDERS_KEY, allIds);
+    setReadReminderIds(prev => Array.from(new Set([...prev, ...allIds])));
+    setPendingRemindersCount(0);
+  };
 
   return (
     <header className="bg-white border-b border-slate-200/80 px-4 md:px-8 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
@@ -332,7 +426,7 @@ export default function TopBar() {
             )}
           </button>
 
-          {/* Messages & Reminders Dropdown with Smooth Transition */}
+          {/* Messages & Reminders Dropdown */}
           <div
             className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${
               isMessageOpen
@@ -343,11 +437,23 @@ export default function TopBar() {
             <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Bell size={16} className="text-amber-400" />
-                <h4 className="font-semibold text-xs tracking-wider uppercase">Reorder Reminders ({pendingRemindersCount})</h4>
+                <h4 className="font-semibold text-xs tracking-wider uppercase">Reminders ({pendingRemindersCount})</h4>
               </div>
-              <Link to="/reminders" onClick={() => setIsMessageOpen(false)} className="text-[11px] text-amber-400 hover:underline font-semibold">
-                View All
-              </Link>
+              <div className="flex items-center gap-3">
+                {pendingRemindersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllMessagesRead}
+                    className="text-[11px] text-slate-300 hover:text-white flex items-center gap-1 font-medium cursor-pointer"
+                  >
+                    <CheckCheck size={13} />
+                    <span>Mark all read</span>
+                  </button>
+                )}
+                <Link to="/reminders" onClick={() => setIsMessageOpen(false)} className="text-[11px] text-amber-400 hover:underline font-semibold">
+                  View All
+                </Link>
+              </div>
             </div>
 
             <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto scrollbar-hide">
@@ -356,32 +462,41 @@ export default function TopBar() {
                   No pending reorder reminders
                 </div>
               ) : (
-                remindersList.map((rem) => (
-                  <Link
-                    key={rem._id}
-                    to={`/customers/${rem.customer._id}`}
-                    onClick={() => setIsMessageOpen(false)}
-                    className="p-3 hover:bg-slate-50 transition block"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="font-semibold text-slate-900 text-xs">{rem.customer.name}</div>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                        rem.isOverdue ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {rem.isOverdue ? 'Overdue' : `${rem.daysUntilReorder}d left`}
-                      </span>
+                remindersList.map((rem) => {
+                  const remId = rem._id || rem.customer?._id;
+                  const isRead = readReminderIds.includes(remId);
+
+                  return (
+                    <div
+                      key={rem._id}
+                      onClick={() => handleReminderItemClick(rem)}
+                      className={`p-3 hover:bg-slate-50 transition block cursor-pointer ${
+                        !isRead ? 'bg-amber-50/40 font-semibold' : ''
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          {!isRead && <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>}
+                          <span className="font-semibold text-slate-900 text-xs">{rem.customer?.name || 'Customer'}</span>
+                        </div>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                          rem.isOverdue ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {rem.isOverdue ? 'Overdue' : `${rem.daysUntilReorder}d left`}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate font-normal">
+                        {rem.customer?.company || 'Customer'} • Probability {rem.probabilityScore}%
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate font-normal">
-                      {rem.customer.company || 'Customer'} • Probability {rem.probabilityScore}%
-                    </p>
-                  </Link>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
         </div>
 
-        {/* 2. Notification Bell Icon (New Leads) */}
+        {/* 2. Notification Bell Icon (New Leads / Activities) */}
         <div className="relative" ref={notifRef}>
           <button
             type="button"
@@ -401,7 +516,7 @@ export default function TopBar() {
             )}
           </button>
 
-          {/* Notifications Dropdown with Smooth Transition */}
+          {/* Notifications Dropdown */}
           <div
             className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${
               isNotifOpen
@@ -412,11 +527,23 @@ export default function TopBar() {
             <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Bell size={16} className="text-red-400" />
-                <h4 className="font-semibold text-xs tracking-wider uppercase">New Leads ({unreadNotifCount})</h4>
+                <h4 className="font-semibold text-xs tracking-wider uppercase">Notifications ({unreadNotifCount})</h4>
               </div>
-              <Link to="/leads" onClick={() => setIsNotifOpen(false)} className="text-[11px] text-red-400 hover:underline font-semibold">
-                Lead Board
-              </Link>
+              <div className="flex items-center gap-3">
+                {unreadNotifCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllNotifsRead}
+                    className="text-[11px] text-slate-300 hover:text-white flex items-center gap-1 font-medium cursor-pointer"
+                  >
+                    <CheckCheck size={13} />
+                    <span>Mark all read</span>
+                  </button>
+                )}
+                <Link to="/leads" onClick={() => setIsNotifOpen(false)} className="text-[11px] text-red-400 hover:underline font-semibold">
+                  Lead Board
+                </Link>
+              </div>
             </div>
 
             <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto scrollbar-hide">
@@ -425,29 +552,37 @@ export default function TopBar() {
                   No recent lead notifications
                 </div>
               ) : (
-                recentLeads.map((ld) => (
-                  <Link
-                    key={ld._id}
-                    to="/leads"
-                    onClick={() => setIsNotifOpen(false)}
-                    className="p-3 hover:bg-slate-50 transition block"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-900 text-xs">{ld.name}</span>
-                      <span className="text-[10px] text-slate-400 font-normal">{getRelativeTime(ld.createdAt)}</span>
+                recentLeads.map((ld) => {
+                  const isRead = readNotifIds.includes(ld._id);
+
+                  return (
+                    <div
+                      key={ld._id}
+                      onClick={() => handleNotificationItemClick(ld)}
+                      className={`p-3 hover:bg-slate-50 transition block cursor-pointer ${
+                        !isRead ? 'bg-red-50/30 font-semibold' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          {!isRead && <span className="w-2 h-2 rounded-full bg-red-600 shrink-0"></span>}
+                          <span className="font-semibold text-slate-900 text-xs">{ld.name}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-normal">{getRelativeTime(ld.createdAt)}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate font-normal">
+                        Company: {ld.company || 'N/A'} • Source: {ld.source || 'Website'}
+                      </p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                          ld.priority === 'high' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {ld.priority || 'medium'} priority
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate font-normal">
-                      Company: {ld.company || 'N/A'} • Source: {ld.source}
-                    </p>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                        ld.priority === 'high' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {ld.priority} priority
-                      </span>
-                    </div>
-                  </Link>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { SkeletonCustomer360 } from '../components/ui/Skeleton';
 import NewOrderModal from '../components/NewOrderModal';
+import LoadingButton from '../components/ui/LoadingButton';
 import {
   getLiveReorderProbability,
   getProbabilityColorClass,
@@ -544,13 +545,6 @@ export default function CustomerDetails() {
 
                 <div className="flex items-center gap-1 text-slate-400">
                   <button
-                    onClick={() => setIsStarred(!isStarred)}
-                    className="p-1 hover:text-amber-500 transition cursor-pointer"
-                    title="Bookmark Customer"
-                  >
-                    <Star size={18} className={isStarred ? 'fill-amber-400 text-amber-400' : ''} />
-                  </button>
-                  <button
                     onClick={() => setIsEditing(!isEditing)}
                     className="p-1 hover:text-slate-700 transition cursor-pointer"
                     title="Edit Profile"
@@ -990,13 +984,15 @@ export default function CustomerDetails() {
               placeholder="Log a new activity note or update for this customer account..."
               className="flex-1 min-w-0 px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500 focus:outline-none"
             />
-            <button
+            <LoadingButton
               type="submit"
-              disabled={submittingNote || !newNoteText.trim()}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold disabled:opacity-50 transition cursor-pointer shrink-0"
+              loading={submittingNote}
+              loadingText="Adding..."
+              disabled={!newNoteText.trim()}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-2xs shrink-0"
             >
-              {submittingNote ? 'Saving...' : 'Add Note'}
-            </button>
+              Add Note
+            </LoadingButton>
           </form>
 
           {timeline.length === 0 ? (
@@ -1420,13 +1416,14 @@ export default function CustomerDetails() {
                 >
                   Cancel
                 </button>
-                <button
+                <LoadingButton
                   type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-2xs disabled:opacity-50 cursor-pointer"
+                  loading={isSaving}
+                  loadingText="Saving..."
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-2xs cursor-pointer"
                 >
-                  {isSaving ? 'Saving...' : 'Save Changes'}
-                </button>
+                  Save Changes
+                </LoadingButton>
               </div>
 
             </form>

@@ -7,6 +7,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X, ShoppingBag, Eye } from 'lucide-react';
 import { SkeletonCustomerDirectory } from '../components/ui/Skeleton';
 import NewOrderModal from '../components/NewOrderModal';
+import LoadingButton from '../components/ui/LoadingButton';
 import {
   getLiveReorderProbability,
   getProbabilityColorClass,
@@ -475,13 +476,14 @@ export default function Customers() {
                 >
                   Cancel
                 </button>
-                <button
+                <LoadingButton
                   type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
+                  loading={isSubmitting}
+                  loadingText="Creating..."
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs cursor-pointer"
                 >
-                  {isSubmitting ? 'Creating...' : 'Create Customer'}
-                </button>
+                  Create Customer
+                </LoadingButton>
               </div>
             </form>
           </div>
