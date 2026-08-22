@@ -6,13 +6,24 @@ const FollowUp = require('../models/FollowUp');
 // GET /api/leads
 const getLeads = async (req, res) => {
   try {
-    const { status, source, assignedTo, page = 1, limit = 50 } = req.query;
+    const { status, source, search, assignedTo, page = 1, limit = 100 } = req.query;
 
     // Base filter starting with ownership scope filter
     let queryFilter = { ...req.scopeFilter };
 
     if (status) queryFilter.status = status;
     if (source) queryFilter.source = source;
+
+    if (search && search.trim()) {
+      const q = search.trim();
+      const cleanPhone = q.replace(/\D/g, '');
+      queryFilter.$or = [
+        { name: { $regex: q, $options: 'i' } },
+        { company: { $regex: q, $options: 'i' } },
+        { phone: { $regex: cleanPhone || q, $options: 'i' } },
+        { email: { $regex: q, $options: 'i' } }
+      ];
+    }
 
     // If manager/super_admin passes assignedTo, apply it unless caller scope already locks it
     if (assignedTo && req.user.role !== 'caller') {
@@ -91,7 +102,7 @@ const createLead = async (req, res) => {
       }
     }
 
-    const finalAssignedTo = req.user.role === 'caller' ? req.user.id : (assignedTo || req.user.id);
+    const finalAssignedTo = req.user.role === 'caller' ? req.user.id : (assignedTo || null);
     const finalSource = (source && source.trim()) ? source.trim() : null;
 
     const newLead = await Lead.create({
@@ -405,7 +416,7 @@ const updateLead = async (req, res) => {
     }
 
     // Ownership check for caller
-    if (req.user.role === 'caller' && lead.assignedTo?.toString() !== req.user.id) {
+    if (req.user.role === 'caller' && lead.assignedTo && lead.assignedTo.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Forbidden: You can only update leads assigned to you' });
     }
 
@@ -413,18 +424,89 @@ const updateLead = async (req, res) => {
     lead.company = company ? company.trim() : undefined;
     lead.phone = cleanPhone;
     lead.email = email ? email.trim().toLowerCase() : undefined;
-    if (source !== undefined) lead.source = (source && source.trim()) ? source.trim() : null;
+    if (source !== undefined) {
+      if (!source || !source.toString().trim()) {
+        lead.source = null;
+      } else {
+        const srcStr = source.toString().trim();
+        const mapped = srcStr.toLowerCase().replace(/[\s-]+/g, '_');
+        const validEnums = ['website', 'referral', 'walk_in', 'google_ads', 'tele_caller', 'other'];
+        lead.source = validEnums.includes(mapped) ? mapped : srcStr;
+      }
+    }
     if (priority) lead.priority = priority;
+    if (req.body.gstNo !== undefined) lead.gstNo = req.body.gstNo;
+    if (req.body.address !== undefined) lead.address = req.body.address;
+    if (req.body.city !== undefined) lead.city = req.body.city;
+
+    let parsedDate = undefined;
+    if (req.body.expectedReorderDate || req.body.nextFollowUpDate || req.body.followUpDate) {
+      const d = new Date(req.body.expectedReorderDate || req.body.nextFollowUpDate || req.body.followUpDate);
+      if (!isNaN(d.getTime())) {
+        parsedDate = d;
+        lead.nextFollowUpDate = parsedDate;
+      }
+    }
 
     await lead.save();
 
-    await Activity.create({
-      relatedType: 'lead',
-      relatedId: lead._id,
-      type: 'status_change',
-      description: `Updated lead details (${lead.name})`,
-      createdBy: req.user.id
-    });
+    // 1. Sync linked Customer if exists
+    const Customer = require('../models/Customer');
+    let linkedCustomer = await Customer.findOne({ $or: [{ leadId: lead._id }, { phone: lead.phone }] });
+    if (linkedCustomer) {
+      linkedCustomer.name = lead.name;
+      linkedCustomer.company = lead.company || '';
+      linkedCustomer.phone = lead.phone;
+      linkedCustomer.email = lead.email || '';
+      if (req.body.address) linkedCustomer.address = req.body.address;
+      if (req.body.city) linkedCustomer.city = req.body.city;
+      if (req.body.gstNo) linkedCustomer.gstNo = req.body.gstNo;
+      if (parsedDate) linkedCustomer.expectedReorderDate = parsedDate;
+      await linkedCustomer.save();
+    }
+
+    // 2. Sync open FollowUp documents for lead and linked customer
+    const FollowUp = require('../models/FollowUp');
+    if (parsedDate) {
+      await FollowUp.updateMany(
+        { relatedType: 'lead', relatedId: lead._id, status: 'open' },
+        { $set: { dueDate: parsedDate } }
+      );
+      if (linkedCustomer) {
+        await FollowUp.updateMany(
+          { relatedType: 'customer', relatedId: linkedCustomer._id, status: 'open' },
+          { $set: { dueDate: parsedDate } }
+        );
+      }
+    }
+
+    if (parsedDate) {
+      const formattedDateStr = parsedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      await Activity.create({
+        relatedType: 'lead',
+        relatedId: lead._id,
+        type: 'reorder_date',
+        description: `Updated Next Pre-order / Reorder date to ${formattedDateStr} (${lead.name})`,
+        createdBy: req.user.id
+      });
+      if (linkedCustomer) {
+        await Activity.create({
+          relatedType: 'customer',
+          relatedId: linkedCustomer._id,
+          type: 'reorder_date',
+          description: `Updated Next Pre-order / Reorder date to ${formattedDateStr} (${lead.name})`,
+          createdBy: req.user.id
+        });
+      }
+    } else {
+      await Activity.create({
+        relatedType: 'lead',
+        relatedId: lead._id,
+        type: 'status_change',
+        description: `Updated lead details (${lead.name})`,
+        createdBy: req.user.id
+      });
+    }
 
     const updatedLead = await Lead.findById(lead._id)
       .populate('assignedTo', 'name email avatarUrl role')

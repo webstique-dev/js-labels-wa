@@ -5,8 +5,7 @@ const {
   getDashboardFunnel,
   getDashboardConversionTrend,
   getDashboardActivityFeed,
-  getDashboardAlerts,
-  getDashboardNeedsReview
+  getDashboardAlerts
 } = require('../controllers/dashboardController');
 const { protect } = require('../middleware/auth');
 const { allowRoles } = require('../middleware/roles');
@@ -17,6 +16,5 @@ router.get('/funnel', protect, applyOwnershipScope('assignedTo'), getDashboardFu
 router.get('/conversion-trend', protect, applyOwnershipScope('assignedTo'), getDashboardConversionTrend);
 router.get('/activity-feed', protect, getDashboardActivityFeed);
 router.get('/alerts', protect, getDashboardAlerts);
-router.get('/needs-review', protect, allowRoles('super_admin', 'manager'), getDashboardNeedsReview);
 
 module.exports = router;

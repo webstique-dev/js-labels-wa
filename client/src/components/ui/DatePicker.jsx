@@ -43,6 +43,9 @@ export default function CustomDatePicker({
   maxDate,
   required = false,
   disabled = false,
+  allowEmpty = false,
+  showMonthYearPicker = false,
+  dateFormat,
   className = ''
 }) {
   const getLiveDateStr = () => {
@@ -50,14 +53,19 @@ export default function CustomDatePicker({
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return showMonthYearPicker ? `${y}-${m}` : `${y}-${m}-${d}`;
   };
 
-  // Convert YYYY-MM-DD string to Date object or vice-versa
+  // Convert YYYY-MM-DD or YYYY-MM string to Date object or vice-versa
   const parseStringToDate = (str) => {
     if (!str) return null;
     if (str instanceof Date) return isNaN(str.getTime()) ? null : str;
     
+    // YYYY-MM format
+    if (/^\d{4}-\d{2}$/.test(str)) {
+      const [y, m] = str.split('-').map(Number);
+      return new Date(y, m - 1, 1);
+    }
     // YYYY-MM-DD format
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
       const [y, m, d] = str.split('-').map(Number);
@@ -73,11 +81,11 @@ export default function CustomDatePicker({
     return isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const activeDateStr = selectedDate || getLiveDateStr();
+  const activeDateStr = selectedDate;
   const dateValue = parseStringToDate(activeDateStr);
 
   useEffect(() => {
-    if (!selectedDate && onChange) {
+    if (!selectedDate && onChange && !allowEmpty) {
       onChange(getLiveDateStr());
     }
   }, []);
@@ -87,11 +95,10 @@ export default function CustomDatePicker({
       onChange('');
       return;
     }
-    // Format to YYYY-MM-DD string
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    const formattedStr = `${year}-${month}-${day}`;
+    const formattedStr = showMonthYearPicker ? `${year}-${month}` : `${year}-${month}-${day}`;
     onChange(formattedStr);
   };
 
@@ -104,13 +111,16 @@ export default function CustomDatePicker({
     }
   };
 
+  const effectiveDateFormat = dateFormat || (showMonthYearPicker ? "yyyy-MM" : "yyyy-MM-dd");
+
   return (
     <div className={`relative w-full font-sans ${className}`}>
       <ReactDatePicker
         selected={dateValue}
         onChange={handleDateChange}
         onChangeRaw={handleRawInputChange}
-        dateFormat="yyyy-MM-dd"
+        dateFormat={effectiveDateFormat}
+        showMonthYearPicker={showMonthYearPicker}
         minDate={minDate}
         maxDate={maxDate}
         popperContainer={({ children }) => createPortal(children, document.body)}

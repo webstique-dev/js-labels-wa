@@ -17,7 +17,7 @@ A web application built for **JS Labels** to manage sales pipelines, customer ac
    - Complete order lifecycle tracking (*Pending*, *Confirmed*, *In Production*, *Quality Check*, *Dispatched*, *Delivered*, *Cancelled*).
 
 4. **Smart Reorder Forecasts & Reminders**:
-   - AI-based reorder prediction timing, probability metrics, and automated escalation stages (*Warning*, *Escalation*, *MD Review*).
+   - AI-based reorder prediction timing, probability metrics, and automated milestone reminders.
 
 5. **Executive Reports & Analytics**:
    - Live revenue growth trends, product sales distribution donut charts, tele-caller win rate leaderboards, and CSV exports.

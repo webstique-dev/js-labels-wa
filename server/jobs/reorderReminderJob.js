@@ -14,7 +14,6 @@ const runReorderReminderCheck = async () => {
     if (!settings) {
       settings = await Settings.create({
         reminderLeadDays: [7, 3, 0],
-        escalationDelaysHours: { warning: 24, escalation: 48, mdReview: 72 },
         singleton: true
       });
     }

@@ -229,6 +229,8 @@ export default function Leads() {
   const [selectedSource, setSelectedSource] = useState('');
   const [selectedPriority, setSelectedPriority] = useState('');
   const [selectedExecutive, setSelectedExecutive] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
   const [activeStageTab, setActiveStageTab] = useState('all');
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
 
@@ -636,14 +638,41 @@ export default function Leads() {
   const filteredLeads = leads.filter(l => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
+      const cleanQ = q.replace(/\D/g, '');
+
       const matchName = l.name?.toLowerCase().includes(q);
       const matchCompany = l.company?.toLowerCase().includes(q);
-      const matchPhone = l.phone?.includes(q);
+      const matchPhone = l.phone && (
+        l.phone.includes(q) ||
+        (cleanQ.length > 0 && l.phone.replace(/\D/g, '').includes(cleanQ))
+      );
       const matchEmail = l.email?.toLowerCase().includes(q);
+
       if (!matchName && !matchCompany && !matchPhone && !matchEmail) return false;
     }
+    if (selectedSource && l.source !== selectedSource) return false;
     if (selectedPriority && l.priority !== selectedPriority) return false;
+    if (selectedExecutive && (l.assignedTo?._id || l.assignedTo) !== selectedExecutive) return false;
     if (activeStageTab !== 'all' && l.status !== activeStageTab) return false;
+
+    // Date & Month Filter logic (matching createdAt / updatedAt / followUpDate)
+    const rawDate = l.createdAt || l.updatedAt || l.nextFollowUpDate;
+    if (rawDate) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) {
+        const yr = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, '0');
+        const dy = String(d.getDate()).padStart(2, '0');
+        const leadYearMonth = `${yr}-${mo}`;
+        const leadFullDate = `${yr}-${mo}-${dy}`;
+
+        if (selectedMonth && leadYearMonth !== selectedMonth) return false;
+        if (selectedDate && leadFullDate !== selectedDate) return false;
+      }
+    } else if (selectedMonth || selectedDate) {
+      return false;
+    }
+
     return true;
   });
 
@@ -661,7 +690,7 @@ export default function Leads() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search leads..."
+              placeholder="Search by name or phone number..."
               className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20"
             />
             {searchQuery && (
@@ -730,15 +759,46 @@ export default function Leads() {
         </div>
       </div>
 
-      {/* Expanded Filter Panel */}
+      {/* Expanded Filter Panel (Responsive Grid layout with Web UI Custom Date Pickers) */}
       {showFiltersPanel && (
-        <div className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-sm flex flex-wrap items-center gap-4 text-xs">
-          <div>
+        <div className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-xs items-end">
+          
+          {/* Month Calendar Filter */}
+          <div className="w-full">
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Filter by Month</label>
+            <CustomDatePicker
+              allowEmpty={true}
+              showMonthYearPicker={true}
+              selectedDate={selectedMonth}
+              onChange={(val) => {
+                setSelectedMonth(val);
+                if (val) setSelectedDate('');
+              }}
+              placeholder="Select month..."
+            />
+          </div>
+
+          {/* Specific Date Calendar Filter */}
+          <div className="w-full">
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Filter by Specific Date</label>
+            <CustomDatePicker
+              allowEmpty={true}
+              selectedDate={selectedDate}
+              onChange={(val) => {
+                setSelectedDate(val);
+                if (val) setSelectedMonth('');
+              }}
+              placeholder="Select date..."
+            />
+          </div>
+
+          {/* Priority Filter */}
+          <div className="w-full">
             <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Priority Filter</label>
             <select
               value={selectedPriority}
               onChange={(e) => setSelectedPriority(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer shadow-2xs"
             >
               <option value="">All Priorities</option>
               <option value="high">High Priority</option>
@@ -747,25 +807,49 @@ export default function Leads() {
             </select>
           </div>
 
-          <div>
+          {/* Layout Toggle */}
+          <div className="w-full">
             <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">View Layout</label>
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-full">
               <button
+                type="button"
                 onClick={() => setViewMode('kanban')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${viewMode === 'kanban' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition text-center cursor-pointer ${viewMode === 'kanban' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
                   }`}
               >
-                Kanban Board
+                Kanban
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('grid')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${viewMode === 'grid' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition text-center cursor-pointer ${viewMode === 'grid' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
                   }`}
               >
-                Grid View
+                Grid
               </button>
             </div>
           </div>
+
+          {/* Responsive Reset Filters Button */}
+          {(selectedMonth || selectedDate || selectedPriority || selectedSource || selectedExecutive) ? (
+            <div className="w-full col-span-1 sm:col-span-2 md:col-span-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMonth('');
+                  setSelectedDate('');
+                  setSelectedPriority('');
+                  setSelectedSource('');
+                  setSelectedExecutive('');
+                }}
+                className="w-full h-[40px] px-3.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+              >
+                <X size={14} />
+                <span>Reset Filters</span>
+              </button>
+            </div>
+          ) : null}
+
         </div>
       )}
 
@@ -786,7 +870,7 @@ export default function Leads() {
         </div>
       ) : viewMode === 'kanban' ? (
         <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="flex md:grid md:grid-cols-4 lg:grid-cols-4 gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide">
+          <div className="flex md:grid md:grid-cols-4 lg:grid-cols-4 gap-4 items-start overflow-x-auto snap-x snap-mandatory scrollbar-hide">
             {COLUMNS.filter(c => c.id !== 'cancelled').map((column) => {
               let columnLeads = filteredLeads.filter(l => l.status === column.id);
 
@@ -856,33 +940,27 @@ export default function Leads() {
                       </div>
                     </div>
 
-                    {/* <div className="flex items-center gap-1">
-                      {canCreate && (
+                    <div className="flex items-center gap-1">
+                      {column.id === 'new' && (
                         <button
                           type="button"
-                          onClick={() => openAddLeadForStage(column.id)}
-                          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                          title={`Add Lead in ${column.title}`}
+                          onClick={() => openAddLeadForStage('new')}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                          title="Add Lead in New stage"
                         >
                           <Plus size={16} />
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition"
-                      >
-                        <MoreVertical size={16} />
-                      </button>
-                    </div> */}
+                    </div>
                   </div>
 
-                  {/* Droppable Area */}
+                  {/* Droppable Area (Independent Scroll Container per Column) */}
                   <Droppable droppableId={column.id}>
                     {(provided, snapshot) => (
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`space-y-3.5 overflow-y-auto scrollbar-hide flex-1 min-h-[100px] p-1 transition-colors ${snapshot.isDraggingOver ? 'bg-slate-100/80 rounded-xl' : ''
+                        className={`space-y-3.5 overflow-y-auto max-h-[calc(100vh-280px)] min-h-[120px] scrollbar-hide flex-1 p-1 transition-colors ${snapshot.isDraggingOver ? 'bg-slate-100/80 rounded-xl' : ''
                           }`}
                       >
                         {columnLeads.length === 0 ? (
@@ -1215,15 +1293,14 @@ export default function Leads() {
               {isManagerOrAdmin ? (
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Assign Executive *
+                    Assign Executive <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
                   </label>
                   <select
-                    required
                     value={newLeadForm.assignedTo}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, assignedTo: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                   >
-                    <option value="" disabled>Select Executive Caller</option>
+                    <option value="">Unassigned (Optional)</option>
                     {usersList.filter(u => u.role === 'caller').map(u => (
                       <option key={u._id} value={u._id}>
                         {u.name} ({u.role})
@@ -1640,6 +1717,25 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
 
       {/* Main Details Body */}
       <div className="space-y-2 flex-1 flex flex-col justify-center">
+        {/* Phone Number Row */}
+        <div className="text-xs text-slate-800 font-semibold flex items-center gap-1.5">
+          <Phone size={13} className="text-emerald-600 shrink-0" />
+          <a
+            href={lead.phone ? `tel:+91${lead.phone.toString().replace(/\D/g, '')}` : '#'}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (lead.phone) {
+                initiatePhoneCall(lead.phone, lead.name, notify);
+                onLogActivity('call');
+              }
+            }}
+            className="hover:underline text-slate-900 font-bold tracking-wide cursor-pointer"
+            title={`Call ${lead.name} (${lead.phone})`}
+          >
+            {lead.phone || '-'}
+          </a>
+        </div>
+
         {/* Priority Line */}
         <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
           <span>Priority:</span>

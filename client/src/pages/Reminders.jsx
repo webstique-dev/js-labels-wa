@@ -23,7 +23,8 @@ import {
   ChevronRight as ChevronRightIcon,
   Plus,
   ShoppingBag,
-  User
+  User,
+  Search
 } from 'lucide-react';
 import { SkeletonCard, SkeletonTable } from '../components/ui/Skeleton';
 import { initiatePhoneCall, openWhatsApp, openEmail, WhatsAppIcon } from '../utils/contactUtils';
@@ -44,15 +45,22 @@ export default function Reminders() {
   const [reminders, setReminders] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // New Order Modal State
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [selectedOrderCustomer, setSelectedOrderCustomer] = useState(null);
 
-  // Calendar Filter State
+  // Calendar Filter State (Month, Year, Specific Date, Filter Active Flag)
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+  const [isCalendarFilterActive, setIsCalendarFilterActive] = useState(false);
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
 
   const fetchReminders = async () => {
     try {
@@ -92,9 +100,31 @@ export default function Reminders() {
     return 'low';
   };
 
-  const highCount = reminders.filter(r => getItemPriority(r) === 'high').length;
-  const mediumCount = reminders.filter(r => getItemPriority(r) === 'medium').length;
-  const lowCount = reminders.filter(r => getItemPriority(r) === 'low').length;
+  // Base list of active reminders (filtered by calendar if user clicked/interacted with calendar)
+  const activeCalendarReminders = reminders.filter((item) => {
+    if (!isCalendarFilterActive) return true;
+
+    const rawDate = item.customer?.expectedReorderDate || item.expectedReorderDate;
+    if (!rawDate) return false;
+    const d = new Date(rawDate);
+    if (isNaN(d.getTime())) return false;
+
+    // Specific date filter
+    if (selectedCalendarDate) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}` === selectedCalendarDate;
+    }
+
+    // Month & Year filter
+    return d.getMonth() === calendarMonth && d.getFullYear() === calendarYear;
+  });
+
+  const totalCount = activeCalendarReminders.length;
+  const highCount = activeCalendarReminders.filter(r => getItemPriority(r) === 'high').length;
+  const mediumCount = activeCalendarReminders.filter(r => getItemPriority(r) === 'medium').length;
+  const lowCount = activeCalendarReminders.filter(r => getItemPriority(r) === 'low').length;
 
   // Build map of YYYY-MM-DD -> set of priority strings for calendar dots
   const reminderDotsMap = {};
@@ -113,33 +143,73 @@ export default function Reminders() {
     }
   });
 
-  // Filter reminder cards according to top tab selection & calendar date
-  const filteredCards = reminders.filter((item) => {
+  // Filter reminder cards according to active priority tab and search query
+  const filteredCards = activeCalendarReminders.filter((item) => {
     const prio = getItemPriority(item);
 
-    // If calendar date is selected, display all reminders for that date regardless of priority view
-    if (!selectedCalendarDate) {
-      if (activeFilterTab === 'high' && prio !== 'high') return false;
-      if (activeFilterTab === 'medium' && prio !== 'medium') return false;
-      if (activeFilterTab === 'low' && prio !== 'low') return false;
+    // 1. Priority Tab Filter
+    if (activeFilterTab !== 'all' && prio !== activeFilterTab) {
+      return false;
     }
 
-    if (selectedCalendarDate) {
-      const rawDate = item.customer?.expectedReorderDate || item.expectedReorderDate;
-      if (!rawDate) return false;
-      const d = new Date(rawDate);
-      if (isNaN(d.getTime())) return false;
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      const itemKey = `${yyyy}-${mm}-${dd}`;
-      if (itemKey !== selectedCalendarDate) return false;
+    // 2. Search Query Filter
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      const custName = (item.customer?.name || '').toLowerCase();
+      const company = (item.customer?.company || '').toLowerCase();
+      if (!custName.includes(q) && !company.includes(q)) return false;
     }
 
     return true;
   });
 
-  const overdueReminders = reminders.filter((r) => {
+  // Month Navigation & Calendar Click Handlers
+  const handlePrevMonth = () => {
+    setIsCalendarFilterActive(true);
+    setSelectedCalendarDate(null);
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear((prev) => prev - 1);
+    } else {
+      setCalendarMonth((prev) => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    setIsCalendarFilterActive(true);
+    setSelectedCalendarDate(null);
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear((prev) => prev + 1);
+    } else {
+      setCalendarMonth((prev) => prev + 1);
+    }
+  };
+
+  const handleDayClick = (dateKey) => {
+    if (selectedCalendarDate === dateKey && isCalendarFilterActive) {
+      // Clear single day filter but remain on month view
+      setSelectedCalendarDate(null);
+    } else {
+      setSelectedCalendarDate(dateKey);
+      setIsCalendarFilterActive(true);
+      setActiveFilterTab('all');
+    }
+  };
+
+  const handleClearCalendarFilter = () => {
+    const now = new Date();
+    setCalendarMonth(now.getMonth());
+    setCalendarYear(now.getFullYear());
+    setIsCalendarFilterActive(false);
+    setSelectedCalendarDate(null);
+    setActiveFilterTab('all');
+    setSearchTerm('');
+  };
+
+  const handleResetDateFilter = handleClearCalendarFilter;
+
+  const overdueReminders = activeCalendarReminders.filter((r) => {
     const cust = r.customer || {};
     const expDateStr = cust.expectedReorderDate || r.expectedReorderDate;
     if (!expDateStr) return false;
@@ -194,8 +264,8 @@ export default function Reminders() {
       {/* Top Header & Filter Controls Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-3">
 
-        {/* Left Filter Tabs */}
-        <div className="flex items-center gap-6 overflow-x-auto scrollbar-hide text-xs font-semibold text-slate-500">
+        {/* Left Priority Filter Tabs */}
+        <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide text-xs font-semibold text-slate-500">
           <button
             onClick={() => setActiveFilterTab('all')}
             className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'all'
@@ -203,7 +273,7 @@ export default function Reminders() {
               : 'border-transparent text-slate-500 hover:text-slate-900'
               }`}
           >
-            All Reminders ({reminders.length})
+            All Reminders ({totalCount})
           </button>
 
           <button
@@ -236,6 +306,31 @@ export default function Reminders() {
             Low Priority ({lowCount})
           </button>
         </div>
+
+        {/* Right Search Input & Clear Calendar Filter */}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search customer..."
+              className="w-40 sm:w-52 pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+            <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+          </div>
+
+          {(isCalendarFilterActive || selectedCalendarDate || searchTerm || activeFilterTab !== 'all') && (
+            <button
+              onClick={handleClearCalendarFilter}
+              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+              title="Reset All Filters & Show All Reminders"
+            >
+              Show All Reminders
+            </button>
+          )}
+        </div>
+
       </div>
 
       {/* Main Workspace Layout (12 Columns) */}
@@ -252,16 +347,28 @@ export default function Reminders() {
               <SkeletonCard />
             </div>
           ) : filteredCards.length === 0 ? (
-            <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80 space-y-3">
+            <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80 space-y-3 px-4">
               <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
-                <Bell size={24} />
+                <CalendarIcon size={24} />
               </div>
-              <h3 className="font-semibold text-slate-800 text-base">No Reorder Reminders</h3>
+              <h3 className="font-semibold text-slate-800 text-base">
+                No Reminders for {monthNames[calendarMonth]} {calendarYear}
+              </h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto font-normal">
-                {activeFilterTab !== 'all'
-                  ? `No ${activeFilterTab} priority reorder reminders found.`
-                  : 'There are no active reorder reminders in the database.'}
+                {selectedCalendarDate
+                  ? `No reorder reminders scheduled for date ${selectedCalendarDate}.`
+                  : activeFilterTab !== 'all'
+                    ? `No ${activeFilterTab} priority reorder reminders scheduled for ${monthNames[calendarMonth]} ${calendarYear}.`
+                    : `There are no reorder reminders scheduled in ${monthNames[calendarMonth]} ${calendarYear}.`}
               </p>
+              <div className="pt-1">
+                <button
+                  onClick={handleClearCalendarFilter}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-2xs transition cursor-pointer"
+                >
+                  Show All Reminders
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -383,7 +490,7 @@ export default function Reminders() {
                               className="w-full text-left px-3 py-1.5 hover:bg-slate-50 rounded-xl text-slate-700 font-medium flex items-center gap-2 cursor-pointer"
                             >
                               <User size={13} className="text-slate-400" />
-                              <span>View Customer 360</span>
+                              <span>View Customer Details</span>
                             </button>
                             <button
                               type="button"
@@ -609,20 +716,29 @@ export default function Reminders() {
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-4">
             {/* Header: Title & Selected Date Filter Badge / Clear */}
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 text-sm tracking-tight flex items-center gap-2">
+              <h3
+                onClick={() => setIsCalendarFilterActive(true)}
+                className="font-bold text-slate-900 text-sm tracking-tight flex items-center gap-2 cursor-pointer hover:text-red-600 transition"
+              >
                 <CalendarIcon size={16} className="text-slate-500" />
                 <span>Calendar</span>
               </h3>
-              {selectedCalendarDate ? (
+              {isCalendarFilterActive || selectedCalendarDate ? (
                 <button
                   type="button"
-                  onClick={() => setSelectedCalendarDate(null)}
-                  className="text-xs font-bold text-red-600 hover:text-red-700 underline cursor-pointer"
+                  onClick={handleClearCalendarFilter}
+                  className="text-xs font-semibold text-slate-500 hover:text-red-600 underline cursor-pointer"
                 >
-                  Clear Filter
+                  Show All Months
                 </button>
               ) : (
-                <span className="text-[11px] font-semibold text-slate-400">Date Filter</span>
+                <button
+                  type="button"
+                  onClick={() => setIsCalendarFilterActive(true)}
+                  className="text-xs font-bold text-red-600 hover:text-red-700 underline cursor-pointer"
+                >
+                  Filter {monthNames[calendarMonth]} Only
+                </button>
               )}
             </div>
 
@@ -630,37 +746,23 @@ export default function Reminders() {
             <div className="flex items-center justify-between px-1 py-1">
               <button
                 type="button"
-                onClick={() => {
-                  if (calendarMonth === 0) {
-                    setCalendarMonth(11);
-                    setCalendarYear(calendarYear - 1);
-                  } else {
-                    setCalendarMonth(calendarMonth - 1);
-                  }
-                }}
+                onClick={handlePrevMonth}
                 className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition cursor-pointer"
                 title="Previous Month"
               >
                 <ChevronLeft size={16} />
               </button>
 
-              <span className="text-xs font-bold text-slate-900 tracking-tight">
-                {[
-                  "January", "February", "March", "April", "May", "June",
-                  "July", "August", "September", "October", "November", "December"
-                ][calendarMonth]} {calendarYear}
+              <span
+                onClick={() => setIsCalendarFilterActive(true)}
+                className="text-xs font-bold text-slate-900 tracking-tight cursor-pointer hover:text-red-600 transition"
+              >
+                {monthNames[calendarMonth]} {calendarYear}
               </span>
 
               <button
                 type="button"
-                onClick={() => {
-                  if (calendarMonth === 11) {
-                    setCalendarMonth(0);
-                    setCalendarYear(calendarYear + 1);
-                  } else {
-                    setCalendarMonth(calendarMonth + 1);
-                  }
-                }}
+                onClick={handleNextMonth}
                 className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition cursor-pointer"
                 title="Next Month"
               >
@@ -709,14 +811,7 @@ export default function Reminders() {
                     <button
                       key={dateKey}
                       type="button"
-                      onClick={() => {
-                        if (isSelected) {
-                          setSelectedCalendarDate(null);
-                        } else {
-                          setSelectedCalendarDate(dateKey);
-                          setActiveFilterTab('all');
-                        }
-                      }}
+                      onClick={() => handleDayClick(dateKey)}
                       className={`h-8 w-full rounded-xl flex flex-col items-center justify-center relative transition cursor-pointer text-xs font-semibold ${isSelected
                           ? 'bg-indigo-600 text-white shadow-md font-bold'
                           : isToday

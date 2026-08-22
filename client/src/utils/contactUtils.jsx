@@ -1,11 +1,9 @@
-// Contact Action Helpers & Icons for Call, WhatsApp, and Email
-
-import React from 'react';
+import api from '../api/axios';
 
 /**
- * Initiates phone call via tel: URI scheme
+ * Initiates phone call via tel: URI scheme and logs activity to database
  */
-export const initiatePhoneCall = (phone, name, notify) => {
+export const initiatePhoneCall = async (phone, name, notify, activityPayload) => {
   if (!phone) {
     if (notify) notify.info(`No phone number recorded for ${name || 'contact'}`);
     return false;
@@ -16,13 +14,30 @@ export const initiatePhoneCall = (phone, name, notify) => {
   }
   window.location.href = `tel:+91${cleanPhone}`;
   if (notify) notify.success(`Initiating call to ${name || 'contact'} (+91 ${cleanPhone})...`);
+
+  if (activityPayload && activityPayload.relatedId) {
+    try {
+      await api.post('/activities', {
+        relatedType: activityPayload.relatedType || 'customer',
+        relatedId: activityPayload.relatedId,
+        type: 'call',
+        description: activityPayload.description || `Phone call initiated with ${name || 'contact'}`
+      });
+      if (typeof activityPayload.onSuccess === 'function') {
+        activityPayload.onSuccess();
+      }
+    } catch (err) {
+      console.error('Error logging call activity:', err);
+    }
+  }
+
   return true;
 };
 
 /**
- * Opens WhatsApp chat via wa.me with pre-formatted message based on reorder probability
+ * Opens WhatsApp chat via wa.me and logs activity to database
  */
-export const openWhatsApp = (phone, name, customMsg, notify, reorderProb, expectedReorderDate) => {
+export const openWhatsApp = async (phone, name, customMsg, notify, reorderProb, expectedReorderDate, activityPayload) => {
   if (!phone) {
     if (notify) notify.info(`No phone number recorded for ${name || 'contact'}`);
     return false;
@@ -46,6 +61,23 @@ export const openWhatsApp = (phone, name, customMsg, notify, reorderProb, expect
   const waUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`;
   window.open(waUrl, '_blank', 'noopener,noreferrer');
   if (notify) notify.success(`Opening WhatsApp chat for ${name || 'contact'}...`);
+
+  if (activityPayload && activityPayload.relatedId) {
+    try {
+      await api.post('/activities', {
+        relatedType: activityPayload.relatedType || 'customer',
+        relatedId: activityPayload.relatedId,
+        type: 'whatsapp',
+        description: activityPayload.description || `WhatsApp conversation opened for ${name || 'contact'}`
+      });
+      if (typeof activityPayload.onSuccess === 'function') {
+        activityPayload.onSuccess();
+      }
+    } catch (err) {
+      console.error('Error logging WhatsApp activity:', err);
+    }
+  }
+
   return true;
 };
 

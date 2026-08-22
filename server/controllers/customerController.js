@@ -107,7 +107,7 @@ const createCustomer = async (req, res) => {
       creditLimit: creditLimit || 100000,
       currentBalance: 0,
       tags: tags || ['Customer'],
-      salesExecutive: req.user.id
+      salesExecutive: req.user.role === 'caller' ? req.user.id : (req.body.salesExecutive || null)
     });
 
     await Activity.create({
@@ -256,6 +256,138 @@ const getCustomerTimeline = async (req, res) => {
   }
 };
 
+// PUT or PATCH /api/customers/:id
+const updateCustomer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await Customer.findById(id);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer account not found' });
+    }
+
+    const {
+      name,
+      company,
+      phone,
+      email,
+      gstNo,
+      address,
+      city,
+      customerType,
+      source,
+      priority,
+      expectedReorderDate
+    } = req.body;
+
+    const cleanPhone = phone ? phone.toString().replace(/\D/g, '') : null;
+    if (phone && cleanPhone.length !== 10) {
+      return res.status(400).json({ message: 'Phone number must be exactly 10 digits' });
+    }
+
+    if (name) customer.name = name.trim();
+    if (company !== undefined) customer.company = company ? company.trim() : '';
+    if (cleanPhone && cleanPhone.length === 10) customer.phone = cleanPhone;
+    if (email !== undefined) customer.email = email ? email.trim().toLowerCase() : '';
+    if (gstNo !== undefined) customer.gstNo = gstNo;
+    if (address !== undefined) customer.address = address;
+    if (city !== undefined) customer.city = city;
+    if (customerType !== undefined) customer.customerType = customerType;
+    if (source !== undefined) customer.source = source;
+    if (priority !== undefined) customer.priority = priority;
+
+    let parsedExpectedDate = undefined;
+    if (expectedReorderDate) {
+      const d = new Date(expectedReorderDate);
+      if (!isNaN(d.getTime())) {
+        parsedExpectedDate = d;
+        customer.expectedReorderDate = parsedExpectedDate;
+      }
+    }
+
+    await customer.save();
+
+    // 1. Sync linked Lead if exists
+    const Lead = require('../models/Lead');
+    let linkedLead = null;
+    if (customer.leadId) {
+      linkedLead = await Lead.findById(customer.leadId);
+    } else {
+      linkedLead = await Lead.findOne({ phone: customer.phone });
+    }
+
+    if (linkedLead) {
+      if (name) linkedLead.name = customer.name;
+      if (company !== undefined) linkedLead.company = customer.company;
+      if (cleanPhone && cleanPhone.length === 10) linkedLead.phone = customer.phone;
+      if (email !== undefined) linkedLead.email = customer.email;
+      if (gstNo !== undefined) linkedLead.gstNo = customer.gstNo;
+      if (address !== undefined) linkedLead.address = customer.address;
+      if (city !== undefined) linkedLead.city = customer.city;
+      if (source) {
+        const srcStr = source.toString().trim();
+        const mapped = srcStr.toLowerCase().replace(/[\s-]+/g, '_');
+        const validEnums = ['website', 'referral', 'walk_in', 'google_ads', 'tele_caller', 'other'];
+        linkedLead.source = validEnums.includes(mapped) ? mapped : srcStr;
+      }
+      if (priority) linkedLead.priority = priority;
+      if (parsedExpectedDate) linkedLead.nextFollowUpDate = parsedExpectedDate;
+      await linkedLead.save();
+    }
+
+    // 2. Sync open FollowUp documents for customer and linked lead
+    const FollowUp = require('../models/FollowUp');
+    if (parsedExpectedDate) {
+      await FollowUp.updateMany(
+        { relatedType: 'customer', relatedId: customer._id, status: 'open' },
+        { $set: { dueDate: parsedExpectedDate } }
+      );
+      if (linkedLead) {
+        await FollowUp.updateMany(
+          { relatedType: 'lead', relatedId: linkedLead._id, status: 'open' },
+          { $set: { dueDate: parsedExpectedDate } }
+        );
+      }
+    }
+
+    // Create activity audit entry
+    if (parsedExpectedDate) {
+      const formattedDateStr = parsedExpectedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      await Activity.create({
+        relatedType: 'customer',
+        relatedId: customer._id,
+        type: 'reorder_date',
+        description: `Updated Next Pre-order / Reorder date to ${formattedDateStr} (${customer.name})`,
+        createdBy: req.user.id
+      });
+      if (linkedLead) {
+        await Activity.create({
+          relatedType: 'lead',
+          relatedId: linkedLead._id,
+          type: 'reorder_date',
+          description: `Updated Next Pre-order / Reorder date to ${formattedDateStr} (${customer.name})`,
+          createdBy: req.user.id
+        });
+      }
+    } else {
+      await Activity.create({
+        relatedType: 'customer',
+        relatedId: customer._id,
+        type: 'status_change',
+        description: `Updated customer details (${customer.name})`,
+        createdBy: req.user.id
+      });
+    }
+
+    const updatedCustomer = await Customer.findById(customer._id)
+      .populate('salesExecutive', 'name email phone avatarUrl role');
+
+    return res.json(updatedCustomer);
+  } catch (error) {
+    console.error('Error updating customer:', error);
+    return res.status(500).json({ message: 'Server error updating customer' });
+  }
+};
+
 // DELETE /api/customers/:id
 const deleteCustomer = async (req, res) => {
   try {
@@ -290,5 +422,6 @@ module.exports = {
   getCustomerSummary,
   getCustomerOrders,
   getCustomerTimeline,
+  updateCustomer,
   deleteCustomer
 };

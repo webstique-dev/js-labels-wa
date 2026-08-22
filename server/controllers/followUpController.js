@@ -135,9 +135,34 @@ const getFollowUpById = async (req, res) => {
     const itemObj = followUp.toObject();
     let relatedRecord = null;
     if (followUp.relatedType === 'lead') {
-      relatedRecord = await Lead.findById(followUp.relatedId).populate('assignedTo', 'name email phone avatarUrl role');
+      const foundLead = await Lead.findById(followUp.relatedId).populate('assignedTo', 'name email phone avatarUrl role');
+      if (foundLead) {
+        const recObj = foundLead.toObject();
+        const Customer = require('../models/Customer');
+        const linkedCust = await Customer.findOne({ $or: [{ leadId: foundLead._id }, { phone: foundLead.phone }] });
+        if (linkedCust) {
+          if (!recObj.gstNo && linkedCust.gstNo) recObj.gstNo = linkedCust.gstNo;
+          if (!recObj.address && linkedCust.address) recObj.address = linkedCust.address;
+          if (!recObj.city && linkedCust.city) recObj.city = linkedCust.city;
+          if (!recObj.company && linkedCust.company) recObj.company = linkedCust.company;
+        }
+        relatedRecord = recObj;
+      }
     } else if (followUp.relatedType === 'customer') {
-      relatedRecord = await Customer.findById(followUp.relatedId).populate('salesExecutive', 'name email phone avatarUrl role');
+      const foundCust = await Customer.findById(followUp.relatedId).populate('salesExecutive', 'name email phone avatarUrl role');
+      if (foundCust) {
+        const recObj = foundCust.toObject();
+        const Lead = require('../models/Lead');
+        const linkedLead = foundCust.leadId ? await Lead.findById(foundCust.leadId) : await Lead.findOne({ phone: foundCust.phone });
+        if (linkedLead) {
+          if (!recObj.source && linkedLead.source) recObj.source = linkedLead.source;
+          if (!recObj.priority && linkedLead.priority) recObj.priority = linkedLead.priority;
+          if (!recObj.gstNo && linkedLead.gstNo) recObj.gstNo = linkedLead.gstNo;
+          if (!recObj.address && linkedLead.address) recObj.address = linkedLead.address;
+          if (!recObj.city && linkedLead.city) recObj.city = linkedLead.city;
+        }
+        relatedRecord = recObj;
+      }
     }
 
     itemObj.relatedId = relatedRecord || itemObj.relatedId;
@@ -151,8 +176,42 @@ const getFollowUpById = async (req, res) => {
       ]
     }).populate('createdBy', 'name email avatarUrl role').sort({ createdAt: -1 });
 
+    // Calculate Summary Metrics from DB
+    const relatedEntityId = followUp.relatedId;
+    const [allFollowUps, openFollowUpsCount] = await Promise.all([
+      FollowUp.find({ relatedId: relatedEntityId }),
+      FollowUp.countDocuments({ relatedId: relatedEntityId, status: 'open' })
+    ]);
+
+    const totalFollowUps = history.length + allFollowUps.length;
+    const openFollowUps = openFollowUpsCount > 0 ? openFollowUpsCount : (followUp.status === 'open' ? 1 : 0);
+    const lastContacted = history.length > 0 ? history[0].createdAt : (followUp.updatedAt || followUp.createdAt);
+    const customerSince = relatedRecord?.createdAt || followUp.createdAt;
+    
+    let reorderProbability = 85;
+    if (relatedRecord && typeof relatedRecord.reorderProbability === 'number' && relatedRecord.reorderProbability > 0) {
+      reorderProbability = relatedRecord.reorderProbability;
+    } else if (relatedRecord?.priority === 'high') {
+      reorderProbability = 85;
+    } else if (relatedRecord?.priority === 'medium') {
+      reorderProbability = 60;
+    } else if (relatedRecord?.priority === 'low') {
+      reorderProbability = 30;
+    }
+
+    const summaryStats = {
+      totalFollowUps,
+      openFollowUps,
+      lastContacted,
+      customerSince,
+      reorderProbability,
+      nextReorderDate: followUp.dueDate || relatedRecord?.expectedReorderDate || relatedRecord?.nextFollowUpDate
+    };
+
     return res.json({
       followup: itemObj,
+      relatedRecord,
+      summaryStats,
       history
     });
   } catch (error) {

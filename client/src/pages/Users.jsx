@@ -19,7 +19,8 @@ import {
   Users as UsersIcon,
   PhoneCall,
   ShieldCheck,
-  ShieldAlert
+  ShieldAlert,
+  Plus
 } from 'lucide-react';
 import { Skeleton, SkeletonTable, SkeletonStatsGrid } from '../components/ui/Skeleton';
 
@@ -295,22 +296,12 @@ export default function Users() {
     }
   };
 
-  const getAvatarBg = (roleStr) => {
-    switch (roleStr) {
-      case 'super_admin':
-        return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'manager':
-        return 'bg-blue-100 text-blue-700 border-blue-200';
-      default:
-        return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    }
-  };
-
   // Filtered users list by search query
   const filteredUsers = users.filter((u) => {
     const nameMatch = (u.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const emailMatch = (u.email || '').toLowerCase().includes(searchQuery.toLowerCase());
-    return nameMatch || emailMatch;
+    const phoneMatch = (u.phone || '').includes(searchQuery);
+    return nameMatch || emailMatch || phoneMatch;
   });
 
   // Calculate top KPI numbers
@@ -323,7 +314,7 @@ export default function Users() {
     <div className="space-y-6 pb-12 font-sans">
       
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">User Accounts & Team Management</h1>
           <p className="text-slate-500 text-sm mt-1 font-normal">Manage team access, role privileges, caller status, and lead reassignments</p>
@@ -332,9 +323,9 @@ export default function Users() {
         {currentRole === 'super_admin' && (
           <button
             onClick={handleOpenAddModal}
-            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold text-xs rounded-xl shadow-2xs transition flex items-center gap-2 cursor-pointer shrink-0"
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl text-xs font-semibold shadow-2xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
           >
-            <UserPlus size={16} />
+            <Plus size={16} />
             <span>Add User Account</span>
           </button>
         )}
@@ -346,47 +337,47 @@ export default function Users() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           
-          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Total Accounts</span>
+              <span className="text-[10px] font-semibold uppercase text-slate-500 tracking-wider">Total Accounts</span>
               <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
                 <UsersIcon size={14} />
               </div>
             </div>
-            <span className="text-2xl font-extrabold text-slate-900 block">{totalCount}</span>
+            <span className="text-2xl font-bold text-slate-900 block">{totalCount}</span>
             <span className="text-[11px] text-slate-400 font-normal">Registered Team Users</span>
           </div>
 
-          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase text-emerald-600 tracking-wider">Active Callers</span>
+              <span className="text-[10px] font-semibold uppercase text-emerald-600 tracking-wider">Active Callers</span>
               <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
                 <PhoneCall size={14} />
               </div>
             </div>
-            <span className="text-2xl font-extrabold text-emerald-600 block">{activeCallersCount}</span>
+            <span className="text-2xl font-bold text-emerald-600 block">{activeCallersCount}</span>
             <span className="text-[11px] text-slate-400 font-normal">Tele Executive Callers</span>
           </div>
 
-          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase text-blue-600 tracking-wider">Active Managers</span>
+              <span className="text-[10px] font-semibold uppercase text-blue-600 tracking-wider">Active Managers</span>
               <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
                 <ShieldCheck size={14} />
               </div>
             </div>
-            <span className="text-2xl font-extrabold text-blue-600 block">{managersCount}</span>
+            <span className="text-2xl font-bold text-blue-600 block">{managersCount}</span>
             <span className="text-[11px] text-slate-400 font-normal">Team Lead Managers</span>
           </div>
 
-          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+          <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase text-purple-600 tracking-wider">Super Admins</span>
+              <span className="text-[10px] font-semibold uppercase text-purple-600 tracking-wider">Super Admins</span>
               <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
                 <ShieldAlert size={14} />
               </div>
             </div>
-            <span className="text-2xl font-extrabold text-purple-600 block">{superAdminCount}</span>
+            <span className="text-2xl font-bold text-purple-600 block">{superAdminCount}</span>
             <span className="text-[11px] text-slate-400 font-normal">System Administrators</span>
           </div>
 
@@ -394,7 +385,7 @@ export default function Users() {
       )}
 
       {/* Filter & Search Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         
         {/* Dropdown Filters */}
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
@@ -403,7 +394,7 @@ export default function Users() {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer shadow-2xs"
           >
             <option value="">All Roles</option>
             <option value="super_admin">Super Admin</option>
@@ -415,7 +406,7 @@ export default function Users() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+            className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer shadow-2xs"
           >
             <option value="">All Statuses</option>
             <option value="active">Active</option>
@@ -431,9 +422,17 @@ export default function Users() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name or email..."
-            className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+            placeholder="Search by name, email or phone..."
+            className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-semibold"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
 
       </div>
@@ -442,20 +441,20 @@ export default function Users() {
       {loading ? (
         <SkeletonTable rows={6} cols={6} />
       ) : filteredUsers.length === 0 ? (
-        <div className="min-h-[250px] bg-white rounded-2xl border border-slate-200/80 p-8 text-center flex flex-col items-center justify-center space-y-2 shadow-2xs">
+        <div className="min-h-[250px] bg-white rounded-2xl border border-slate-200/80 p-8 text-center flex flex-col items-center justify-center space-y-2 shadow-sm">
           <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
             <UserX size={24} />
           </div>
-          <h3 className="font-bold text-slate-900 text-sm">No Users Found</h3>
-          <p className="text-xs text-slate-500 font-normal">No user accounts match your search or selected filter criteria.</p>
+          <h3 className="font-semibold text-slate-800 text-base">No Users Found</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto font-normal">No user accounts match your search query or selected filter criteria.</p>
         </div>
       ) : (
         <>
-          {/* Desktop Table View */}
-          <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden scrollbar-hide">
-            <table className="w-full text-left border-collapse min-w-[700px]">
+          {/* Desktop Table View (Styled matching Customer Directory table) */}
+          <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden scrollbar-hide">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-semibold uppercase text-slate-500 tracking-wider">
+                <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-semibold uppercase text-slate-500 tracking-wider">
                   <th className="p-4">Team User</th>
                   <th className="p-4">Contact Details</th>
                   <th className="p-4">Role Privilege</th>
@@ -468,7 +467,6 @@ export default function Users() {
                 {filteredUsers.map((u) => {
                   const isSelf = loggedInUserId && loggedInUserId.toString() === u._id.toString();
                   const initials = getInitials(u.name);
-                  const avatarBg = getAvatarBg(u.role);
 
                   return (
                     <tr key={u._id} className="hover:bg-slate-50/80 transition">
@@ -476,39 +474,39 @@ export default function Users() {
                       {/* User Name & Initials Avatar */}
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full ${avatarBg} border font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs`}>
+                          <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-semibold text-xs shadow-xs">
                             {initials}
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-900 text-sm">{u.name}</span>
+                              <span className="font-semibold text-slate-900">{u.name}</span>
                               {isSelf && (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
                                   You
                                 </span>
                               )}
                             </div>
-                            <span className="text-[11px] text-slate-400 font-normal">{u.role === 'caller' ? 'Tele Executive' : u.role === 'manager' ? 'Sales Manager' : 'Administrator'}</span>
+                            <span className="text-[11px] text-slate-500 font-normal">{u.role === 'caller' ? 'Tele Executive' : u.role === 'manager' ? 'Sales Manager' : 'Administrator'}</span>
                           </div>
                         </div>
                       </td>
 
                       {/* Contact Details */}
                       <td className="p-4">
-                        <span className="font-semibold text-slate-800 block">{u.email}</span>
-                        <span className="text-slate-400 text-[11px] block mt-0.5">{u.phone || 'No phone'}</span>
+                        <span className="font-medium text-slate-800 block">{u.email}</span>
+                        <span className="text-slate-400 text-[11px] font-normal block mt-0.5">{u.phone || 'No phone'}</span>
                       </td>
 
                       {/* Role Privilege */}
                       <td className="p-4">
-                        <span className={`px-2.5 py-1 border text-[10px] font-bold rounded-md uppercase ${getRoleBadgeClass(u.role)}`}>
+                        <span className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getRoleBadgeClass(u.role)}`}>
                           {u.role.replace('_', ' ')}
                         </span>
                       </td>
 
                       {/* Status */}
                       <td className="p-4">
-                        <span className={`px-2.5 py-1 border text-[10px] font-bold rounded-md uppercase ${
+                        <span className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${
                           u.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
                           {u.status}
@@ -516,8 +514,8 @@ export default function Users() {
                       </td>
 
                       {/* Last Active */}
-                      <td className="p-4 font-medium text-slate-600">
-                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never'}
+                      <td className="p-4 font-medium text-slate-700">
+                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'}
                       </td>
 
                       {/* Actions */}
@@ -527,51 +525,52 @@ export default function Users() {
                             
                             {/* Edit Button */}
                             <button
+                              type="button"
                               onClick={() => handleOpenEditModal(u)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
-                              title="Edit User Details"
+                              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                              title={`Edit details for ${u.name}`}
                             >
-                              <Edit size={12} />
-                              <span>Edit</span>
+                              <Edit size={14} />
+                            </button>
+
+                            {/* Update Password Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPasswordModal(u)}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                              title={`Update password for ${u.name}`}
+                            >
+                              <Key size={14} />
                             </button>
 
                             {/* Activate / Deactivate Toggle */}
                             {u.status === 'active' ? (
                               <button
+                                type="button"
                                 onClick={() => handleDeactivate(u)}
-                                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
-                                title="Deactivate Account"
+                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                                title={`Deactivate ${u.name}`}
                               >
-                                <UserX size={12} />
-                                <span>Deactivate</span>
+                                <UserX size={14} />
                               </button>
                             ) : (
                               <button
+                                type="button"
                                 onClick={() => handleActivateUser(u)}
-                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
-                                title="Activate Account"
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                                title={`Activate ${u.name}`}
                               >
-                                <UserCheck size={12} />
-                                <span>Activate</span>
+                                <UserCheck size={14} />
                               </button>
                             )}
-
-                            {/* Update Password Button */}
-                            <button
-                              onClick={() => handleOpenPasswordModal(u)}
-                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-[11px] rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
-                              title="Update Password"
-                            >
-                              <Key size={12} />
-                              <span>Password</span>
-                            </button>
 
                             {/* Delete Button */}
                             {currentRole === 'super_admin' && (
                               <button
+                                type="button"
                                 onClick={() => handleDeleteUser(u)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition inline-flex items-center cursor-pointer"
-                                title="Move User to Trash"
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                title={`Move ${u.name} to Trash`}
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -593,17 +592,16 @@ export default function Users() {
             {filteredUsers.map((u) => {
               const isSelf = loggedInUserId && loggedInUserId.toString() === u._id.toString();
               const initials = getInitials(u.name);
-              const avatarBg = getAvatarBg(u.role);
 
               return (
-                <div key={u._id} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                <div key={u._id} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-8 h-8 rounded-full ${avatarBg} border font-bold text-xs flex items-center justify-center shrink-0`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-semibold text-xs shadow-xs">
                         {initials}
                       </div>
                       <div>
-                        <span className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                        <span className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
                           {u.name}
                           {isSelf && <span className="text-[10px] font-normal text-slate-400">(You)</span>}
                         </span>
@@ -611,13 +609,13 @@ export default function Users() {
                       </div>
                     </div>
 
-                    <span className={`px-2 py-0.5 border text-[10px] font-bold rounded-md uppercase ${getRoleBadgeClass(u.role)}`}>
+                    <span className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getRoleBadgeClass(u.role)}`}>
                       {u.role.replace('_', ' ')}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                    <span className={`px-2 py-0.5 border text-[10px] font-bold rounded-md uppercase ${
+                    <span className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${
                       u.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
                     }`}>
                       {u.status}
@@ -626,32 +624,50 @@ export default function Users() {
                     {!isSelf && (
                       <div className="flex items-center gap-1">
                         <button
+                          type="button"
                           onClick={() => handleOpenEditModal(u)}
-                          className="px-2 py-1 bg-slate-100 text-slate-800 font-bold text-[10px] rounded-lg"
+                          className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                          title="Edit User"
                         >
-                          Edit
+                          <Edit size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPasswordModal(u)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg cursor-pointer"
+                          title="Update Password"
+                        >
+                          <Key size={14} />
                         </button>
                         {u.status === 'active' ? (
                           <button
+                            type="button"
                             onClick={() => handleDeactivate(u)}
-                            className="px-2 py-1 bg-rose-50 text-rose-700 font-bold text-[10px] rounded-lg"
+                            className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg cursor-pointer"
+                            title="Deactivate"
                           >
-                            Deactivate
+                            <UserX size={14} />
                           </button>
                         ) : (
                           <button
+                            type="button"
                             onClick={() => handleActivateUser(u)}
-                            className="px-2 py-1 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-lg"
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 rounded-lg cursor-pointer"
+                            title="Activate"
                           >
-                            Activate
+                            <UserCheck size={14} />
                           </button>
                         )}
-                        <button
-                          onClick={() => handleOpenPasswordModal(u)}
-                          className="px-2 py-1 bg-blue-50 text-blue-700 font-bold text-[10px] rounded-lg"
-                        >
-                          Password
-                        </button>
+                        {currentRole === 'super_admin' && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUser(u)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
+                            title="Move to Trash"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -684,7 +700,7 @@ export default function Users() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g. Rahul Sharma"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
@@ -696,7 +712,7 @@ export default function Users() {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="name@jslabels.com"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
@@ -707,7 +723,7 @@ export default function Users() {
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="+91 98765 43210"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
@@ -716,7 +732,7 @@ export default function Users() {
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                 >
                   <option value="caller">Caller (Tele Executive)</option>
                   <option value="manager">Manager (Sales Team Lead)</option>
@@ -734,22 +750,22 @@ export default function Users() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? 'Saving...' : isEdit ? 'Update User' : 'Create User'}
                 </button>
@@ -791,12 +807,12 @@ export default function Users() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Min 6 characters"
-                    className="w-full pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPasswordText(!showPasswordText)}
-                    className="absolute right-3 text-slate-400 hover:text-slate-600"
+                    className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
                     {showPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -813,23 +829,23 @@ export default function Users() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter new password"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => { setShowPasswordModal(false); setPasswordUser(null); }}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isUpdatingPassword}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition disabled:opacity-50 cursor-pointer"
                 >
                   {isUpdatingPassword ? 'Updating...' : 'Update Password'}
                 </button>
@@ -869,7 +885,7 @@ export default function Users() {
                   required
                   value={reassignTo}
                   onChange={(e) => setReassignTo(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                 >
                   <option value="">Select active executive caller...</option>
                   {users
@@ -883,18 +899,18 @@ export default function Users() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => { setDeactivateTargetUser(null); setOpenItemsData(null); }}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-medium cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingReassign || !reassignTo}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmittingReassign ? 'Processing...' : 'Reassign & Deactivate'}
                 </button>
@@ -907,4 +923,3 @@ export default function Users() {
     </div>
   );
 }
-

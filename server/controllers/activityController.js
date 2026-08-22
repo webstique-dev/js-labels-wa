@@ -81,8 +81,57 @@ const uploadActivityFile = async (req, res) => {
   }
 };
 
+// PATCH /api/activities/:id - Update note description
+const updateActivity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { description } = req.body;
+
+    if (!description || !description.trim()) {
+      return res.status(400).json({ message: 'Description is required' });
+    }
+
+    const activity = await Activity.findById(id);
+    if (!activity) {
+      return res.status(404).json({ message: 'Activity not found' });
+    }
+
+    activity.description = description.trim();
+    await activity.save();
+
+    const populated = await Activity.findById(activity._id)
+      .populate('createdBy', 'name email avatarUrl role');
+
+    return res.json(populated);
+  } catch (error) {
+    console.error('Error updating activity:', error);
+    return res.status(500).json({ message: 'Server error updating activity' });
+  }
+};
+
+// DELETE /api/activities/:id - Delete activity note/file
+const deleteActivity = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const activity = await Activity.findById(id);
+    if (!activity) {
+      return res.status(404).json({ message: 'Activity not found' });
+    }
+
+    await Activity.findByIdAndDelete(id);
+    return res.json({ message: 'Activity deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting activity:', error);
+    return res.status(500).json({ message: 'Server error deleting activity' });
+  }
+};
+
 module.exports = {
   getActivities,
   createActivity,
-  uploadActivityFile
+  uploadActivityFile,
+  updateActivity,
+  deleteActivity
 };
+

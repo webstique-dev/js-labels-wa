@@ -17,7 +17,8 @@ import {
   Calendar,
   Filter,
   Search,
-  ChevronDown
+  ChevronDown,
+  Eye
 } from 'lucide-react';
 import { SkeletonTable } from '../components/ui/Skeleton';
 
@@ -57,7 +58,7 @@ export default function FollowUps() {
   }, [fetchFollowups]);
 
   const getInitials = (name) => {
-    if (!name) return 'CU';
+    if (!name || name === '-') return 'JS';
     const parts = name.trim().split(' ');
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return name.substring(0, 2).toUpperCase();
@@ -85,7 +86,7 @@ export default function FollowUps() {
     <div className="space-y-6 pb-12 font-sans">
       
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Customer Follow-ups Workspace</h1>
           <p className="text-slate-500 text-sm mt-1 font-normal">Manage scheduled customer call interactions, reorder follow-ups, and active pipelines</p>
@@ -124,7 +125,7 @@ export default function FollowUps() {
       </div>
 
       {/* Filter & Search Controls Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         
         {/* Status Filter Tabs */}
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-max overflow-x-auto scrollbar-hide">
@@ -156,12 +157,12 @@ export default function FollowUps() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search customer or company..."
-            className="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+            className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500"
           />
         </div>
       </div>
 
-      {/* Customer Follow-ups Data Table */}
+      {/* Customer Follow-ups Data Table (Styled matching Customer Directory table) */}
       {loading ? (
         <SkeletonTable rows={6} cols={6} />
       ) : filteredFollowups.length === 0 ? (
@@ -177,105 +178,110 @@ export default function FollowUps() {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto scrollbar-hide">
-            <table className="w-full text-left border-collapse text-xs min-w-[700px]">
-              <thead>
-                <tr className="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-semibold text-[11px]">
-                  <th className="p-4">Customer Entity</th>
-                  <th className="p-4">Notes / Task</th>
-                  <th className="p-4">Due Date</th>
-                  <th className="p-4">Assigned To</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredFollowups.map((item) => {
-                  const related = item.relatedRecord || (typeof item.relatedId === 'object' ? item.relatedId : null);
-                  const custName = related?.name || item.name || 'N/A';
-                  const custCompany = related?.company || item.company || 'Individual Account';
-                  const initials = getInitials(custName);
-                  const notesText = item.notes || (item.relatedType === 'lead' ? 'Scheduled Lead Call' : 'Customer Follow-up');
-                  const dueDateStr = item.dueDate ? new Date(item.dueDate).toLocaleString('en-IN', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
-                  const assignedName = item.assignedTo?.name || 'Unassigned';
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden scrollbar-hide">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-semibold uppercase text-slate-500 tracking-wider">
+                <th className="p-4">Customer Entity</th>
+                <th className="p-4">Notes / Task</th>
+                <th className="p-4">Due Date</th>
+                <th className="p-4">Assigned To</th>
+                <th className="p-4">Status</th>
+                <th className="p-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {filteredFollowups.map((item) => {
+                const related = item.relatedRecord || (typeof item.relatedId === 'object' ? item.relatedId : null);
+                const custName = related?.name || item.name || '-';
+                const custCompany = related?.company || item.company || '-';
+                const initials = getInitials(custName);
+                const notesText = item.notes || (item.relatedType === 'lead' ? 'Scheduled Lead Call' : 'Customer Follow-up');
+                const dueDateStr = item.dueDate ? new Date(item.dueDate).toLocaleString('en-IN', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+                const assignedName = item.assignedTo?.name || 'Unassigned';
 
-                  const statusStr = (item.status || 'open').toLowerCase();
-                  let statusBadgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
-                  let statusLabel = 'Open';
+                const statusStr = (item.status || 'open').toLowerCase();
+                let statusBadgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                let statusLabel = 'Open';
 
-                  if (statusStr === 'overdue') {
-                    statusBadgeClass = 'bg-rose-50 text-rose-700 border-rose-200';
-                    statusLabel = 'Overdue';
-                  } else if (statusStr === 'completed' || statusStr === 'done') {
-                    statusBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                    statusLabel = 'Completed';
-                  }
+                if (statusStr === 'overdue') {
+                  statusBadgeClass = 'bg-rose-50 text-rose-700 border-rose-200';
+                  statusLabel = 'Overdue';
+                } else if (statusStr === 'completed' || statusStr === 'done') {
+                  statusBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                  statusLabel = 'Completed';
+                }
 
-                  const targetId = item._id || item.id;
-                  const workspaceNavId = item.relatedId?._id || item.relatedId || targetId;
+                const targetId = item._id || item.id;
+                const workspaceNavId = item.relatedId?._id || item.relatedId || targetId;
 
-                  return (
-                    <tr key={targetId} className="hover:bg-slate-50/80 transition">
-                      
-                      {/* Customer Entity */}
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                            {initials}
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-900 text-sm leading-tight">{custName}</p>
-                            <p className="text-[11px] text-slate-400 font-normal">{custCompany}</p>
-                          </div>
+                return (
+                  <tr
+                    key={targetId}
+                    onClick={() => navigate(`/followups/${workspaceNavId}`)}
+                    className="hover:bg-slate-50/80 cursor-pointer transition"
+                  >
+                    
+                    {/* Customer Entity */}
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-semibold text-xs shadow-xs">
+                          {initials}
                         </div>
-                      </td>
+                        <div>
+                          <p className="font-semibold text-slate-900">{custName}</p>
+                          <p className="text-slate-500 text-[11px] font-normal">{custCompany}</p>
+                        </div>
+                      </div>
+                    </td>
 
-                      {/* Notes / Task */}
-                      <td className="p-4 font-medium text-slate-700 max-w-xs truncate">
-                        {notesText}
-                      </td>
+                    {/* Notes / Task */}
+                    <td className="p-4 font-medium text-slate-700 max-w-xs truncate">
+                      {notesText}
+                    </td>
 
-                      {/* Due Date */}
-                      <td className="p-4 font-medium text-slate-800">
-                        {dueDateStr}
-                      </td>
+                    {/* Due Date */}
+                    <td className="p-4 font-medium text-slate-800">
+                      {dueDateStr}
+                    </td>
 
-                      {/* Assigned Executive */}
-                      <td className="p-4 font-semibold text-slate-700">
-                        {assignedName}
-                      </td>
+                    {/* Assigned Executive */}
+                    <td className="p-4 font-medium text-slate-700">
+                      {assignedName}
+                    </td>
 
-                      {/* Status Pill */}
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 border text-[10px] font-bold rounded-md uppercase ${statusBadgeClass}`}>
-                          {statusLabel}
-                        </span>
-                      </td>
+                    {/* Status Pill */}
+                    <td className="p-4">
+                      <span className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${statusBadgeClass}`}>
+                        {statusLabel}
+                      </span>
+                    </td>
 
-                      {/* Action Button */}
-                      <td className="p-4 text-center">
+                    {/* Action Button (Eye icon only matching Customer Directory) */}
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => navigate(`/followups/${workspaceNavId}`)}
-                          className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold rounded-xl text-xs shadow-2xs transition inline-flex items-center gap-1.5 cursor-pointer"
+                          type="button"
+                          title={`View followup for ${custName}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/followups/${workspaceNavId}`);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                         >
-                          <span>View Followup</span>
-                          <ArrowRight size={13} />
+                          <Eye size={15} />
                         </button>
-                      </td>
+                      </div>
+                    </td>
 
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
     </div>
   );
 }
-
-
-

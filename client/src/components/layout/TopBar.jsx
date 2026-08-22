@@ -262,7 +262,7 @@ export default function TopBar() {
                           <span className="text-slate-400 text-[11px] font-normal">{c.company || c.phone}</span>
                         </div>
                         <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-medium rounded uppercase">
-                          360 View
+                          Customer
                         </span>
                       </Link>
                     ))}

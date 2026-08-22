@@ -45,6 +45,7 @@ import {
   getProbabilityTextColorClass,
   getProbabilityBadgeClass
 } from '../utils/reorderHelper';
+import { initiatePhoneCall, openWhatsApp, WhatsAppIcon } from '../utils/contactUtils';
 
 export default function CustomerDetails() {
   const { id } = useParams();
@@ -180,18 +181,16 @@ export default function CustomerDetails() {
           phone: custData.phone || '',
           email: custData.email || '',
           gstNo: custData.gstNo || '',
-          address: custData.address || '',
-          city: custData.city || '',
-          state: custData.state || '',
-          pincode: custData.pincode || '',
-          customerType: custData.customerType || '',
-          paymentTerms: custData.paymentTerms || '',
-          creditLimit: custData.creditLimit !== undefined && custData.creditLimit !== null ? custData.creditLimit : ''
+          source: custData.source || 'website',
+          address: custData.address || custData.city || '',
+          expectedReorderDate: custData.expectedReorderDate
+            ? new Date(custData.expectedReorderDate).toISOString().split('T')[0]
+            : ''
         });
       }
     } catch (err) {
       console.error('Error fetching customer 360:', err);
-      notify.error(err.response?.data?.message || 'Failed to load customer 360 details');
+      notify.error(err.response?.data?.message || 'Failed to load customer details');
     } finally {
       setLoading(false);
     }
@@ -205,13 +204,45 @@ export default function CustomerDetails() {
     e.preventDefault();
     try {
       setIsSaving(true);
-      await api.patch(`/customers/${id}`, formData);
-      notify.success('Customer profile updated successfully!');
+      const cleanPhone = (formData.phone || '').replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        notify.error('Phone number must be exactly 10 digits');
+        setIsSaving(false);
+        return;
+      }
+
+      if (formData.email && formData.email.trim()) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email.trim())) {
+          notify.error('Please enter a valid email address');
+          setIsSaving(false);
+          return;
+        }
+      }
+
+      const payload = {
+        name: formData.name.trim(),
+        company: formData.company ? formData.company.trim() : '',
+        phone: cleanPhone,
+        email: formData.email ? formData.email.trim().toLowerCase() : '',
+        address: formData.address,
+        city: formData.address,
+        gstNo: formData.gstNo,
+        source: formData.source,
+        expectedReorderDate: formData.expectedReorderDate || undefined
+      };
+
+      await api.patch(`/customers/${id}`, payload);
+      notify.success('Details updated successfully!');
       setIsEditing(false);
       fetchCustomer360();
     } catch (err) {
       console.error('Error updating customer profile:', err);
-      notify.error(err.response?.data?.message || 'Failed to save customer profile');
+      let errMsg = 'Failed to save customer profile';
+      if (typeof err.response?.data?.message === 'string') {
+        errMsg = err.response.data.message;
+      }
+      notify.error(errMsg);
     } finally {
       setIsSaving(false);
     }
@@ -302,6 +333,8 @@ export default function CustomerDetails() {
         return <Mail size={14} className="text-purple-600" />;
       case 'whatsapp':
         return <MessageCircle size={14} className="text-emerald-600" />;
+      case 'reorder_date':
+        return <Calendar size={14} className="text-rose-600" />;
       case 'status_change':
         return <ShoppingBag size={14} className="text-emerald-600" />;
       case 'note':
@@ -319,6 +352,8 @@ export default function CustomerDetails() {
         return 'bg-purple-50 border-purple-200';
       case 'whatsapp':
         return 'bg-emerald-50 border-emerald-200';
+      case 'reorder_date':
+        return 'bg-rose-50 border-rose-200';
       case 'status_change':
         return 'bg-emerald-50 border-emerald-200';
       case 'note':
@@ -351,37 +386,24 @@ export default function CustomerDetails() {
     }
   };
 
-  const handleWhatsAppClick = async () => {
+  const handleCallClick = () => {
     if (!customerPhone) return;
-    const cleanPhone = customerPhone.replace(/\D/g, '');
-    const expDateStr = customer?.expectedReorderDate
-      ? new Date(customer.expectedReorderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-      : 'soon';
+    initiatePhoneCall(customerPhone, customerName, notify, {
+      relatedType: 'customer',
+      relatedId: id,
+      description: `Phone call initiated with ${customerName}`,
+      onSuccess: () => fetchCustomer360()
+    });
+  };
 
-    let message = '';
-    if (reorderProb >= 80) {
-      message = `Hi ${customerName}, this is JS Labels. Your label supply is expected to need an urgent reorder around ${expDateStr} (${reorderProb}% reorder probability). Would you like us to process your next batch of custom labels today?`;
-    } else if (reorderProb >= 50) {
-      message = `Hi ${customerName}, greetings from JS Labels! Based on your usage cycle, your next label reorder is expected around ${expDateStr}. Please let us know if you'd like us to prepare your upcoming order!`;
-    } else {
-      message = `Hi ${customerName}, hope you are doing well! JS Labels is following up to check on your label inventory. Feel free to reach out whenever you're ready for your next reorder!`;
-    }
-
-    const waUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
-    notify.success(`Opening WhatsApp chat for ${customerName}...`);
-
-    try {
-      await api.post('/activities', {
-        relatedType: 'customer',
-        relatedId: id,
-        type: 'whatsapp',
-        description: `WhatsApp reminder opened for reorder (Reorder Probability: ${reorderProb}%)`
-      });
-      fetchTimeline();
-    } catch (err) {
-      console.error('Error logging WhatsApp activity:', err);
-    }
+  const handleWhatsAppClick = () => {
+    if (!customerPhone) return;
+    openWhatsApp(customerPhone, customerName, null, notify, reorderProb, customer?.expectedReorderDate, {
+      relatedType: 'customer',
+      relatedId: id,
+      description: `WhatsApp conversation opened for ${customerName}`,
+      onSuccess: () => fetchCustomer360()
+    });
   };
 
   return (
@@ -551,9 +573,27 @@ export default function CustomerDetails() {
               <div className="space-y-3 pt-2 text-xs">
                 {/* Phone */}
                 {customerPhone && (
-                  <div className="flex items-center gap-2.5 text-slate-700 font-medium">
-                    <Phone size={15} className="text-slate-400 shrink-0" />
-                    <span>{customerPhone}</span>
+                  <div className="flex items-center justify-between text-slate-700 font-medium">
+                    <div className="flex items-center gap-2.5">
+                      <Phone size={15} className="text-slate-400 shrink-0" />
+                      <span>{customerPhone}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={handleCallClick}
+                        className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                        title="Call"
+                      >
+                        <Phone size={13} />
+                      </button>
+                      <button
+                        onClick={handleWhatsAppClick}
+                        className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                        title="WhatsApp"
+                      >
+                        <WhatsAppIcon size={13} className="text-emerald-600" />
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1268,78 +1308,107 @@ export default function CustomerDetails() {
         </div>
       )}
 
-      {/* Edit Profile Modal */}
+      {/* EDIT PROFILE MODAL */}
       {isEditing && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-4">
+
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Edit Customer Profile</h3>
-              <button onClick={() => setIsEditing(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer">
+              <h3 className="font-bold text-slate-900 text-sm">Edit Details</h3>
+              <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleSaveProfile} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Customer Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Company Name</label>
-                <input
-                  type="text"
-                  value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Customer Name</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Company</label>
+                  <input
+                    type="text"
+                    value={formData.company}
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Phone Number *</label>
+                  <label className="font-bold text-slate-700 block mb-1">Phone</label>
                   <input
-                    type="tel"
-                    required
+                    type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Email</label>
+                  <label className="font-bold text-slate-700 block mb-1">Email</label>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">GST Number</label>
-                <input
-                  type="text"
-                  value={formData.gstNo}
-                  onChange={(e) => setFormData({ ...formData, gstNo: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">GST Number</label>
+                  <input
+                    type="text"
+                    value={formData.gstNo}
+                    onChange={(e) => setFormData({ ...formData, gstNo: e.target.value })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Source</label>
+                  <select
+                    value={formData.source}
+                    onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                  >
+                    <option value="website">Website</option>
+                    <option value="referral">Referral</option>
+                    <option value="google_ads">Google Ads</option>
+                    <option value="tele_caller">Tele Caller</option>
+                    <option value="walk_in">Walk-in</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Address</label>
+                <label className="font-bold text-slate-700 block mb-1">Address / Location</label>
                 <input
                   type="text"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900"
+                  className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Next Reorder / Follow-up Date</label>
+                <input
+                  type="date"
+                  value={formData.expectedReorderDate}
+                  onChange={(e) => setFormData({ ...formData, expectedReorderDate: e.target.value })}
+                  className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
                 />
               </div>
 
@@ -1347,19 +1416,21 @@ export default function CustomerDetails() {
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold shadow-2xs disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-2xs disabled:opacity-50 cursor-pointer"
                 >
-                  {isSaving ? 'Saving...' : 'Save Profile'}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
+
             </form>
+
           </div>
         </div>
       )}

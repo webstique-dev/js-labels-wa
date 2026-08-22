@@ -14,7 +14,6 @@ const customerRoutes = require('./routes/customerRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const reminderRoutes = require('./routes/reminderRoutes');
-const escalationRoutes = require('./routes/escalationRoutes');
 const devRoutes = require('./routes/devRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const reportRoutes = require('./routes/reportRoutes');
@@ -23,7 +22,6 @@ const trashRoutes = require('./routes/trashRoutes');
 const searchRoutes = require('./routes/searchRoutes');
 
 const { initReorderReminderJob } = require('./jobs/reorderReminderJob');
-const { initEscalationJob } = require('./jobs/escalationJob');
 
 const app = express();
 
@@ -32,7 +30,6 @@ connectDB();
 
 // Initialize Cron Jobs
 initReorderReminderJob();
-initEscalationJob();
 
 // CORS configuration for production & local development
 const allowedOrigins = [
@@ -75,7 +72,6 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/reminders', reminderRoutes);
-app.use('/api/escalations', escalationRoutes);
 app.use('/api/dev', devRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);

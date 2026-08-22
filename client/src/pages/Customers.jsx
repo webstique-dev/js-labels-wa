@@ -4,7 +4,7 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X, ShoppingBag } from 'lucide-react';
+import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X, ShoppingBag, Eye } from 'lucide-react';
 import { SkeletonCustomerDirectory } from '../components/ui/Skeleton';
 import NewOrderModal from '../components/NewOrderModal';
 import {
@@ -300,21 +300,6 @@ export default function Customers() {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
-                          title={`Create order for ${c.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedOrderCustomer(c);
-                            setShowNewOrderModal(true);
-                          }}
-                          className={`px-2.5 py-1 font-semibold rounded-xl text-xs transition inline-flex items-center gap-1 cursor-pointer shadow-2xs ${getOrderButtonClass(
-                            getLiveReorderProbability(c)
-                          )}`}
-                        >
-                          <ShoppingBag size={13} />
-                          <span>+ Order</span>
-                        </button>
-                        <button
-                          type="button"
                           title={`Delete ${c.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -325,14 +310,15 @@ export default function Customers() {
                           <Trash2 size={14} />
                         </button>
                         <button
+                          type="button"
+                          title={`View ${c.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/customers/${c._id}`);
                           }}
-                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl border border-slate-200 text-xs transition inline-flex items-center gap-1 cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                         >
-                          <span>View 360°</span>
-                          <ArrowRight size={12} />
+                          <Eye size={15} />
                         </button>
                       </div>
                     </td>

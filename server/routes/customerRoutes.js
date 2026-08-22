@@ -7,6 +7,7 @@ const {
   getCustomerSummary,
   getCustomerOrders,
   getCustomerTimeline,
+  updateCustomer,
   deleteCustomer
 } = require('../controllers/customerController');
 const { getTrash, restoreRecord } = require('../controllers/trashController');
@@ -21,6 +22,8 @@ router.get('/:id', protect, getCustomerById);
 router.get('/:id/summary', protect, getCustomerSummary);
 router.get('/:id/orders', protect, getCustomerOrders);
 router.get('/:id/timeline', protect, getCustomerTimeline);
+router.put('/:id', protect, updateCustomer);
+router.patch('/:id', protect, updateCustomer);
 router.delete('/:id', protect, allowRoles('super_admin', 'manager'), deleteCustomer);
 router.post('/:id/restore', protect, allowRoles('super_admin'), (req, res, next) => { req.params.resource = 'customers'; next(); }, restoreRecord);
 

@@ -14,7 +14,8 @@ const customerSchema = new mongoose.Schema({
   paymentTerms: { type: String },
   creditLimit: { type: Number },
   currentBalance: { type: Number, default: 0 },
-  tags: [{ type: String }],
+  source: { type: String },
+  priority: { type: String },
   salesExecutive: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   reorderProbability: { type: Number, default: 0 },
   expectedReorderDate: { type: Date }

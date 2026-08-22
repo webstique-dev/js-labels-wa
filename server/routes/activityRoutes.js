@@ -7,7 +7,9 @@ const fs = require('fs');
 const {
   getActivities,
   createActivity,
-  uploadActivityFile
+  uploadActivityFile,
+  updateActivity,
+  deleteActivity
 } = require('../controllers/activityController');
 const { protect } = require('../middleware/auth');
 
@@ -32,5 +34,8 @@ const upload = multer({ storage });
 router.get('/', protect, getActivities);
 router.post('/', protect, createActivity);
 router.post('/upload', protect, upload.single('file'), uploadActivityFile);
+router.patch('/:id', protect, updateActivity);
+router.delete('/:id', protect, deleteActivity);
 
 module.exports = router;
+

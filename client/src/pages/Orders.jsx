@@ -441,7 +441,7 @@ export default function Orders() {
                     }}
                     className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
                   >
-                    Customer 360 →
+                    Customer Details →
                   </button>
                 )}
               </div>
