@@ -92,7 +92,7 @@ export default function Login() {
       });
 
       notify.success(res.data?.message || 'Account created successfully! Please sign in.');
-      
+
       // Pre-fill login credentials and switch to Login view
       setEmail(regEmail);
       setPassword(regPassword);
@@ -120,15 +120,15 @@ export default function Login() {
 
   return (
     <div className="w-full h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-2 font-sans select-none">
-      
+
       {/* Left Side – Login / Registration Form */}
       <div className="h-full w-full px-6 py-6 sm:px-10 lg:px-12 xl:px-16 2xl:px-20 flex flex-col justify-between items-center bg-white overflow-y-auto scrollbar-hide">
-        
+
         {/* Top spacer for vertical balance */}
         <div className="shrink-0 h-2 sm:h-4" />
 
         <div className="w-full max-w-md 2xl:max-w-lg mx-auto my-auto py-2 space-y-4 sm:space-y-5 2xl:space-y-6">
-          
+
           {/* JS Labels Brand Logo */}
           <div className="space-y-0.5 sm:space-y-1">
             <img
@@ -136,12 +136,12 @@ export default function Login() {
               alt="JS Labels Logo"
               className="h-10 2xl:h-12 w-auto object-contain mb-1 transition-all"
             />
-            <h1 className="text-lg sm:text-xl 2xl:text-2xl font-semibold text-[#111827] tracking-tight mt-2">
+            {/* <h1 className="text-lg sm:text-xl 2xl:text-2xl font-semibold text-[#111827] tracking-tight mt-2">
               Lead to Reorder
             </h1>
             <p className="text-xs 2xl:text-sm text-[#6B7280] font-normal">
               Smart CRM for Sustainable Growth
-            </p>
+            </p> */}
           </div>
 
           {/* Heading Toggle */}
@@ -171,7 +171,7 @@ export default function Login() {
           {/* LOGIN FORM */}
           {!isRegisterMode ? (
             <form onSubmit={handleLoginSubmit} className="space-y-3.5 2xl:space-y-4">
-              
+
               {/* Email Input */}
               <div>
                 <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
@@ -227,7 +227,7 @@ export default function Login() {
                   <span className="text-xs 2xl:text-sm text-[#6B7280] font-medium">Remember me</span>
                 </label>
 
-                <a
+                {/* <a
                   href="#forgot"
                   onClick={(e) => {
                     e.preventDefault();
@@ -236,7 +236,7 @@ export default function Login() {
                   className="text-xs 2xl:text-sm text-[#0B4EA2] hover:underline font-semibold"
                 >
                   Forgot Password?
-                </a>
+                </a> */}
               </div>
 
               {/* Sign In Button */}
@@ -272,7 +272,7 @@ export default function Login() {
           ) : (
             /* REGISTRATION FORM */
             <form onSubmit={handleRegisterSubmit} className="space-y-2.5 2xl:space-y-3.5">
-              
+
               {/* System Role Selection Dropdown */}
               <div>
                 <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
@@ -466,17 +466,17 @@ export default function Login() {
       <div
         className="relative h-full p-6 sm:p-10 lg:p-12 xl:p-14 border-l border-[#E5E7EB] flex flex-col justify-between hidden lg:flex overflow-hidden bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: `url('https://res.cloudinary.com/rlokioxu/image/upload/v1787145696/Js-Labels-login_r0lkfd.png')`
+          backgroundImage: `url('https://res.cloudinary.com/rlokioxu/image/upload/v1787590135/JS-Banner_w5kk8e.png')`
         }}
       >
         {/* Semi-transparent Overlay gradient to ensure contrast and readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-white/30 to-transparent pointer-events-none" />
 
         <div className="relative z-10 w-full max-w-lg mx-auto flex flex-col h-full justify-between space-y-6">
-          
+
           {/* 2x2 Feature Cards Grid */}
           <div className="grid grid-cols-2 gap-4 sm:gap-5">
-            
+
             {/* Card 1: Manage Leads */}
             <div className="p-4 bg-white/90 backdrop-blur-md rounded-[16px] border border-white/80 shadow-md space-y-2">
               <div className="w-10 h-10 rounded-full bg-red-50 text-[#E31E24] flex items-center justify-center">
