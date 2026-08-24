@@ -254,15 +254,16 @@ export default function TopBar() {
 
   return (
     <header className="bg-white border-b border-slate-200/80 px-4 md:px-8 py-3 flex items-center justify-between sticky top-0 z-20 shadow-xs">
-      
+
       {/* Left section: Mobile Logo & Global Search Bar */}
       <div className="flex items-center gap-3 flex-1 max-w-xs md:max-w-md" ref={searchRef}>
         {/* Mobile-only logo mark */}
         <div className="flex items-center gap-2 md:hidden">
-          <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center font-semibold text-sm shadow-xs">
-            JS
-          </div>
-          <span className="font-semibold text-slate-900 text-sm tracking-tight">JS LABELS</span>
+          <img
+            src="https://res.cloudinary.com/rlokioxu/image/upload/v1787581286/JS_Labels-Logo_uann2h.png"
+            alt="JS Labels Logo"
+            className="h-8 w-auto object-contain"
+          />
         </div>
 
         {/* Global Search Input */}
@@ -302,11 +303,10 @@ export default function TopBar() {
           {/* Search Results Dropdown Panel */}
           {searchResults && (
             <div
-              className={`absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 max-h-96 overflow-y-auto scrollbar-hide transition-all duration-200 ease-out origin-top ${
-                isSearchOpen
-                  ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
-                  : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
-              }`}
+              className={`absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 max-h-96 overflow-y-auto scrollbar-hide transition-all duration-200 ease-out origin-top ${isSearchOpen
+                ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+                }`}
             >
               {/* Leads Results */}
               {searchResults.leads?.length > 0 && (
@@ -405,7 +405,7 @@ export default function TopBar() {
 
       {/* Right Section: Header Controls & Profile Options */}
       <div className="flex items-center gap-2 sm:gap-3">
-        
+
         {/* 1. Pending Messages & Reorder Reminders Icon */}
         <div className="relative" ref={messageRef}>
           <button
@@ -428,11 +428,10 @@ export default function TopBar() {
 
           {/* Messages & Reminders Dropdown */}
           <div
-            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${
-              isMessageOpen
-                ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
-                : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
-            }`}
+            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${isMessageOpen
+              ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
+              : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+              }`}
           >
             <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -470,18 +469,16 @@ export default function TopBar() {
                     <div
                       key={rem._id}
                       onClick={() => handleReminderItemClick(rem)}
-                      className={`p-3 hover:bg-slate-50 transition block cursor-pointer ${
-                        !isRead ? 'bg-amber-50/40 font-semibold' : ''
-                      }`}
+                      className={`p-3 hover:bg-slate-50 transition block cursor-pointer ${!isRead ? 'bg-amber-50/40 font-semibold' : ''
+                        }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-1.5">
                           {!isRead && <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>}
                           <span className="font-semibold text-slate-900 text-xs">{rem.customer?.name || 'Customer'}</span>
                         </div>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                          rem.isOverdue ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                        }`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${rem.isOverdue ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
                           {rem.isOverdue ? 'Overdue' : `${rem.daysUntilReorder}d left`}
                         </span>
                       </div>
@@ -518,11 +515,10 @@ export default function TopBar() {
 
           {/* Notifications Dropdown */}
           <div
-            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${
-              isNotifOpen
-                ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
-                : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
-            }`}
+            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${isNotifOpen
+              ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
+              : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+              }`}
           >
             <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -559,9 +555,8 @@ export default function TopBar() {
                     <div
                       key={ld._id}
                       onClick={() => handleNotificationItemClick(ld)}
-                      className={`p-3 hover:bg-slate-50 transition block cursor-pointer ${
-                        !isRead ? 'bg-red-50/30 font-semibold' : ''
-                      }`}
+                      className={`p-3 hover:bg-slate-50 transition block cursor-pointer ${!isRead ? 'bg-red-50/30 font-semibold' : ''
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
@@ -574,9 +569,8 @@ export default function TopBar() {
                         Company: {ld.company || 'N/A'} • Source: {ld.source || 'Website'}
                       </p>
                       <div className="mt-1 flex items-center gap-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                          ld.priority === 'high' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
-                        }`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${ld.priority === 'high' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                          }`}>
                           {ld.priority || 'medium'} priority
                         </span>
                       </div>
@@ -617,11 +611,10 @@ export default function TopBar() {
 
           {/* Profile Dropdown Menu with Smooth Transition */}
           <div
-            className={`absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${
-              isProfileOpen
-                ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
-                : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
-            }`}
+            className={`absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${isProfileOpen
+              ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
+              : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+              }`}
           >
             {/* Profile Header */}
             <div className="p-4 bg-slate-900 text-white">

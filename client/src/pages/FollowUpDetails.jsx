@@ -1464,13 +1464,12 @@ export default function FollowUpDetails() {
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`w-10 h-10 rounded-xl ${
-                            isPdf
-                              ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                              : isExcel
+                          className={`w-10 h-10 rounded-xl ${isPdf
+                            ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                            : isExcel
                               ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
                               : 'bg-blue-50 text-blue-600 border border-blue-100'
-                          } flex items-center justify-center shrink-0`}
+                            } flex items-center justify-center shrink-0`}
                         >
                           {isExcel ? <FileSpreadsheet size={18} /> : <FileText size={18} />}
                         </div>

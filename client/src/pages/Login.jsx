@@ -121,21 +121,25 @@ export default function Login() {
   return (
     <div className="w-full h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-2 font-sans select-none">
       
-      {/* Left Side – Login / Registration Form (Non-scrollable, Fits Viewport) */}
-      <div className="h-full px-6 py-5 sm:px-10 lg:px-12 xl:px-14 flex flex-col justify-between bg-white overflow-hidden">
-        <div className="w-full max-w-md mx-auto my-auto space-y-4">
+      {/* Left Side – Login / Registration Form */}
+      <div className="h-full w-full px-6 py-6 sm:px-10 lg:px-12 xl:px-16 2xl:px-20 flex flex-col justify-between items-center bg-white overflow-y-auto scrollbar-hide">
+        
+        {/* Top spacer for vertical balance */}
+        <div className="shrink-0 h-2 sm:h-4" />
+
+        <div className="w-full max-w-md 2xl:max-w-lg mx-auto my-auto py-2 space-y-4 sm:space-y-5 2xl:space-y-6">
           
           {/* JS Labels Brand Logo */}
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 sm:space-y-1">
             <img
-              src="https://res.cloudinary.com/rlokioxu/image/upload/v1787146422/Js-logo_wnklmo.png"
+              src="https://res.cloudinary.com/rlokioxu/image/upload/v1787580665/JS-Labels_Logo_kxvyzp.png"
               alt="JS Labels Logo"
-              className="h-10 w-auto object-contain mb-1"
+              className="h-10 2xl:h-12 w-auto object-contain mb-1 transition-all"
             />
-            <h1 className="text-lg sm:text-xl font-semibold text-[#111827] tracking-tight mt-2">
+            <h1 className="text-lg sm:text-xl 2xl:text-2xl font-semibold text-[#111827] tracking-tight mt-2">
               Lead to Reorder
             </h1>
-            <p className="text-xs text-[#6B7280] font-normal">
+            <p className="text-xs 2xl:text-sm text-[#6B7280] font-normal">
               Smart CRM for Sustainable Growth
             </p>
           </div>
@@ -144,20 +148,20 @@ export default function Login() {
           <div>
             {isRegisterMode ? (
               <div>
-                <h2 className="text-xl sm:text-2xl font-semibold text-[#111827] tracking-tight flex items-center gap-2">
-                  <UserPlus size={20} className="text-[#E31E24]" />
+                <h2 className="text-xl sm:text-2xl 2xl:text-3xl font-semibold text-[#111827] tracking-tight flex items-center gap-2">
+                  <UserPlus size={20} className="text-[#E31E24] 2xl:w-6 2xl:h-6" />
                   Create Account
                 </h2>
-                <p className="text-xs text-[#6B7280] mt-0.5 font-normal">
+                <p className="text-xs 2xl:text-sm text-[#6B7280] mt-0.5 font-normal">
                   Fill details and choose your system role to register
                 </p>
               </div>
             ) : (
               <div>
-                <h2 className="text-xl sm:text-2xl font-semibold text-[#111827] tracking-tight">
+                <h2 className="text-xl sm:text-2xl 2xl:text-3xl font-semibold text-[#111827] tracking-tight">
                   Welcome Back!
                 </h2>
-                <p className="text-xs text-[#6B7280] mt-0.5 font-normal">
+                <p className="text-xs 2xl:text-sm text-[#6B7280] mt-0.5 font-normal">
                   Sign in to continue to your account
                 </p>
               </div>
@@ -166,11 +170,11 @@ export default function Login() {
 
           {/* LOGIN FORM */}
           {!isRegisterMode ? (
-            <form onSubmit={handleLoginSubmit} className="space-y-3.5">
+            <form onSubmit={handleLoginSubmit} className="space-y-3.5 2xl:space-y-4">
               
               {/* Email Input */}
               <div>
-                <label className="block text-xs font-medium text-[#111827] mb-1">
+                <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
                   Email Address
                 </label>
                 <div className="relative flex items-center">
@@ -181,14 +185,14 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter email address"
-                    className="w-full h-[42px] pl-10 pr-4 bg-white border border-[#E5E7EB] rounded-[10px] text-xs sm:text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
+                    className="w-full h-[42px] 2xl:h-[48px] pl-10 pr-4 bg-white border border-[#E5E7EB] rounded-[10px] text-xs sm:text-sm 2xl:text-base text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                   />
                 </div>
               </div>
 
               {/* Password Input */}
               <div>
-                <label className="block text-xs font-medium text-[#111827] mb-1">
+                <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
                   Password
                 </label>
                 <div className="relative flex items-center">
@@ -199,7 +203,7 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
-                    className="w-full h-[42px] pl-10 pr-10 bg-white border border-[#E5E7EB] rounded-[10px] text-xs sm:text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
+                    className="w-full h-[42px] 2xl:h-[48px] pl-10 pr-10 bg-white border border-[#E5E7EB] rounded-[10px] text-xs sm:text-sm 2xl:text-base text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                   />
                   <button
                     type="button"
@@ -218,9 +222,9 @@ export default function Login() {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded text-[#E31E24] focus:ring-[#E31E24] border-[#E5E7EB] cursor-pointer"
+                    className="w-3.5 h-3.5 2xl:w-4 2xl:h-4 rounded text-[#E31E24] focus:ring-[#E31E24] border-[#E5E7EB] cursor-pointer"
                   />
-                  <span className="text-xs text-[#6B7280] font-medium">Remember me</span>
+                  <span className="text-xs 2xl:text-sm text-[#6B7280] font-medium">Remember me</span>
                 </label>
 
                 <a
@@ -229,7 +233,7 @@ export default function Login() {
                     e.preventDefault();
                     notify.info('Please contact your administrator to reset password.');
                   }}
-                  className="text-xs text-[#0B4EA2] hover:underline font-semibold"
+                  className="text-xs 2xl:text-sm text-[#0B4EA2] hover:underline font-semibold"
                 >
                   Forgot Password?
                 </a>
@@ -239,7 +243,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full h-[44px] bg-[#E31E24] hover:bg-[#c8191f] active:bg-[#b01419] text-white font-semibold text-sm rounded-[10px] shadow-sm hover:shadow-md transition duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+                className="w-full h-[44px] 2xl:h-[50px] bg-[#E31E24] hover:bg-[#c8191f] active:bg-[#b01419] text-white font-semibold text-sm 2xl:text-base rounded-[10px] shadow-sm hover:shadow-md transition duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
               >
                 {isSubmitting ? (
                   <>
@@ -251,9 +255,9 @@ export default function Login() {
                 )}
               </button>
 
-              {/* Create Account Link */}
-              <div className="pt-2 text-center">
-                <p className="text-xs text-[#6B7280] font-normal">
+              {/* Switch to Register */}
+              <div className="text-center pt-1">
+                <p className="text-xs 2xl:text-sm text-[#6B7280] font-normal">
                   Don't have an account?{' '}
                   <button
                     type="button"
@@ -266,12 +270,12 @@ export default function Login() {
               </div>
             </form>
           ) : (
-            /* REGISTRATION FORM (Compact, Fit in Viewport) */
-            <form onSubmit={handleRegisterSubmit} className="space-y-2.5">
+            /* REGISTRATION FORM */
+            <form onSubmit={handleRegisterSubmit} className="space-y-2.5 2xl:space-y-3.5">
               
               {/* System Role Selection Dropdown */}
               <div>
-                <label className="block text-xs font-medium text-[#111827] mb-1">
+                <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
                   System Role *
                 </label>
                 <div className="relative flex items-center">
@@ -279,7 +283,7 @@ export default function Login() {
                   <select
                     value={regRole}
                     onChange={(e) => setRegRole(e.target.value)}
-                    className="w-full h-[38px] pl-9 pr-8 bg-white border border-[#E5E7EB] rounded-[10px] text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent font-medium transition cursor-pointer appearance-none"
+                    className="w-full h-[38px] 2xl:h-[44px] pl-9 pr-8 bg-white border border-[#E5E7EB] rounded-[10px] text-xs 2xl:text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent font-medium transition cursor-pointer appearance-none"
                   >
                     <option value="caller">Tele Caller (Executive & Follow-ups)</option>
                     <option value="manager">Sales Manager (Pipeline & Reports)</option>
@@ -291,7 +295,7 @@ export default function Login() {
 
               {/* Full Name Input */}
               <div>
-                <label className="block text-xs font-medium text-[#111827] mb-1">
+                <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
                   Full Name *
                 </label>
                 <div className="relative flex items-center">
@@ -302,14 +306,14 @@ export default function Login() {
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
                     placeholder="e.g. John Doe"
-                    className="w-full h-[38px] pl-9 pr-3 bg-white border border-[#E5E7EB] rounded-[10px] text-xs text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
+                    className="w-full h-[38px] 2xl:h-[44px] pl-9 pr-3 bg-white border border-[#E5E7EB] rounded-[10px] text-xs 2xl:text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                   />
                 </div>
               </div>
 
               {/* Email Address Input */}
               <div>
-                <label className="block text-xs font-medium text-[#111827] mb-1">
+                <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
                   Email Address *
                 </label>
                 <div className="relative flex items-center">
@@ -320,14 +324,14 @@ export default function Login() {
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     placeholder="e.g. john@jslabels.com"
-                    className="w-full h-[38px] pl-9 pr-3 bg-white border border-[#E5E7EB] rounded-[10px] text-xs text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
+                    className="w-full h-[38px] 2xl:h-[44px] pl-9 pr-3 bg-white border border-[#E5E7EB] rounded-[10px] text-xs 2xl:text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                   />
                 </div>
               </div>
 
               {/* Phone Number Input */}
               <div>
-                <label className="block text-xs font-medium text-[#111827] mb-1">
+                <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
                   Phone Number (Optional)
                 </label>
                 <div className="relative flex items-center">
@@ -337,7 +341,7 @@ export default function Login() {
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
                     placeholder="+91 9876543210"
-                    className="w-full h-[38px] pl-9 pr-3 bg-white border border-[#E5E7EB] rounded-[10px] text-xs text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
+                    className="w-full h-[38px] 2xl:h-[44px] pl-9 pr-3 bg-white border border-[#E5E7EB] rounded-[10px] text-xs 2xl:text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                   />
                 </div>
               </div>
@@ -345,7 +349,7 @@ export default function Login() {
               {/* Password & Confirm Password Grid */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-medium text-[#111827] mb-1">
+                  <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
                     Password *
                   </label>
                   <div className="relative flex items-center">
@@ -356,13 +360,13 @@ export default function Login() {
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
                       placeholder="Min 6 chars"
-                      className="w-full h-[38px] pl-8 pr-7 bg-white border border-[#E5E7EB] rounded-[10px] text-xs text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
+                      className="w-full h-[38px] 2xl:h-[44px] pl-8 pr-7 bg-white border border-[#E5E7EB] rounded-[10px] text-xs 2xl:text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-[#111827] mb-1">
+                  <label className="block text-xs 2xl:text-sm font-medium text-[#111827] mb-1">
                     Confirm *
                   </label>
                   <div className="relative flex items-center">
@@ -373,7 +377,7 @@ export default function Login() {
                       value={regConfirmPassword}
                       onChange={(e) => setRegConfirmPassword(e.target.value)}
                       placeholder="Re-enter"
-                      className="w-full h-[38px] pl-8 pr-7 bg-white border border-[#E5E7EB] rounded-[10px] text-xs text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
+                      className="w-full h-[38px] 2xl:h-[44px] pl-8 pr-7 bg-white border border-[#E5E7EB] rounded-[10px] text-xs 2xl:text-sm text-[#111827] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#E31E24] focus:border-transparent transition"
                     />
                     <button
                       type="button"
@@ -391,7 +395,7 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full h-[42px] bg-[#E31E24] hover:bg-[#c8191f] active:bg-[#b01419] text-white font-semibold text-xs sm:text-sm rounded-[10px] shadow-sm hover:shadow-md transition duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full h-[42px] 2xl:h-[48px] bg-[#E31E24] hover:bg-[#c8191f] active:bg-[#b01419] text-white font-semibold text-xs sm:text-sm 2xl:text-base rounded-[10px] shadow-sm hover:shadow-md transition duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
@@ -399,17 +403,17 @@ export default function Login() {
                       <span>Creating Account...</span>
                     </>
                   ) : (
-                    <span>Register & Create Account</span>
+                    <span>Create Account</span>
                   )}
                 </button>
               </div>
 
-              {/* Back to Sign In Link */}
-              <div className="text-center pt-0.5">
+              {/* Switch to Login */}
+              <div className="text-center pt-1">
                 <button
                   type="button"
                   onClick={() => setIsRegisterMode(false)}
-                  className="text-xs text-[#0B4EA2] hover:underline font-semibold inline-flex items-center gap-1 cursor-pointer"
+                  className="text-xs 2xl:text-sm text-[#0B4EA2] hover:underline font-semibold inline-flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft size={12} />
                   <span>Already have an account? Sign In</span>
@@ -420,27 +424,27 @@ export default function Login() {
 
           {/* Quick Demo Shortcuts */}
           {!isRegisterMode && (
-            <div className="pt-1.5 border-t border-[#E5E7EB]/60">
-              <p className="text-[11px] text-[#6B7280] text-center mb-1.5 font-medium">Quick Demo Accounts:</p>
-              <div className="flex flex-wrap justify-center gap-1.5">
+            <div className="pt-1.5 2xl:pt-3 border-t border-[#E5E7EB]/60">
+              <p className="text-[11px] 2xl:text-xs text-[#6B7280] text-center mb-1.5 2xl:mb-2 font-medium">Quick Demo Accounts:</p>
+              <div className="flex flex-wrap justify-center gap-1.5 2xl:gap-2">
                 <button
                   type="button"
                   onClick={() => fillQuickUser('super_admin@jslabels.com')}
-                  className="px-2.5 py-1 text-[11px] font-medium text-[#111827] bg-[#F5F7FA] hover:bg-[#E5E7EB] rounded-lg transition cursor-pointer"
+                  className="px-2.5 py-1 2xl:px-3.5 2xl:py-1.5 text-[11px] 2xl:text-xs font-medium text-[#111827] bg-[#F5F7FA] hover:bg-[#E5E7EB] rounded-lg transition cursor-pointer"
                 >
                   Super Admin
                 </button>
                 <button
                   type="button"
                   onClick={() => fillQuickUser('manager@jslabels.com')}
-                  className="px-2.5 py-1 text-[11px] font-medium text-[#111827] bg-[#F5F7FA] hover:bg-[#E5E7EB] rounded-lg transition cursor-pointer"
+                  className="px-2.5 py-1 2xl:px-3.5 2xl:py-1.5 text-[11px] 2xl:text-xs font-medium text-[#111827] bg-[#F5F7FA] hover:bg-[#E5E7EB] rounded-lg transition cursor-pointer"
                 >
                   Manager
                 </button>
                 <button
                   type="button"
                   onClick={() => fillQuickUser('caller@jslabels.com')}
-                  className="px-2.5 py-1 text-[11px] font-medium text-[#111827] bg-[#F5F7FA] hover:bg-[#E5E7EB] rounded-lg transition cursor-pointer"
+                  className="px-2.5 py-1 2xl:px-3.5 2xl:py-1.5 text-[11px] 2xl:text-xs font-medium text-[#111827] bg-[#F5F7FA] hover:bg-[#E5E7EB] rounded-lg transition cursor-pointer"
                 >
                   Caller
                 </button>
@@ -451,8 +455,8 @@ export default function Login() {
         </div>
 
         {/* Footer */}
-        <div className="text-center py-1 mt-auto">
-          <p className="text-[11px] text-[#6B7280] font-normal">
+        <div className="text-center py-2 shrink-0">
+          <p className="text-[11px] 2xl:text-xs text-[#6B7280] font-normal">
             © 2025 JS Labels. All rights reserved.
           </p>
         </div>

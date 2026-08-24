@@ -21,7 +21,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
     company: initialLead?.company || '',
     phone: initialLead?.phone || '',
     email: initialLead?.email || '',
-        city: '',
+    city: '',
     address: ''
   });
 
@@ -70,7 +70,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
         company: initialLead.company || '',
         phone: initialLead.phone || '',
         email: initialLead.email || '',
-            city: '',
+        city: '',
         address: ''
       });
     } else if (initialCustomer) {
@@ -273,18 +273,16 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
                   <button
                     type="button"
                     onClick={() => setCustomerMode('existing')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                      customerMode === 'existing' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
-                    }`}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${customerMode === 'existing' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                      }`}
                   >
                     Existing Customer
                   </button>
                   <button
                     type="button"
                     onClick={() => setCustomerMode('new')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                      customerMode === 'new' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
-                    }`}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${customerMode === 'new' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                      }`}
                   >
                     + New Customer
                   </button>
@@ -551,18 +549,16 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
                       <button
                         type="button"
                         onClick={() => setAdvanceReceived(false)}
-                        className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
-                          !advanceReceived ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'
-                        }`}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${!advanceReceived ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'
+                          }`}
                       >
                         No
                       </button>
                       <button
                         type="button"
                         onClick={() => setAdvanceReceived(true)}
-                        className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
-                          advanceReceived ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
-                        }`}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${advanceReceived ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                          }`}
                       >
                         Yes
                       </button>

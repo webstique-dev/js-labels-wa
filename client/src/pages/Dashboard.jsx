@@ -38,7 +38,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 /**
  * Responsive Skeleton Loader for Dashboard matching exact 3-row layout
  */
-function DashboardSkeleton() {
+function DashboardSkeleton({ isManagerOrAdmin = true }) {
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
       {/* Header Banner Skeleton */}
@@ -53,75 +53,25 @@ function DashboardSkeleton() {
         </div>
       </div>
 
-      {/* Row 1: Top 4 KPI Stat Cards Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        {Array.from({ length: 4 }).map((_, idx) => (
-          <div key={idx} className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
-            <div className="flex items-center gap-3">
-              <Skeleton className="w-10 h-10 rounded-full shrink-0" />
-              <Skeleton className="h-4 w-28" />
-            </div>
-            <Skeleton className="h-8 w-24 mt-2" />
-            <Skeleton className="h-4 w-36" />
-          </div>
-        ))}
-      </div>
-
-      {/* Row 2: 3 Middle Widgets Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6">
-        {/* Widget 1: Line Chart Skeleton */}
-        <div className="xl:col-span-5 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-7 w-24 rounded-lg" />
-          </div>
-          <div className="space-y-1 pt-2">
-            <Skeleton className="h-9 w-24" />
-            <Skeleton className="h-4 w-36" />
-          </div>
-          <Skeleton className="h-56 w-full rounded-xl" />
-        </div>
-
-        {/* Widget 2: Funnel Skeleton */}
-        <div className="xl:col-span-4 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-5">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-7 w-24 rounded-lg" />
-          </div>
-          <div className="space-y-4 py-2">
-            {Array.from({ length: 5 }).map((_, fIdx) => (
-              <div key={fIdx} className="flex items-center justify-between gap-3">
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-6 flex-1 rounded-lg" />
-                <Skeleton className="h-4 w-12" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Widget 3: Recent Activities Skeleton */}
-        <div className="xl:col-span-3 md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-5 w-36" />
-            <Skeleton className="h-4 w-16" />
-          </div>
-          <div className="space-y-3.5 pt-1">
-            {Array.from({ length: 5 }).map((_, aIdx) => (
-              <div key={aIdx} className="flex items-center gap-3">
-                <Skeleton className="w-9 h-9 rounded-full shrink-0" />
-                <div className="space-y-1.5 flex-1">
-                  <Skeleton className="h-3.5 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
+      {isManagerOrAdmin && (
+        <>
+          {/* Row 1: Top 4 KPI Stat Cards Skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="w-10 h-10 rounded-full shrink-0" />
+                  <Skeleton className="h-4 w-28" />
                 </div>
-                <Skeleton className="h-3 w-12 shrink-0" />
+                <Skeleton className="h-8 w-24 mt-2" />
+                <Skeleton className="h-4 w-36" />
               </div>
             ))}
           </div>
-          <Skeleton className="h-9 w-full rounded-xl" />
-        </div>
-      </div>
+        </>
+      )}
 
-      {/* Row 3: Bottom 4 KPI Action Cards Skeleton */}
+      {/* Row 2: KPI Action Cards Skeleton */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
         {Array.from({ length: 4 }).map((_, idx) => (
           <div key={idx} className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
@@ -134,6 +84,64 @@ function DashboardSkeleton() {
           </div>
         ))}
       </div>
+
+      {isManagerOrAdmin && (
+        <>
+          {/* Row 3: 3 Middle Widgets Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6">
+            {/* Widget 1: Line Chart Skeleton */}
+            <div className="xl:col-span-5 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-5 w-48" />
+                <Skeleton className="h-7 w-24 rounded-lg" />
+              </div>
+              <div className="space-y-1 pt-2">
+                <Skeleton className="h-9 w-24" />
+                <Skeleton className="h-4 w-36" />
+              </div>
+              <Skeleton className="h-56 w-full rounded-xl" />
+            </div>
+
+            {/* Widget 2: Funnel Skeleton */}
+            <div className="xl:col-span-4 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-5">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-7 w-24 rounded-lg" />
+              </div>
+              <div className="space-y-4 py-2">
+                {Array.from({ length: 5 }).map((_, fIdx) => (
+                  <div key={fIdx} className="flex items-center justify-between gap-3">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-6 flex-1 rounded-lg" />
+                    <Skeleton className="h-4 w-12" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Widget 3: Recent Activities Skeleton */}
+            <div className="xl:col-span-3 md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+              <div className="space-y-3.5 pt-1">
+                {Array.from({ length: 5 }).map((_, aIdx) => (
+                  <div key={aIdx} className="flex items-center gap-3">
+                    <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+                    <div className="space-y-1.5 flex-1">
+                      <Skeleton className="h-3.5 w-3/4" />
+                      <Skeleton className="h-3 w-1/2" />
+                    </div>
+                    <Skeleton className="h-3 w-12 shrink-0" />
+                  </div>
+                ))}
+              </div>
+              <Skeleton className="h-9 w-full rounded-xl" />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -164,6 +172,8 @@ export default function Dashboard() {
   const [modalSearch, setModalSearch] = useState('');
   const [modalTypeFilter, setModalTypeFilter] = useState('all');
 
+  const isManagerOrAdmin = role === 'super_admin' || role === 'manager';
+
   const handleOpenActivitiesModal = async () => {
     setShowActivitiesModal(true);
     try {
@@ -191,8 +201,6 @@ export default function Dashboard() {
     const matchesType = modalTypeFilter === 'all' || act.type === modalTypeFilter;
     return matchesSearch && matchesType;
   });
-
-  const isManagerOrAdmin = role === 'super_admin' || role === 'manager';
 
   // Fetch executive callers for admin/manager dropdown
   useEffect(() => {
@@ -283,7 +291,7 @@ export default function Dashboard() {
   };
 
   if (loading && !summary) {
-    return <DashboardSkeleton />;
+    return <DashboardSkeleton isManagerOrAdmin={isManagerOrAdmin} />;
   }
 
   // Calculate funnel stage values from DB response
@@ -302,8 +310,14 @@ export default function Dashboard() {
       {/* Header Banner */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Executive Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1 font-normal">Real-time CRM metrics, conversion performance, and reorder forecasts</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            {isManagerOrAdmin ? 'Executive Dashboard' : 'Caller Dashboard'}
+          </h1>
+          <p className="text-slate-500 text-sm mt-1 font-normal">
+            {isManagerOrAdmin
+              ? 'Real-time CRM metrics, conversion performance, and reorder forecasts'
+              : 'My active follow-ups, pending reminders, and quick actions'}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -325,378 +339,173 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Interactive Filters Toolbar Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-bold text-slate-700 tracking-tight uppercase">Filters:</span>
+      {isManagerOrAdmin && (
+        <>
+          {/* Interactive Filters Toolbar Bar */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs font-bold text-slate-700 tracking-tight uppercase">Filters:</span>
 
-          {/* 1. Time Period Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
-            <Calendar size={14} className="text-slate-400" />
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
-            >
-              <option value="this_month">This Month</option>
-              <option value="today">Today</option>
-              <option value="this_week">This Week</option>
-              <option value="this_quarter">This Quarter</option>
-              <option value="this_year">This Year</option>
-              <option value="all_time">All Time</option>
-            </select>
-          </div>
+              {/* 1. Time Period Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
+                <Calendar size={14} className="text-slate-400" />
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
+                >
+                  <option value="this_month">This Month</option>
+                  <option value="today">Today</option>
+                  <option value="this_week">This Week</option>
+                  <option value="this_quarter">This Quarter</option>
+                  <option value="this_year">This Year</option>
+                  <option value="all_time">All Time</option>
+                </select>
+              </div>
 
-          {/* 2. Executive / Caller Filter (Admin/Manager only) */}
-          {isManagerOrAdmin && (
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
-              <Users size={14} className="text-slate-400" />
-              <select
-                value={assignedTo}
-                onChange={(e) => setAssignedTo(e.target.value)}
-                className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
+              {/* 2. Executive / Caller Filter (Admin/Manager only) */}
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
+                <Users size={14} className="text-slate-400" />
+                <select
+                  value={assignedTo}
+                  onChange={(e) => setAssignedTo(e.target.value)}
+                  className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
+                >
+                  <option value="all">All Executives</option>
+                  {callers.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 3. Lead Source Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
+                <FileText size={14} className="text-slate-400" />
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                  className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
+                >
+                  <option value="all">All Sources</option>
+                  <option value="Website">Website</option>
+                  <option value="Tele-caller">Tele-caller</option>
+                  <option value="Referral">Referral</option>
+                  <option value="Exhibition">Exhibition</option>
+                  <option value="Direct">Direct</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Clear Filters Action */}
+            {isFilterActive && (
+              <button
+                onClick={handleResetFilters}
+                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
               >
-                <option value="all">All Executives</option>
-                {callers.map((c) => (
-                  <option key={c._id} value={c._id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* 3. Lead Source Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
-            <FileText size={14} className="text-slate-400" />
-            <select
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
-            >
-              <option value="all">All Sources</option>
-              <option value="Website">Website</option>
-              <option value="Tele-caller">Tele-caller</option>
-              <option value="Referral">Referral</option>
-              <option value="Exhibition">Exhibition</option>
-              <option value="Direct">Direct</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Clear Filters Action */}
-        {isFilterActive && (
-          <button
-            onClick={handleResetFilters}
-            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
-          >
-            <X size={14} />
-            <span>Reset Filters</span>
-          </button>
-        )}
-      </div>
-
-      {/* ROW 1: Top 4 KPI Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        
-        {/* 1. Total Leads */}
-        <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 transition">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Users size={20} />
-            </div>
-            <span className="text-slate-500 font-semibold text-xs tracking-tight">Total Leads</span>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-slate-900 tracking-tight">
-              {(summary?.totalLeads?.count ?? 0).toLocaleString('en-IN')}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs">
-              <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                <ArrowUp size={13} strokeWidth={2.5} />
-                <span>{summary?.totalLeads?.change ?? 0}%</span>
-              </span>
-              <span className="text-slate-400 font-normal">vs last month</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Converted Customers */}
-        <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 transition">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <UserCheck size={20} />
-            </div>
-            <span className="text-slate-500 font-semibold text-xs tracking-tight">Converted Customers</span>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-slate-900 tracking-tight">
-              {(summary?.convertedCustomers?.count ?? 0).toLocaleString('en-IN')}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs">
-              <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                <ArrowUp size={13} strokeWidth={2.5} />
-                <span>{summary?.convertedCustomers?.change ?? 0}%</span>
-              </span>
-              <span className="text-slate-400 font-normal">vs last month</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Orders Delivered */}
-        <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 transition">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
-              <Package size={20} />
-            </div>
-            <span className="text-slate-500 font-semibold text-xs tracking-tight">Orders Delivered</span>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-slate-900 tracking-tight">
-              {(summary?.ordersDelivered?.count ?? 0).toLocaleString('en-IN')}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs">
-              <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                <ArrowUp size={13} strokeWidth={2.5} />
-                <span>{summary?.ordersDelivered?.change ?? 0}%</span>
-              </span>
-              <span className="text-slate-400 font-normal">vs last month</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 4. Repeat Orders */}
-        <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 transition">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <RefreshCw size={20} />
-            </div>
-            <span className="text-slate-500 font-semibold text-xs tracking-tight">Repeat Orders</span>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-slate-900 tracking-tight">
-              {(summary?.repeatOrders?.count ?? 0).toLocaleString('en-IN')}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs">
-              <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                <ArrowUp size={13} strokeWidth={2.5} />
-                <span>{summary?.repeatOrders?.change ?? 0}%</span>
-              </span>
-              <span className="text-slate-400 font-normal">vs last month</span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ROW 2: 3 Main Middle Widgets (Conversion Chart, Sales Funnel, Recent Activities) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6">
-        
-        {/* Widget 1: Lead to Customer Conversion Line Chart */}
-        <div className="xl:col-span-5 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Lead to Customer Conversion</h3>
-            <div className="relative inline-block">
-              <select
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                className="px-2.5 py-1 bg-white border border-slate-200/90 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs cursor-pointer focus:outline-none"
-              >
-                <option value="this_month">This Month</option>
-                <option value="today">Today</option>
-                <option value="this_week">This Week</option>
-                <option value="this_quarter">This Quarter</option>
-                <option value="this_year">This Year</option>
-                <option value="all_time">All Time</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <div className="text-3xl font-bold text-slate-900 tracking-tight">{latestConversionRate}%</div>
-            <div className="flex items-center gap-1.5 mt-1 text-xs">
-              <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                <ArrowUp size={13} strokeWidth={2.5} />
-                <span>0%</span>
-              </span>
-              <span className="text-slate-400 font-normal">vs last month</span>
-            </div>
-          </div>
-
-          <div className="h-56 w-full pt-2">
-            {trendData && trendData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="conversionGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22C55E" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#22C55E" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#64748B' }} unit="%" ticks={[0, 15, 30, 45, 100]} domain={[0, 100]} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#0F172A', borderRadius: '12px', border: 'none', color: '#FFF', padding: '8px 12px' }}
-                    itemStyle={{ color: '#4ADE80', fontWeight: '600', fontSize: '12px' }}
-                    formatter={(val) => [`${val}%`, 'Conversion Rate']}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="conversionRate"
-                    stroke="#22C55E"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#conversionGrad)"
-                    dot={{ fill: '#22C55E', r: 4, stroke: '#FFFFFF', strokeWidth: 2 }}
-                    activeDot={{ r: 6, fill: '#16A34A', stroke: '#FFFFFF', strokeWidth: 2 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-2 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                <TrendingUp size={24} className="text-slate-300" />
-                <p className="text-xs font-semibold text-slate-500">No Conversion Trend Data</p>
-                <p className="text-[10px] text-slate-400 font-normal">Conversion stats will appear here as leads progress</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Widget 2: Sales Funnel */}
-        <div className="xl:col-span-4 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Sales Funnel</h3>
-            <div className="relative inline-block">
-              <select
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                className="px-2.5 py-1 bg-white border border-slate-200/90 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs cursor-pointer focus:outline-none"
-              >
-                <option value="this_month">This Month</option>
-                <option value="today">Today</option>
-                <option value="this_week">This Week</option>
-                <option value="this_quarter">This Quarter</option>
-                <option value="this_year">This Year</option>
-                <option value="all_time">All Time</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Visual SVG & Layered Funnel Chart */}
-          <div className="space-y-2.5 py-1">
-            {/* Stage 1: Leads */}
-            <div className="flex items-center justify-between text-xs gap-3">
-              <span className="w-24 font-semibold text-slate-600 truncate">Leads</span>
-              <div className="flex-1 flex justify-center">
-                <div className="h-7 bg-[#E0E7FF] rounded-md w-full max-w-[220px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
-                </div>
-              </div>
-              <span className="w-14 text-right font-bold text-slate-900">{funnelLeads.toLocaleString('en-IN')}</span>
-            </div>
-
-            {/* Stage 2: Contacted */}
-            <div className="flex items-center justify-between text-xs gap-3">
-              <span className="w-24 font-semibold text-slate-600 truncate">Contacted</span>
-              <div className="flex-1 flex justify-center">
-                <div className="h-7 bg-[#DBEAFE] rounded-md w-[80%] max-w-[176px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
-                </div>
-              </div>
-              <span className="w-14 text-right font-bold text-slate-900">{funnelContacted.toLocaleString('en-IN')}</span>
-            </div>
-
-            {/* Stage 3: Follow Up */}
-            <div className="flex items-center justify-between text-xs gap-3">
-              <span className="w-24 font-semibold text-slate-600 truncate">Follow Up</span>
-              <div className="flex-1 flex justify-center">
-                <div className="h-7 bg-[#D1FAE5] rounded-md w-[60%] max-w-[132px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
-                </div>
-              </div>
-              <span className="w-14 text-right font-bold text-slate-900">{funnelFollowUp.toLocaleString('en-IN')}</span>
-            </div>
-
-            {/* Stage 4: Order Received */}
-            <div className="flex items-center justify-between text-xs gap-3">
-              <span className="w-24 font-semibold text-slate-600 truncate">Order Received</span>
-              <div className="flex-1 flex justify-center">
-                <div className="h-7 bg-[#FFEDD5] rounded-md w-[40%] max-w-[88px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
-                </div>
-              </div>
-              <span className="w-14 text-right font-bold text-slate-900">{funnelOrderReceived.toLocaleString('en-IN')}</span>
-            </div>
-
-            {/* Stage 5: Won */}
-            <div className="flex items-center justify-between text-xs gap-3">
-              <span className="w-24 font-semibold text-slate-600 truncate">Won</span>
-              <div className="flex-1 flex justify-center">
-                <div className="h-7 bg-[#FCA5A5] rounded-b-lg w-[22%] max-w-[48px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
-                </div>
-              </div>
-              <span className="w-14 text-right font-bold text-slate-900">{funnelWon.toLocaleString('en-IN')}</span>
-            </div>
-          </div>
-
-          <div className="pt-2 text-center">
-            <Link to="/leads" className="text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1">
-              <span>View Full Pipeline</span>
-              <ArrowRight size={12} />
-            </Link>
-          </div>
-        </div>
-
-        {/* Widget 3: Recent Activities */}
-        <div className="xl:col-span-3 md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-slate-900 text-sm tracking-tight">Recent Activities</h3>
-            <button
-              onClick={handleOpenActivitiesModal}
-              className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
-            >
-              View All
-            </button>
-          </div>
-
-          <div className="space-y-3 overflow-hidden">
-            {activities.length > 0 ? (
-              activities.slice(0, 5).map((act, idx) => {
-                const iconInfo = getActivityIcon(act, idx);
-                return (
-                  <div key={act._id || idx} className="flex items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-9 h-9 rounded-xl ${iconInfo.bg} flex items-center justify-center shrink-0 border`}>
-                        {iconInfo.icon}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900 truncate leading-tight">{act.description}</p>
-                        <p className="text-[11px] text-slate-400 truncate mt-0.5 font-normal">
-                          {act.createdBy?.name || 'System User'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-medium shrink-0">
-                      {new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="py-12 text-center text-slate-400 text-xs font-normal">
-                No recent activity records found.
-              </div>
+                <X size={14} />
+                <span>Reset Filters</span>
+              </button>
             )}
           </div>
 
-          <button
-            onClick={handleOpenActivitiesModal}
-            className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-200/80 text-slate-700 font-semibold text-xs rounded-xl transition text-center shadow-2xs cursor-pointer"
-          >
-            View All Activities
-          </button>
-        </div>
+          {/* ROW 1: Top 4 KPI Stat Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 2xl:gap-6">
+            
+            {/* 1. Total Leads */}
+            <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 hover:shadow-md transition duration-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <Users size={20} />
+                </div>
+                <span className="text-slate-500 font-semibold text-xs 2xl:text-sm tracking-tight">Total Leads</span>
+              </div>
+              <div>
+                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">
+                  {(summary?.totalLeads?.count ?? 0).toLocaleString('en-IN')}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 text-xs 2xl:text-sm">
+                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
+                    <ArrowUp size={13} strokeWidth={2.5} />
+                    <span>{summary?.totalLeads?.change ?? 0}%</span>
+                  </span>
+                  <span className="text-slate-400 font-normal">vs last month</span>
+                </div>
+              </div>
+            </div>
 
-      </div>
+            {/* 2. Converted Customers */}
+            <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 hover:shadow-md transition duration-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <UserCheck size={20} />
+                </div>
+                <span className="text-slate-500 font-semibold text-xs 2xl:text-sm tracking-tight">Converted Customers</span>
+              </div>
+              <div>
+                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">
+                  {(summary?.convertedCustomers?.count ?? 0).toLocaleString('en-IN')}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 text-xs 2xl:text-sm">
+                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
+                    <ArrowUp size={13} strokeWidth={2.5} />
+                    <span>{summary?.convertedCustomers?.change ?? 0}%</span>
+                  </span>
+                  <span className="text-slate-400 font-normal">vs last month</span>
+                </div>
+              </div>
+            </div>
 
-      {/* ROW 3: Bottom 4 KPI Action Cards */}
+            {/* 3. Orders Delivered */}
+            <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 hover:shadow-md transition duration-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+                  <Package size={20} />
+                </div>
+                <span className="text-slate-500 font-semibold text-xs 2xl:text-sm tracking-tight">Orders Delivered</span>
+              </div>
+              <div>
+                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">
+                  {(summary?.ordersDelivered?.count ?? 0).toLocaleString('en-IN')}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 text-xs 2xl:text-sm">
+                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
+                    <ArrowUp size={13} strokeWidth={2.5} />
+                    <span>{summary?.ordersDelivered?.change ?? 0}%</span>
+                  </span>
+                  <span className="text-slate-400 font-normal">vs last month</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Repeat Orders */}
+            <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 hover:shadow-md transition duration-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <RefreshCw size={20} />
+                </div>
+                <span className="text-slate-500 font-semibold text-xs 2xl:text-sm tracking-tight">Repeat Orders</span>
+              </div>
+              <div>
+                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">
+                  {(summary?.repeatOrders?.count ?? 0).toLocaleString('en-IN')}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 text-xs 2xl:text-sm">
+                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
+                    <ArrowUp size={13} strokeWidth={2.5} />
+                    <span>{summary?.repeatOrders?.change ?? 0}%</span>
+                  </span>
+                  <span className="text-slate-400 font-normal">vs last month</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </>
+      )}
+
+      {/* KPI Action Cards Row (Overdue Follow-ups, Due Today, Reminders, Forecast) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
         
         {/* 1. Overdue Follow-ups */}
@@ -768,6 +577,217 @@ export default function Dashboard() {
         </Link>
 
       </div>
+
+      {isManagerOrAdmin && (
+        <>
+          {/* ROW 2: 3 Main Middle Widgets (Conversion Chart, Sales Funnel, Recent Activities) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6 2xl:gap-8">
+            
+            {/* Widget 1: Lead to Customer Conversion Line Chart */}
+            <div className="xl:col-span-5 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-sm 2xl:text-base tracking-tight">Lead to Customer Conversion</h3>
+                <div className="relative inline-block">
+                  <select
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                    className="px-2.5 py-1 bg-white border border-slate-200/90 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs cursor-pointer focus:outline-none"
+                  >
+                    <option value="this_month">This Month</option>
+                    <option value="today">Today</option>
+                    <option value="this_week">This Week</option>
+                    <option value="this_quarter">This Quarter</option>
+                    <option value="this_year">This Year</option>
+                    <option value="all_time">All Time</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">{latestConversionRate}%</div>
+                <div className="flex items-center gap-1.5 mt-1 text-xs 2xl:text-sm">
+                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
+                    <ArrowUp size={13} strokeWidth={2.5} />
+                    <span>0%</span>
+                  </span>
+                  <span className="text-slate-400 font-normal">vs last month</span>
+                </div>
+              </div>
+
+              <div className="h-56 md:h-64 lg:h-72 2xl:h-80 w-full pt-2">
+                {trendData && trendData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="conversionGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#22C55E" stopOpacity={0.2} />
+                          <stop offset="95%" stopColor="#22C55E" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748B' }} unit="%" ticks={[0, 15, 30, 45, 100]} domain={[0, 100]} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#0F172A', borderRadius: '12px', border: 'none', color: '#FFF', padding: '8px 12px' }}
+                        itemStyle={{ color: '#4ADE80', fontWeight: '600', fontSize: '12px' }}
+                        formatter={(val) => [`${val}%`, 'Conversion Rate']}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="conversionRate"
+                        stroke="#22C55E"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#conversionGrad)"
+                        dot={{ fill: '#22C55E', r: 4, stroke: '#FFFFFF', strokeWidth: 2 }}
+                        activeDot={{ r: 6, fill: '#16A34A', stroke: '#FFFFFF', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center space-y-2 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                    <TrendingUp size={24} className="text-slate-300" />
+                    <p className="text-xs font-semibold text-slate-500">No Conversion Trend Data</p>
+                    <p className="text-[10px] text-slate-400 font-normal">Conversion stats will appear here as leads progress</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Widget 2: Sales Funnel */}
+            <div className="xl:col-span-4 md:col-span-1 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-sm tracking-tight">Sales Funnel</h3>
+                <div className="relative inline-block">
+                  <select
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                    className="px-2.5 py-1 bg-white border border-slate-200/90 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs cursor-pointer focus:outline-none"
+                  >
+                    <option value="this_month">This Month</option>
+                    <option value="today">Today</option>
+                    <option value="this_week">This Week</option>
+                    <option value="this_quarter">This Quarter</option>
+                    <option value="this_year">This Year</option>
+                    <option value="all_time">All Time</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Visual SVG & Layered Funnel Chart */}
+              <div className="space-y-2.5 py-1">
+                {/* Stage 1: Leads */}
+                <div className="flex items-center justify-between text-xs gap-3">
+                  <span className="w-24 font-semibold text-slate-600 truncate">Leads</span>
+                  <div className="flex-1 flex justify-center">
+                    <div className="h-7 bg-[#E0E7FF] rounded-md w-full max-w-[220px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
+                    </div>
+                  </div>
+                  <span className="w-14 text-right font-bold text-slate-900">{funnelLeads.toLocaleString('en-IN')}</span>
+                </div>
+
+                {/* Stage 2: Contacted */}
+                <div className="flex items-center justify-between text-xs gap-3">
+                  <span className="w-24 font-semibold text-slate-600 truncate">Contacted</span>
+                  <div className="flex-1 flex justify-center">
+                    <div className="h-7 bg-[#DBEAFE] rounded-md w-[80%] max-w-[176px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
+                    </div>
+                  </div>
+                  <span className="w-14 text-right font-bold text-slate-900">{funnelContacted.toLocaleString('en-IN')}</span>
+                </div>
+
+                {/* Stage 3: Follow Up */}
+                <div className="flex items-center justify-between text-xs gap-3">
+                  <span className="w-24 font-semibold text-slate-600 truncate">Follow Up</span>
+                  <div className="flex-1 flex justify-center">
+                    <div className="h-7 bg-[#D1FAE5] rounded-md w-[60%] max-w-[132px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
+                    </div>
+                  </div>
+                  <span className="w-14 text-right font-bold text-slate-900">{funnelFollowUp.toLocaleString('en-IN')}</span>
+                </div>
+
+                {/* Stage 4: Order Received */}
+                <div className="flex items-center justify-between text-xs gap-3">
+                  <span className="w-24 font-semibold text-slate-600 truncate">Order Received</span>
+                  <div className="flex-1 flex justify-center">
+                    <div className="h-7 bg-[#FFEDD5] rounded-md w-[40%] max-w-[88px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
+                    </div>
+                  </div>
+                  <span className="w-14 text-right font-bold text-slate-900">{funnelOrderReceived.toLocaleString('en-IN')}</span>
+                </div>
+
+                {/* Stage 5: Won */}
+                <div className="flex items-center justify-between text-xs gap-3">
+                  <span className="w-24 font-semibold text-slate-600 truncate">Won</span>
+                  <div className="flex-1 flex justify-center">
+                    <div className="h-7 bg-[#FCA5A5] rounded-b-lg w-[22%] max-w-[48px] flex items-center justify-center transition-all duration-300 hover:brightness-95">
+                    </div>
+                  </div>
+                  <span className="w-14 text-right font-bold text-slate-900">{funnelWon.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              <div className="pt-2 text-center">
+                <Link to="/leads" className="text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1">
+                  <span>View Full Pipeline</span>
+                  <ArrowRight size={12} />
+                </Link>
+              </div>
+            </div>
+
+            {/* Widget 3: Recent Activities */}
+            <div className="xl:col-span-3 md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-sm tracking-tight">Recent Activities</h3>
+                <button
+                  onClick={handleOpenActivitiesModal}
+                  className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                >
+                  View All
+                </button>
+              </div>
+
+              <div className="space-y-3 overflow-hidden">
+                {activities.length > 0 ? (
+                  activities.slice(0, 5).map((act, idx) => {
+                    const iconInfo = getActivityIcon(act, idx);
+                    return (
+                      <div key={act._id || idx} className="flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-9 h-9 rounded-xl ${iconInfo.bg} flex items-center justify-center shrink-0 border`}>
+                            {iconInfo.icon}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 truncate leading-tight">{act.description}</p>
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5 font-normal">
+                              {act.createdBy?.name || 'System User'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-medium shrink-0">
+                          {new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-12 text-center text-slate-400 text-xs font-normal">
+                    No recent activity records found.
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={handleOpenActivitiesModal}
+                className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-200/80 text-slate-700 font-semibold text-xs rounded-xl transition text-center shadow-2xs cursor-pointer"
+              >
+                View All Activities
+              </button>
+            </div>
+
+          </div>
+        </>
+      )}
 
       {/* View All Activities Popup Modal */}
       {showActivitiesModal && (
