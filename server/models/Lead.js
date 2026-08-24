@@ -8,7 +8,7 @@ const leadSchema = new mongoose.Schema({
   email: { type: String },
   source: { type: String, enum: ['website', 'referral', 'walk_in', 'google_ads', 'tele_caller', 'other', 'Website', 'Referral', 'Google Ads', 'Tele Caller', 'Walk-in', null, ''], default: null },
   priority: { type: String, enum: ['high', 'medium', 'low'], default: 'medium' },
-  status: { type: String, enum: ['new', 'contacted', 'follow_up', 'won', 'cancelled'], default: 'new' },
+  status: { type: String, enum: ['new', 'contacted', 'follow_up', 'won', 'cancelled', 'order_lost', 'order-lost'], default: 'new' },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   gstNo: { type: String },

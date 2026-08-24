@@ -26,7 +26,16 @@ const { initReorderReminderJob } = require('./jobs/reorderReminderJob');
 const app = express();
 
 // Connect to MongoDB
-connectDB();
+connectDB().then(() => {
+  const Lead = require('./models/Lead');
+  Lead.updateMany({ status: 'rejected' }, { status: 'cancelled' })
+    .then(res => {
+      if (res.modifiedCount > 0) {
+        console.log(`[DB Migration] Migrated ${res.modifiedCount} legacy 'rejected' leads to 'cancelled' (Order-Lost)`);
+      }
+    })
+    .catch(err => console.warn('Non-fatal lead status migration check:', err.message));
+});
 
 // Initialize Cron Jobs
 initReorderReminderJob();

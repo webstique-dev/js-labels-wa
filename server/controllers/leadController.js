@@ -143,13 +143,14 @@ const updateLeadStatus = async (req, res) => {
     const { id } = req.params;
     const { status, cancelReason, followUpDate, followUpTime, notes } = req.body;
 
-    const validStatuses = ['new', 'contacted', 'follow_up', 'won', 'cancelled'];
+    const isOrderLostTarget = ['cancelled', 'order_lost', 'order-lost'].includes(status);
+    const validStatuses = ['new', 'contacted', 'follow_up', 'won', 'cancelled', 'order_lost', 'order-lost'];
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({ message: 'Invalid lead status' });
     }
 
-    if (status === 'cancelled' && (!cancelReason || !cancelReason.trim())) {
-      return res.status(400).json({ message: 'Cancellation reason is required when cancelling a lead' });
+    if (isOrderLostTarget && (!cancelReason || !cancelReason.trim())) {
+      return res.status(400).json({ message: 'Reason is required when marking a lead as Order-Lost' });
     }
 
     const lead = await Lead.findById(id);
@@ -162,15 +163,24 @@ const updateLeadStatus = async (req, res) => {
       return res.status(403).json({ message: 'Forbidden: You can only update leads assigned to you' });
     }
 
-    const ALLOWED_TRANSITIONS = {
-      new: ['contacted', 'follow_up', 'won', 'cancelled'],
-      contacted: ['new', 'follow_up', 'won', 'cancelled'],
-      follow_up: ['new', 'contacted', 'follow_up', 'won', 'cancelled'],
-      won: ['new', 'contacted', 'follow_up', 'cancelled'],
-      cancelled: ['new', 'contacted', 'follow_up', 'won']
-    };
-
     const oldStatus = lead.status || 'new';
+
+    // Strict validation: Order-Lost can ONLY be moved to from 'contacted' or 'follow_up'
+    if (isOrderLostTarget && !['contacted', 'follow_up'].includes(oldStatus)) {
+      return res.status(400).json({
+        message: 'Leads can only be moved to Order-Lost from Contacted or Follow-up stages'
+      });
+    }
+
+    const ALLOWED_TRANSITIONS = {
+      new: ['contacted', 'follow_up', 'won'],
+      contacted: ['new', 'follow_up', 'won', 'cancelled', 'order_lost', 'order-lost'],
+      follow_up: ['new', 'contacted', 'follow_up', 'won', 'cancelled', 'order_lost', 'order-lost'],
+      won: ['new', 'contacted', 'follow_up'],
+      cancelled: ['new', 'contacted', 'follow_up', 'won'],
+      order_lost: ['new', 'contacted', 'follow_up', 'won'],
+      'order-lost': ['new', 'contacted', 'follow_up', 'won']
+    };
 
     if (oldStatus !== status) {
       const allowedNext = ALLOWED_TRANSITIONS[oldStatus] || [];
@@ -182,7 +192,7 @@ const updateLeadStatus = async (req, res) => {
     }
 
     lead.status = status;
-    if (status === 'cancelled') {
+    if (isOrderLostTarget) {
       lead.cancelReason = cancelReason;
     } else {
       lead.cancelReason = undefined;

@@ -78,7 +78,7 @@ const COLUMNS = [
   },
   {
     id: 'cancelled',
-    title: 'Rejected',
+    title: 'Order-Lost',
     icon: XCircle,
     iconBg: 'bg-rose-50 text-rose-600',
     avatarBg: 'bg-rose-100 text-rose-700',
@@ -393,9 +393,12 @@ export default function Leads() {
     const sourceStatus = source.droppableId;
     const destStatus = destination.droppableId;
 
-    // Validate Kanban status transition graph: snap back silently if invalid
+    // Validate Kanban status transition graph: snap back with toast if invalid
     const allowed = ALLOWED_KANBAN_TRANSITIONS[sourceStatus] || [];
     if (!allowed.includes(destStatus)) {
+      if (destStatus === 'cancelled') {
+        notify.error('Leads can only be moved to Order-Lost from Contacted or Follow-up stages');
+      }
       return;
     }
 
@@ -417,6 +420,10 @@ export default function Leads() {
     }
 
     if (destStatus === 'cancelled') {
+      if (!['contacted', 'follow_up'].includes(sourceStatus)) {
+        notify.error('Leads can only be moved to Order-Lost from Contacted or Follow-up stages');
+        return;
+      }
       setPendingCancelMove({
         leadId: draggableId,
         sourceStatus,
@@ -446,7 +453,7 @@ export default function Leads() {
   // Submit Cancel Reason
   const confirmCancelMove = async () => {
     if (!pendingCancelMove || !cancelReasonInput.trim()) {
-      notify.error('Please provide a reason for cancellation');
+      notify.error('Please provide a reason for marking lead as Order-Lost');
       return;
     }
 
@@ -459,10 +466,10 @@ export default function Leads() {
         status: destStatus,
         cancelReason: cancelReasonInput
       });
-      notify.info('Lead marked as cancelled');
+      notify.info('Lead marked as Order-Lost');
     } catch (err) {
       setLeads(leads);
-      notify.error(err.response?.data?.message || 'Failed to cancel lead');
+      notify.error(err.response?.data?.message || 'Failed to mark lead as Order-Lost');
     } finally {
       setPendingCancelMove(null);
       setCancelReasonInput('');
@@ -871,8 +878,8 @@ export default function Leads() {
         </div>
       ) : viewMode === 'kanban' ? (
         <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="flex md:grid md:grid-cols-4 lg:grid-cols-4 gap-4 items-start overflow-x-auto snap-x snap-mandatory scrollbar-hide">
-            {COLUMNS.filter(c => c.id !== 'cancelled').map((column) => {
+          <div className="flex gap-4 items-start overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scrollbar-hide touch-pan-x min-w-full">
+            {COLUMNS.map((column) => {
               let columnLeads = filteredLeads.filter(l => l.status === column.id);
 
               // Automatically position and sort follow-up cards chronologically by scheduled time
@@ -906,15 +913,15 @@ export default function Leads() {
               return (
                 <div
                   key={column.id}
-                  className={`rounded-2xl border shadow-2xs p-3 flex flex-col min-w-[85vw] sm:min-w-[280px] md:min-w-0 snap-center flex-shrink-0 md:flex-shrink transition-all duration-200 ${isInvalidTarget
+                  className={`w-80 sm:w-[320px] min-w-[300px] flex-shrink-0 snap-start rounded-2xl border shadow-2xs p-3 flex flex-col transition-all duration-200 ${isInvalidTarget
                     ? 'bg-rose-50/20 border-dashed border-rose-300 opacity-40 grayscale pointer-events-none'
                     : isDraggingCard && activeDragSourceStatus !== column.id
                       ? 'bg-emerald-50/20 border-emerald-400 ring-2 ring-emerald-500/30'
                       : 'bg-white/70 border-slate-200/80'
                     }`}
                 >
-                  {/* Column Header */}
-                  <div className="p-3 bg-white rounded-xl border border-slate-200/60 shadow-2xs flex items-center justify-between mb-3">
+                  {/* Sticky Column Header */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/60 shadow-2xs flex items-center justify-between mb-3 sticky top-0 z-10">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${column.iconBg}`}>
                         <IconComp size={18} />
@@ -961,7 +968,7 @@ export default function Leads() {
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`space-y-3.5 overflow-y-auto max-h-[calc(100vh-280px)] min-h-[120px] scrollbar-hide flex-1 p-1 transition-colors ${snapshot.isDraggingOver ? 'bg-slate-100/80 rounded-xl' : ''
+                        className={`space-y-3.5 overflow-y-auto max-h-[calc(100vh-270px)] min-h-[140px] scrollbar-hide flex-1 p-1 transition-colors ${snapshot.isDraggingOver ? 'bg-slate-100/80 rounded-xl' : ''
                           }`}
                       >
                         {columnLeads.length === 0 ? (
@@ -1112,14 +1119,14 @@ export default function Leads() {
         </div>
       )}
 
-      {/* Cancel Lead Reason Modal */}
+      {/* Order-Lost Reason Modal */}
       {pendingCancelMove && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto scrollbar-hide">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-semibold text-rose-600 flex items-center gap-2">
                 <AlertTriangle size={18} />
-                <span>Mark Lead as Rejected</span>
+                <span>Mark Lead as Order-Lost</span>
               </h3>
               <button onClick={() => setPendingCancelMove(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
@@ -1127,7 +1134,7 @@ export default function Leads() {
             </div>
 
             <p className="text-xs text-slate-600 font-normal">
-              Please enter the reason for marking lead <strong className="text-slate-800">{pendingCancelMove.lead?.name}</strong> as rejected.
+              Please enter the reason for marking lead <strong className="text-slate-800">{pendingCancelMove.lead?.name}</strong> as Order-Lost.
             </p>
             <textarea
               rows={3}
@@ -1150,7 +1157,7 @@ export default function Leads() {
                 onClick={confirmCancelMove}
                 className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs"
               >
-                Submit & Reject Lead
+                Submit Order-Lost
               </button>
             </div>
           </div>
@@ -1890,7 +1897,7 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
                   </button>
                 )}
 
-                {['new', 'contacted', 'follow_up'].includes(lead.status) && (
+                {['contacted', 'follow_up'].includes(lead.status) && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1901,7 +1908,7 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
                     className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
                   >
                     <XCircle size={13} />
-                    <span>Reject Lead</span>
+                    <span>Mark as Order-Lost</span>
                   </button>
                 )}
               </div>
