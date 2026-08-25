@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { SkeletonCard, SkeletonTable } from '../components/ui/Skeleton';
 import { initiatePhoneCall, openWhatsApp, openEmail, WhatsAppIcon } from '../utils/contactUtils';
+import AccordionCard from '../components/ui/AccordionCard';
+import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
 import NewOrderModal from '../components/NewOrderModal';
 import {
   getLiveReorderProbability,
@@ -261,77 +263,77 @@ export default function Reminders() {
   return (
     <div className="space-y-6 pb-12 font-sans">
 
-      {/* Top Header & Filter Controls Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-3">
+      {/* Top Header & Filter Controls Bar wrapped in CollapsibleFilterCard */}
+      {(() => {
+        const activeCount = (activeFilterTab !== 'all' ? 1 : 0) + (searchTerm ? 1 : 0) + (isCalendarFilterActive || selectedCalendarDate ? 1 : 0);
 
-        {/* Left Priority Filter Tabs */}
-        <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide text-xs font-semibold text-slate-500">
-          <button
-            onClick={() => setActiveFilterTab('all')}
-            className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'all'
-              ? 'border-red-600 text-red-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-900'
-              }`}
+        return (
+          <CollapsibleFilterCard
+            title="Reminder Filters"
+            activeCount={activeCount}
+            onClear={handleClearCalendarFilter}
           >
-            All Reminders ({totalCount})
-          </button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              {/* Left Priority Filter Tabs */}
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide text-xs font-semibold text-slate-500 w-full sm:w-auto">
+                <button
+                  onClick={() => setActiveFilterTab('all')}
+                  className={`py-1.5 px-3 rounded-xl transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'all'
+                    ? 'bg-slate-900 text-white font-bold'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                >
+                  All ({totalCount})
+                </button>
 
-          <button
-            onClick={() => setActiveFilterTab('high')}
-            className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'high'
-              ? 'border-red-600 text-red-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-900'
-              }`}
-          >
-            High Priority ({highCount})
-          </button>
+                <button
+                  onClick={() => setActiveFilterTab('high')}
+                  className={`py-1.5 px-3 rounded-xl transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'high'
+                    ? 'bg-red-600 text-white font-bold'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                >
+                  High ({highCount})
+                </button>
 
-          <button
-            onClick={() => setActiveFilterTab('medium')}
-            className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'medium'
-              ? 'border-red-600 text-red-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-900'
-              }`}
-          >
-            Medium Priority ({mediumCount})
-          </button>
+                <button
+                  onClick={() => setActiveFilterTab('medium')}
+                  className={`py-1.5 px-3 rounded-xl transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'medium'
+                    ? 'bg-amber-600 text-white font-bold'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                >
+                  Medium ({mediumCount})
+                </button>
 
-          <button
-            onClick={() => setActiveFilterTab('low')}
-            className={`py-2 px-1 border-b-2 transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'low'
-              ? 'border-red-600 text-red-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-900'
-              }`}
-          >
-            Low Priority ({lowCount})
-          </button>
-        </div>
+                <button
+                  onClick={() => setActiveFilterTab('low')}
+                  className={`py-1.5 px-3 rounded-xl transition cursor-pointer whitespace-nowrap ${activeFilterTab === 'low'
+                    ? 'bg-emerald-600 text-white font-bold'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                >
+                  Low ({lowCount})
+                </button>
+              </div>
 
-        {/* Right Search Input & Clear Calendar Filter */}
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search customer..."
-              className="w-40 sm:w-52 pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
-            />
-            <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
-          </div>
-
-          {(isCalendarFilterActive || selectedCalendarDate || searchTerm || activeFilterTab !== 'all') && (
-            <button
-              onClick={handleClearCalendarFilter}
-              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-semibold transition cursor-pointer whitespace-nowrap"
-              title="Reset All Filters & Show All Reminders"
-            >
-              Show All Reminders
-            </button>
-          )}
-        </div>
-
-      </div>
+              {/* Right Search Input & Clear Calendar Filter */}
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <div className="relative w-full sm:w-52">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search customer..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                  <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                </div>
+              </div>
+            </div>
+          </CollapsibleFilterCard>
+        );
+      })()}
 
       {/* Main Workspace Layout (12 Columns) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -536,96 +538,161 @@ export default function Reminders() {
                 No overdue reorder reminders at this time.
               </div>
             ) : (
-              <div className="overflow-x-auto scrollbar-hide">
-                <table className="w-full text-left border-collapse text-xs min-w-[600px]">
-                  <thead>
-                    <tr className="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-semibold text-[11px]">
-                      <th className="p-3">Customer</th>
-                      <th className="p-3">Days Overdue</th>
-                      <th className="p-3">Expected Reorder Date</th>
-                      <th className="p-3">Sales Executive</th>
-                      <th className="p-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {overdueReminders.map((row) => {
-                      const cust = row.customer || {};
-                      const custName = cust.name || 'N/A';
-                      const company = cust.company || 'Individual Account';
-                      const initials = getInitials(custName);
-                      const daysOver = Math.abs(row.daysUntilReorder);
-                      const expDateStr = cust.expectedReorderDate
-                        ? new Date(cust.expectedReorderDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
-                        : 'N/A';
-                      const execName = cust.salesExecutive?.name || 'Unassigned';
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto scrollbar-hide">
+                  <table className="w-full text-left border-collapse text-xs min-w-[600px]">
+                    <thead>
+                      <tr className="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-semibold text-[11px]">
+                        <th className="p-3">Customer</th>
+                        <th className="p-3">Days Overdue</th>
+                        <th className="p-3">Expected Reorder Date</th>
+                        <th className="p-3">Sales Executive</th>
+                        <th className="p-3 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {overdueReminders.map((row) => {
+                        const cust = row.customer || {};
+                        const custName = cust.name || 'N/A';
+                        const company = cust.company || 'Individual Account';
+                        const initials = getInitials(custName);
+                        const daysOver = Math.abs(row.daysUntilReorder);
+                        const expDateStr = cust.expectedReorderDate
+                          ? new Date(cust.expectedReorderDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : 'N/A';
+                        const execName = cust.salesExecutive?.name || 'Unassigned';
 
-                      return (
-                        <tr key={row._id} className="hover:bg-slate-50/80 transition">
-
-                          {/* Customer */}
-                          <td className="p-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-full bg-rose-100 text-rose-600 font-bold text-[10px] flex items-center justify-center shrink-0">
-                                {initials}
+                        return (
+                          <tr key={row._id} className="hover:bg-slate-50/80 transition">
+                            <td className="p-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-full bg-rose-100 text-rose-600 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                  {initials}
+                                </div>
+                                <div>
+                                  <p
+                                    onClick={() => navigate(`/customers/${cust._id}`)}
+                                    className="font-bold text-slate-900 leading-tight hover:text-red-600 cursor-pointer"
+                                  >
+                                    {custName}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 font-normal">{company}</p>
+                                </div>
                               </div>
-                              <div>
-                                <p
-                                  onClick={() => navigate(`/customers/${cust._id}`)}
-                                  className="font-bold text-slate-900 leading-tight hover:text-red-600 cursor-pointer"
+                            </td>
+                            <td className="p-3 font-bold text-red-600">{daysOver} Days</td>
+                            <td className="p-3 font-medium text-slate-800">{expDateStr}</td>
+                            <td className="p-3 font-semibold text-slate-700">{execName}</td>
+                            <td className="p-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <a
+                                  href={cust.phone ? `tel:+91${cust.phone.toString().replace(/\D/g, '')}` : '#'}
+                                  onClick={(e) => {
+                                    if (!cust.phone) {
+                                      e.preventDefault();
+                                      notify.info(`No phone number recorded for ${custName}`);
+                                    } else {
+                                      notify.success(`Initiating call to ${custName}...`);
+                                    }
+                                  }}
+                                  className="w-6 h-6 rounded-md border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                                  title="Call Customer"
                                 >
-                                  {custName}
-                                </p>
-                                <p className="text-[10px] text-slate-400 font-normal">{company}</p>
+                                  <Phone size={12} />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => handleWhatsAppClick(cust)}
+                                  className="w-6 h-6 rounded-md border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                                  title="Send WhatsApp"
+                                >
+                                  <WhatsAppIcon size={12} className="text-slate-500 hover:text-emerald-600" />
+                                </button>
                               </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Accordion Cards View */}
+                <div className="md:hidden space-y-3">
+                  {overdueReminders.map((row) => {
+                    const cust = row.customer || {};
+                    const custName = cust.name || 'N/A';
+                    const company = cust.company || 'Individual Account';
+                    const initials = getInitials(custName);
+                    const daysOver = Math.abs(row.daysUntilReorder);
+                    const expDateStr = cust.expectedReorderDate
+                      ? new Date(cust.expectedReorderDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : 'N/A';
+                    const execName = cust.salesExecutive?.name || 'Unassigned';
+
+                    return (
+                      <AccordionCard
+                        key={row._id}
+                        title={
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 font-bold text-xs flex items-center justify-center shrink-0">
+                              {initials}
                             </div>
-                          </td>
-
-                          {/* Days Overdue */}
-                          <td className="p-3 font-bold text-red-600">{daysOver} Days</td>
-
-                          {/* Expected Reorder Date */}
-                          <td className="p-3 font-medium text-slate-800">{expDateStr}</td>
-
-                          {/* Sales Executive */}
-                          <td className="p-3 font-semibold text-slate-700">
-                            {execName}
-                          </td>
-
-                          {/* Action Icon Buttons */}
-                          <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <a
-                                href={cust.phone ? `tel:+91${cust.phone.toString().replace(/\D/g, '')}` : '#'}
-                                onClick={(e) => {
-                                  if (!cust.phone) {
-                                    e.preventDefault();
-                                    notify.info(`No phone number recorded for ${custName}`);
-                                  } else {
-                                    notify.success(`Initiating call to ${custName}...`);
-                                  }
-                                }}
-                                className="w-6 h-6 rounded-md border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
-                                title="Call Customer"
-                              >
-                                <Phone size={12} />
-                              </a>
-                              <button
-                                type="button"
-                                onClick={() => handleWhatsAppClick(cust)}
-                                className="w-6 h-6 rounded-md border border-slate-200 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
-                                title="Send WhatsApp"
-                              >
-                                <WhatsAppIcon size={12} className="text-slate-500 hover:text-emerald-600" />
-                              </button>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-semibold text-slate-900 text-sm truncate">{custName}</h4>
+                              <p className="text-slate-500 text-xs font-normal truncate">{company}</p>
                             </div>
-                          </td>
+                          </div>
+                        }
+                        headerExtra={
+                          <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold rounded-md uppercase shrink-0">
+                            {daysOver} Days Overdue
+                          </span>
+                        }
+                      >
+                        <div className="grid grid-cols-2 gap-3 text-xs pt-1">
+                          <div>
+                            <span className="text-slate-400 font-medium text-[11px] block">Expected Date</span>
+                            <span className="font-semibold text-slate-800">{expDateStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium text-[11px] block">Sales Executive</span>
+                            <span className="font-medium text-slate-700">{execName}</span>
+                          </div>
+                        </div>
 
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                        <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/customers/${cust._id}`);
+                            }}
+                            className="flex-1 py-2 px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition text-center cursor-pointer"
+                          >
+                            View Customer Profile
+                          </button>
+                          <a
+                            href={cust.phone ? `tel:+91${cust.phone.toString().replace(/\D/g, '')}` : '#'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!cust.phone) {
+                                e.preventDefault();
+                                notify.info(`No phone number recorded for ${custName}`);
+                              }
+                            }}
+                            className="p-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl transition cursor-pointer"
+                            title="Call Customer"
+                          >
+                            <Phone size={15} />
+                          </a>
+                        </div>
+                      </AccordionCard>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
 

@@ -11,7 +11,6 @@ import {
   BarChart3,
   Users as UsersIcon,
   Settings as SettingsIcon,
-  Trash2,
   Menu,
   X
 } from 'lucide-react';
@@ -27,8 +26,7 @@ const MODULES_INFO = [
   { key: 'reminders', label: 'Reminders', path: '/reminders', icon: <Bell size={20} /> },
   { key: 'reports', label: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
   { key: 'users', label: 'Users', path: '/users', icon: <UsersIcon size={20} /> },
-  { key: 'settings', label: 'Settings', path: '/settings', icon: <SettingsIcon size={20} /> },
-  { key: 'trash', label: 'Trash', path: '/trash', icon: <Trash2 size={20} /> }
+  { key: 'settings', label: 'Settings', path: '/settings', icon: <SettingsIcon size={20} /> }
 ];
 
 export default function MobileTabBar() {

@@ -38,6 +38,8 @@ import {
   Trash2
 } from 'lucide-react';
 import { SkeletonCustomer360 } from '../components/ui/Skeleton';
+import AccordionCard from '../components/ui/AccordionCard';
+import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
 import NewOrderModal from '../components/NewOrderModal';
 import LoadingButton from '../components/ui/LoadingButton';
 import {
@@ -1023,72 +1025,150 @@ export default function CustomerDetails() {
 
       {/* Orders Tab */}
       {activeTab === 'orders' && (
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-x-auto scrollbar-hide">
-          <table className="w-full text-left border-collapse text-xs min-w-[750px]">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-semibold text-[11px]">
-                <th className="p-4">Order No</th>
-                <th className="p-4">Order Date</th>
-                <th className="p-4">Line Items</th>
-                <th className="p-4">Total Amount</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {orders.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400 font-normal">No orders recorded for this customer account.</td>
-                </tr>
-              ) : (
-                orders.map((ord) => (
-                  <tr key={ord._id} className="hover:bg-slate-50 transition">
-                    <td className="p-4 font-bold text-slate-900">{ord.orderNo || `ORD-${ord._id.slice(-6)}`}</td>
-                    <td className="p-4 font-medium text-slate-600">{new Date(ord.orderDate || ord.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                    <td className="p-4 text-slate-700">
-                      {ord.lineItems && ord.lineItems.length > 0 ? (
-                        <div className="space-y-0.5">
-                          {ord.lineItems.map((li, idx) => (
-                            <div key={idx} className="font-medium text-slate-800">
-                              {li.name || li.description} <span className="text-slate-400 font-normal">({li.qty} units)</span>
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+          {orders.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 font-normal text-xs">
+              No orders recorded for this customer account.
+            </div>
+          ) : (
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto scrollbar-hide">
+                <table className="w-full text-left border-collapse text-xs min-w-[750px]">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-semibold text-[11px]">
+                      <th className="p-4">Order No</th>
+                      <th className="p-4">Order Date</th>
+                      <th className="p-4">Line Items</th>
+                      <th className="p-4">Total Amount</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {orders.map((ord) => (
+                      <tr key={ord._id} className="hover:bg-slate-50 transition">
+                        <td className="p-4 font-bold text-slate-900">{ord.orderNo || `ORD-${ord._id.slice(-6)}`}</td>
+                        <td className="p-4 font-medium text-slate-600">{new Date(ord.orderDate || ord.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                        <td className="p-4 text-slate-700">
+                          {ord.lineItems && ord.lineItems.length > 0 ? (
+                            <div className="space-y-0.5">
+                              {ord.lineItems.map((li, idx) => (
+                                <div key={idx} className="font-medium text-slate-800">
+                                  {li.name || li.description} <span className="text-slate-400 font-normal">({li.qty} units)</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic">No line items specified</span>
-                      )}
-                    </td>
-                    <td className="p-4 font-bold text-slate-900">₹ {(ord.amount || 0).toLocaleString('en-IN')}</td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-0.5 border text-[10px] font-semibold rounded-md uppercase ${getStatusBadgeClass(ord.status)}`}>
+                          ) : (
+                            <span className="text-slate-400 italic">No line items specified</span>
+                          )}
+                        </td>
+                        <td className="p-4 font-bold text-slate-900">₹ {(ord.amount || 0).toLocaleString('en-IN')}</td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-0.5 border text-[10px] font-semibold rounded-md uppercase ${getStatusBadgeClass(ord.status)}`}>
+                            {ord.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setViewingOrder(ord)}
+                              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                              title="View Order Details"
+                            >
+                              <Eye size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOrder(ord._id, ord.orderNo || `ORD-${ord._id.slice(-6)}`)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                              title="Delete Order"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Accordion Cards View */}
+              <div className="md:hidden p-3 space-y-3">
+                {orders.map((ord) => (
+                  <AccordionCard
+                    key={ord._id}
+                    title={
+                      <div className="min-w-0 flex-1">
+                        <span className="font-bold text-slate-900 text-sm">{ord.orderNo || `ORD-${ord._id.slice(-6)}`}</span>
+                        <p className="text-xs text-slate-500 font-normal truncate mt-0.5">
+                          {new Date(ord.orderDate || ord.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                    }
+                    headerExtra={
+                      <span className={`px-2 py-0.5 border text-[10px] font-semibold rounded-md uppercase shrink-0 ${getStatusBadgeClass(ord.status)}`}>
                         {ord.status}
                       </span>
-                    </td>
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setViewingOrder(ord)}
-                          className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                          title="View Order Details"
-                        >
-                          <Eye size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteOrder(ord._id, ord.orderNo || `ORD-${ord._id.slice(-6)}`)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                          title="Delete Order"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                    }
+                  >
+                    <div className="grid grid-cols-2 gap-3 text-xs pt-1">
+                      <div>
+                        <span className="text-slate-400 font-medium text-[11px] block">Order Amount</span>
+                        <span className="font-bold text-slate-900 text-sm">₹ {(ord.amount || 0).toLocaleString('en-IN')}</span>
                       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      <div>
+                        <span className="text-slate-400 font-medium text-[11px] block">Order Date</span>
+                        <span className="font-semibold text-slate-800">
+                          {new Date(ord.orderDate || ord.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                      {ord.lineItems && ord.lineItems.length > 0 && (
+                        <div className="col-span-2 bg-slate-100/70 p-2.5 rounded-xl">
+                          <span className="text-slate-500 font-semibold text-[11px] block mb-1">Items ({ord.lineItems.length}):</span>
+                          <div className="space-y-1">
+                            {ord.lineItems.map((li, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-[11px] text-slate-700">
+                                <span className="truncate">{li.name || li.description}</span>
+                                <span className="font-semibold shrink-0">x{li.qty}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingOrder(ord);
+                        }}
+                        className="flex-1 py-2 px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition text-center cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Eye size={14} />
+                        <span>View Details</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteOrder(ord._id, ord.orderNo || `ORD-${ord._id.slice(-6)}`);
+                        }}
+                        className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition cursor-pointer"
+                        title="Delete Order"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </AccordionCard>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

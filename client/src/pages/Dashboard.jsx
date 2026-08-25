@@ -33,6 +33,9 @@ import {
   Search,
   Activity as ActivityIcon
 } from 'lucide-react';
+import AccordionCard from '../components/ui/AccordionCard';
+import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
+import NewOrderModal from '../components/NewOrderModal';
 import { Skeleton } from '../components/ui/Skeleton';
 
 /**
@@ -341,74 +344,80 @@ export default function Dashboard() {
 
       {isManagerOrAdmin && (
         <>
-          {/* Interactive Filters Toolbar Bar */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-xs font-bold text-slate-700 tracking-tight uppercase">Filters:</span>
+          {/* Interactive Filters Toolbar Bar wrapped in CollapsibleFilterCard */}
+          <CollapsibleFilterCard
+            title="Dashboard Filters"
+            activeCount={isFilterActive ? 1 : 0}
+            onClear={handleResetFilters}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-bold text-slate-700 tracking-tight uppercase">Filters:</span>
 
-              {/* 1. Time Period Filter */}
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
-                <Calendar size={14} className="text-slate-400" />
-                <select
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
-                  className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
-                >
-                  <option value="this_month">This Month</option>
-                  <option value="today">Today</option>
-                  <option value="this_week">This Week</option>
-                  <option value="this_quarter">This Quarter</option>
-                  <option value="this_year">This Year</option>
-                  <option value="all_time">All Time</option>
-                </select>
+                {/* 1. Time Period Filter */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
+                  <Calendar size={14} className="text-slate-400" />
+                  <select
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                    className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
+                  >
+                    <option value="this_month">This Month</option>
+                    <option value="today">Today</option>
+                    <option value="this_week">This Week</option>
+                    <option value="this_quarter">This Quarter</option>
+                    <option value="this_year">This Year</option>
+                    <option value="all_time">All Time</option>
+                  </select>
+                </div>
+
+                {/* 2. Executive / Caller Filter (Admin/Manager only) */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
+                  <Users size={14} className="text-slate-400" />
+                  <select
+                    value={assignedTo}
+                    onChange={(e) => setAssignedTo(e.target.value)}
+                    className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
+                  >
+                    <option value="all">All Executives</option>
+                    {callers.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Lead Source Filter */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
+                  <FileText size={14} className="text-slate-400" />
+                  <select
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
+                  >
+                    <option value="all">All Sources</option>
+                    <option value="Website">Website</option>
+                    <option value="Tele-caller">Tele-caller</option>
+                    <option value="Referral">Referral</option>
+                    <option value="Exhibition">Exhibition</option>
+                    <option value="Direct">Direct</option>
+                  </select>
+                </div>
               </div>
 
-              {/* 2. Executive / Caller Filter (Admin/Manager only) */}
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
-                <Users size={14} className="text-slate-400" />
-                <select
-                  value={assignedTo}
-                  onChange={(e) => setAssignedTo(e.target.value)}
-                  className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
+              {/* Clear Filters Action */}
+              {isFilterActive && (
+                <button
+                  onClick={handleResetFilters}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
                 >
-                  <option value="all">All Executives</option>
-                  {callers.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 3. Lead Source Filter */}
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700">
-                <FileText size={14} className="text-slate-400" />
-                <select
-                  value={source}
-                  onChange={(e) => setSource(e.target.value)}
-                  className="bg-transparent focus:outline-none cursor-pointer font-semibold text-slate-800"
-                >
-                  <option value="all">All Sources</option>
-                  <option value="Website">Website</option>
-                  <option value="Tele-caller">Tele-caller</option>
-                  <option value="Referral">Referral</option>
-                  <option value="Exhibition">Exhibition</option>
-                  <option value="Direct">Direct</option>
-                </select>
-              </div>
+                  <X size={14} />
+                  <span>Reset Filters</span>
+                </button>
+              )}
             </div>
-
-            {/* Clear Filters Action */}
-            {isFilterActive && (
-              <button
-                onClick={handleResetFilters}
-                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
-              >
-                <X size={14} />
-                <span>Reset Filters</span>
-              </button>
-            )}
-          </div>
+          </CollapsibleFilterCard>
 
           {/* ROW 1: Top 4 KPI Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 2xl:gap-6">

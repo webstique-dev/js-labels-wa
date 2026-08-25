@@ -31,7 +31,9 @@ import {
   FileSpreadsheet,
   FileCode
 } from 'lucide-react';
-import { Skeleton, SkeletonCard, SkeletonTable } from '../components/ui/Skeleton';
+import AccordionCard from '../components/ui/AccordionCard';
+import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
+import { Skeleton, SkeletonCard, SkeletonStatsGrid } from '../components/ui/Skeleton';
 
 export default function Reports() {
   const navigate = useNavigate();
@@ -472,7 +474,8 @@ export default function Reports() {
         </div>
 
         <div className="overflow-x-auto scrollbar-hide rounded-xl">
-          <table className="w-full text-left border-collapse text-xs sm:text-sm">
+          {/* Desktop Table View */}
+          <table className="hidden md:table w-full text-left border-collapse text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-bold text-[10px] sm:text-xs uppercase tracking-wider">
                 <th className="pb-3 px-2">Customer Name & Company</th>
@@ -506,6 +509,59 @@ export default function Reports() {
               )}
             </tbody>
           </table>
+
+          {/* Mobile Accordion Cards View */}
+          <div className="md:hidden space-y-3">
+            {topCustomers && topCustomers.length > 0 ? (
+              topCustomers.map((c) => (
+                <AccordionCard
+                  key={c.id}
+                  title={
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-9 h-9 rounded-full ${c.initialsBg} font-bold text-xs flex items-center justify-center shrink-0`}>
+                        {c.initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-semibold text-slate-900 text-sm truncate">{c.name}</h4>
+                        <p className="text-slate-500 text-xs font-normal truncate">{c.company}</p>
+                      </div>
+                    </div>
+                  }
+                  headerExtra={
+                    <span className="font-bold text-slate-900 text-sm shrink-0">
+                      {c.revenue}
+                    </span>
+                  }
+                >
+                  <div className="grid grid-cols-2 gap-3 text-xs pt-1">
+                    <div>
+                      <span className="text-slate-400 font-medium text-[11px] block">Orders Placed</span>
+                      <span className="font-bold text-slate-900">{c.orders} Orders</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium text-[11px] block">Total Revenue</span>
+                      <span className="font-bold text-emerald-600">{c.revenue}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-200/80">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/customers/${c.id}`);
+                      }}
+                      className="w-full py-2 px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition text-center cursor-pointer"
+                    >
+                      View Customer Account
+                    </button>
+                  </div>
+                </AccordionCard>
+              ))
+            ) : (
+              <div className="p-6 text-center text-slate-400 italic">No customer revenue records found.</div>
+            )}
+          </div>
         </div>
       </div>
 

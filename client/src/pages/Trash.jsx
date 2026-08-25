@@ -3,6 +3,8 @@ import api from '../api/axios';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Trash2, RotateCcw, Check, User, AlertTriangle } from 'lucide-react';
+import AccordionCard from '../components/ui/AccordionCard';
+import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
 
 const TABS = [
   { key: 'orders', label: 'Orders' },
@@ -102,22 +104,27 @@ export default function Trash() {
         </div>
       </div>
 
-      {/* Resource Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto scrollbar-hide pb-0.5">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap cursor-pointer ${
-              activeTab === tab.key
-                ? 'border-red-600 text-red-600 bg-red-50/40 rounded-t-lg'
-                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* Resource Tabs wrapped in CollapsibleFilterCard */}
+      <CollapsibleFilterCard
+        title="Select Module Bin"
+        activeCount={activeTab ? 1 : 0}
+      >
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 text-xs font-semibold rounded-xl transition whitespace-nowrap cursor-pointer ${
+                activeTab === tab.key
+                  ? 'bg-red-600 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </CollapsibleFilterCard>
 
       {/* Error Alert */}
       {errorMessage && (
@@ -145,70 +152,148 @@ export default function Trash() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
-                  <th className="py-3.5 px-4">Item Details</th>
-                  <th className="py-3.5 px-4">Deleted At</th>
-                  <th className="py-3.5 px-4">Deleted By</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {safeItems.map((item) => {
-                  const displayName = getItemDisplayName(item);
-                  const deletedByUser = item.deletedBy?.name || item.deletedBy?.email || 'System / Admin';
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
+                    <th className="py-3.5 px-4">Item Details</th>
+                    <th className="py-3.5 px-4">Deleted At</th>
+                    <th className="py-3.5 px-4">Deleted By</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {safeItems.map((item) => {
+                    const displayName = getItemDisplayName(item);
+                    const deletedByUser = item.deletedBy?.name || item.deletedBy?.email || 'System / Admin';
 
-                  return (
-                    <tr key={item._id} className="hover:bg-slate-50/60 transition">
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-slate-800">{displayName}</div>
-                        {activeTab === 'orders' && item.customerId && (
-                          <div className="text-xs text-slate-400 font-normal">
-                            Customer: {item.customerId.name || 'Deleted Customer'} • ₹{(item.amount || 0).toLocaleString('en-IN')}
-                          </div>
-                        )}
-                        {activeTab === 'leads' && (
-                          <div className="text-xs text-slate-400 font-normal">
+                    return (
+                      <tr key={item._id} className="hover:bg-slate-50/60 transition">
+                        <td className="py-3.5 px-4">
+                          <div className="font-semibold text-slate-800">{displayName}</div>
+                          {activeTab === 'orders' && item.customerId && (
+                            <div className="text-xs text-slate-400 font-normal">
+                              Customer: {item.customerId.name || 'Deleted Customer'} • ₹{(item.amount || 0).toLocaleString('en-IN')}
+                            </div>
+                          )}
+                          {activeTab === 'leads' && (
+                            <div className="text-xs text-slate-400 font-normal">
+                              Phone: {item.phone || 'N/A'} • Status: {item.status || 'N/A'}
+                            </div>
+                          )}
+                          {activeTab === 'customers' && (
+                            <div className="text-xs text-slate-400 font-normal">
+                              Phone: {item.phone || 'N/A'} • City: {item.city || 'N/A'}
+                            </div>
+                          )}
+                          {activeTab === 'followups' && (
+                            <div className="text-xs text-slate-400 font-normal">
+                              Notes: {item.notes || 'No notes'}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 font-normal text-slate-600">
+                          {formatDateTime(item.deletedAt || item.updatedAt)}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                            <User size={12} className="text-slate-400" />
+                            <span>{deletedByUser}</span>
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            onClick={() => handleRestore(item._id, displayName)}
+                            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs transition shadow-xs flex items-center gap-1.5 ml-auto cursor-pointer"
+                          >
+                            <RotateCcw size={14} />
+                            <span>Restore</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Accordion View */}
+            <div className="md:hidden p-3 space-y-3">
+              {safeItems.map((item) => {
+                const displayName = getItemDisplayName(item);
+                const deletedByUser = item.deletedBy?.name || item.deletedBy?.email || 'System / Admin';
+
+                return (
+                  <AccordionCard
+                    key={item._id}
+                    title={
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-semibold text-slate-900 text-sm truncate">{displayName}</h4>
+                        <p className="text-xs text-slate-500 font-normal truncate mt-0.5">
+                          Bin: {activeTab.toUpperCase()}
+                        </p>
+                      </div>
+                    }
+                    headerExtra={
+                      <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold rounded-md uppercase shrink-0">
+                        Deleted
+                      </span>
+                    }
+                  >
+                    <div className="space-y-2 text-xs pt-1">
+                      {activeTab === 'orders' && item.customerId && (
+                        <div>
+                          <span className="text-slate-400 font-medium text-[11px] block">Customer & Amount</span>
+                          <span className="font-semibold text-slate-800">
+                            {item.customerId.name || 'Deleted Customer'} • ₹{(item.amount || 0).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      )}
+                      {activeTab === 'leads' && (
+                        <div>
+                          <span className="text-slate-400 font-medium text-[11px] block">Contact & Status</span>
+                          <span className="font-semibold text-slate-800">
                             Phone: {item.phone || 'N/A'} • Status: {item.status || 'N/A'}
-                          </div>
-                        )}
-                        {activeTab === 'customers' && (
-                          <div className="text-xs text-slate-400 font-normal">
+                          </span>
+                        </div>
+                      )}
+                      {activeTab === 'customers' && (
+                        <div>
+                          <span className="text-slate-400 font-medium text-[11px] block">Contact & Location</span>
+                          <span className="font-semibold text-slate-800">
                             Phone: {item.phone || 'N/A'} • City: {item.city || 'N/A'}
-                          </div>
-                        )}
-                        {activeTab === 'followups' && (
-                          <div className="text-xs text-slate-400 font-normal">
-                            Notes: {item.notes || 'No notes'}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 font-normal text-slate-600">
-                        {formatDateTime(item.deletedAt || item.updatedAt)}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
-                          <User size={12} className="text-slate-400" />
-                          <span>{deletedByUser}</span>
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => handleRestore(item._id, displayName)}
-                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs transition shadow-xs flex items-center gap-1.5 ml-auto cursor-pointer"
-                        >
-                          <RotateCcw size={14} />
-                          <span>Restore</span>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-slate-400 font-medium text-[11px] block">Deleted Date</span>
+                        <span className="font-medium text-slate-700">{formatDateTime(item.deletedAt || item.updatedAt)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-medium text-[11px] block">Deleted By</span>
+                        <span className="font-semibold text-slate-800">{deletedByUser}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-200/80">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRestore(item._id, displayName);
+                        }}
+                        className="w-full py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <RotateCcw size={14} />
+                        <span>Restore Item</span>
+                      </button>
+                    </div>
+                  </AccordionCard>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>

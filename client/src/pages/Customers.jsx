@@ -8,6 +8,7 @@ import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X, Shop
 import { SkeletonCustomerDirectory } from '../components/ui/Skeleton';
 import NewOrderModal from '../components/NewOrderModal';
 import LoadingButton from '../components/ui/LoadingButton';
+import AccordionCard from '../components/ui/AccordionCard';
 import {
   getLiveReorderProbability,
   getProbabilityColorClass,
@@ -329,59 +330,93 @@ export default function Customers() {
             </table>
           </div>
 
-          {/* Mobile Stacked Card View */}
+          {/* Mobile Accordion Card View */}
           <div className="md:hidden space-y-3">
-            {safeCustomers.map((c) => (
-              <div
-                key={c._id}
-                onClick={() => navigate(`/customers/${c._id}`)}
-                className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs active:bg-slate-50 transition space-y-3"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-semibold text-xs shadow-xs">
-                      {getInitials(c.name)}
+            {safeCustomers.map((c) => {
+              const prob = getLiveReorderProbability(c);
+              const initials = getInitials(c.name);
+
+              return (
+                <AccordionCard
+                  key={c._id}
+                  title={
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-semibold text-xs shadow-2xs shrink-0">
+                        {initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-semibold text-slate-900 text-sm truncate">{c.name}</h4>
+                        <p className="text-slate-500 text-xs font-normal truncate">{c.company || 'Individual Account'}</p>
+                      </div>
+                    </div>
+                  }
+                  headerExtra={
+                    <span className={`px-2 py-0.5 border text-[10px] font-semibold rounded-md uppercase shrink-0 ${getProbabilityBadgeClass(prob)}`}>
+                      {prob}% Reorder
+                    </span>
+                  }
+                >
+                  <div className="grid grid-cols-2 gap-3 text-xs pt-1">
+                    <div>
+                      <span className="text-slate-400 font-medium text-[11px] block">Phone / Contact</span>
+                      <a href={`tel:${c.phone}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-slate-800 hover:text-blue-600 truncate block">
+                        {c.phone || 'N/A'}
+                      </a>
                     </div>
                     <div>
-                      <h4 className="font-semibold text-slate-900 text-sm">{c.name}</h4>
-                      <p className="text-slate-500 text-xs font-normal">{c.company || 'Individual'}</p>
+                      <span className="text-slate-400 font-medium text-[11px] block">Expected Reorder</span>
+                      <span className="font-semibold text-slate-800">
+                        {c.expectedReorderDate ? new Date(c.expectedReorderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                      </span>
                     </div>
+                    <div>
+                      <span className="text-slate-400 font-medium text-[11px] block">Sales Executive</span>
+                      <span className="font-medium text-slate-700">{c.assignedTo?.name || 'Unassigned'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium text-[11px] block">Customer Type</span>
+                      <span className="font-medium text-slate-700">{c.customerType || 'Standard'}</span>
+                    </div>
+                    {c.email && (
+                      <div className="col-span-2">
+                        <span className="text-slate-400 font-medium text-[11px] block">Email</span>
+                        <a href={`mailto:${c.email}`} onClick={(e) => e.stopPropagation()} className="font-medium text-blue-600 truncate block">
+                          {c.email}
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between gap-2">
                     <button
                       type="button"
-                      title={`Delete ${c.name}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteCustomer(c._id, c.name);
+                        navigate(`/customers/${c._id}`);
                       }}
-                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                      className="flex-1 py-2 px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition text-center cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                      <Trash2 size={14} />
+                      <Eye size={14} />
+                      <span>View Details</span>
                     </button>
-                    {(() => {
-                      const prob = getLiveReorderProbability(c);
-                      return (
-                        <span
-                          className={`px-2 py-0.5 border text-[10px] font-medium rounded-md uppercase ${getProbabilityBadgeClass(
-                            prob
-                          )}`}
-                        >
-                          {prob}% Reorder
-                        </span>
-                      );
-                    })()}
-                  </div>
-                </div>
 
-                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
-                  <span className="text-slate-500 font-normal">{c.phone}</span>
-                  <span className="font-medium text-slate-700">
-                    {c.expectedReorderDate ? new Date(c.expectedReorderDate).toLocaleDateString('en-IN') : 'N/A'}
-                  </span>
-                </div>
-              </div>
-            ))}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCustomer(c._id, c.name);
+                        }}
+                        className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition cursor-pointer"
+                        title={`Delete ${c.name}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </AccordionCard>
+              );
+            })}
           </div>
         </>
       )}

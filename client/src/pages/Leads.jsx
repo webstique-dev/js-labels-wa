@@ -7,6 +7,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import NewOrderModal from '../components/NewOrderModal';
 import LoadingButton from '../components/ui/LoadingButton';
+import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
 import {
   Kanban,
   LayoutGrid,
@@ -687,85 +688,100 @@ export default function Leads() {
   return (
     <div className="space-y-4 pb-2">
 
-      {/* Reference UI Top Header Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/50 backdrop-blur-xs p-2 rounded-2xl">
+      {/* Reference UI Top Header Bar wrapped in CollapsibleFilterCard */}
+      {(() => {
+        const activeCount = (selectedSource ? 1 : 0) + (selectedExecutive ? 1 : 0) + (searchQuery ? 1 : 0);
 
-        {/* Left: Optional Title / Search Input */}
-        <div className="flex items-center gap-3 flex-1">
-          <div className="relative w-full max-w-sm">
-            <Search size={16} className="text-slate-400 absolute left-3.5 top-2.5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name or phone number..."
-              className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-semibold"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Right Action Controls Matching Reference Design */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Source Dropdown */}
-          <select
-            value={selectedSource}
-            onChange={(e) => setSelectedSource(e.target.value)}
-            className="px-3.5 py-2 bg-white border border-slate-200/90 rounded-xl text-xs font-medium text-slate-700 shadow-2xs focus:outline-none cursor-pointer"
+        return (
+          <CollapsibleFilterCard
+            title="Lead Filters & Search"
+            activeCount={activeCount}
+            onClear={() => {
+              setSelectedSource('');
+              setSelectedExecutive('');
+              setSearchQuery('');
+            }}
           >
-            <option value="">All Sources</option>
-            <option value="website">Website</option>
-            <option value="referral">Referral</option>
-            <option value="walk_in">Walk-in</option>
-            <option value="google_ads">Google Ads</option>
-            <option value="tele_caller">Tele-caller</option>
-          </select>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              {/* Left: Search Input */}
+              <div className="flex items-center gap-3 flex-1">
+                <div className="relative w-full">
+                  <Search size={16} className="text-slate-400 absolute left-3.5 top-2.5" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by name or phone number..."
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-semibold"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
 
-          {/* Sales Executive Dropdown */}
-          {isManagerOrAdmin && (
-            <select
-              value={selectedExecutive}
-              onChange={(e) => setSelectedExecutive(e.target.value)}
-              className="px-3.5 py-2 bg-white border border-slate-200/90 rounded-xl text-xs font-medium text-slate-700 shadow-2xs focus:outline-none cursor-pointer"
-            >
-              <option value="">All Executive Callers</option>
-              {usersList.filter(u => u.role === 'caller').map(u => (
-                <option key={u._id} value={u._id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          )}
+              {/* Right Action Controls */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Source Dropdown */}
+                <select
+                  value={selectedSource}
+                  onChange={(e) => setSelectedSource(e.target.value)}
+                  className="px-3.5 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-medium text-slate-700 shadow-2xs focus:outline-none cursor-pointer"
+                >
+                  <option value="">All Sources</option>
+                  <option value="website">Website</option>
+                  <option value="referral">Referral</option>
+                  <option value="walk_in">Walk-in</option>
+                  <option value="google_ads">Google Ads</option>
+                  <option value="tele_caller">Tele-caller</option>
+                </select>
 
-          {/* Filters Toggle Button */}
-          <button
-            onClick={() => setShowFiltersPanel(!showFiltersPanel)}
-            className={`px-3.5 py-2 bg-white border border-slate-200/90 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium transition shadow-2xs flex items-center gap-1.5 cursor-pointer ${showFiltersPanel ? 'ring-2 ring-red-500/20 border-red-500' : ''
-              }`}
-          >
-            <SlidersHorizontal size={14} className="text-slate-500" />
-            <span>Filters</span>
-          </button>
+                {/* Sales Executive Dropdown */}
+                {isManagerOrAdmin && (
+                  <select
+                    value={selectedExecutive}
+                    onChange={(e) => setSelectedExecutive(e.target.value)}
+                    className="px-3.5 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-medium text-slate-700 shadow-2xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="">All Executive Callers</option>
+                    {usersList.filter(u => u.role === 'caller').map(u => (
+                      <option key={u._id} value={u._id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
-          {/* Add Lead Red Button */}
-          {canCreate && (
-            <button
-              onClick={() => openAddLeadForStage('new')}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus size={16} />
-              <span>Add Lead</span>
-            </button>
-          )}
-        </div>
-      </div>
+                {/* Filters Toggle Button */}
+                <button
+                  onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+                  className={`px-3.5 py-2 bg-slate-50 border border-slate-200/90 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-medium transition shadow-2xs flex items-center gap-1.5 cursor-pointer ${showFiltersPanel ? 'ring-2 ring-red-500/20 border-red-500' : ''
+                    }`}
+                >
+                  <SlidersHorizontal size={14} className="text-slate-500" />
+                  <span>More Filters</span>
+                </button>
+
+                {/* Add Lead Red Button */}
+                {canCreate && (
+                  <button
+                    onClick={() => openAddLeadForStage('new')}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus size={16} />
+                    <span>Add Lead</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </CollapsibleFilterCard>
+        );
+      })()}
 
       {/* Expanded Filter Panel (Responsive Grid layout with Web UI Custom Date Pickers) */}
       {showFiltersPanel && (

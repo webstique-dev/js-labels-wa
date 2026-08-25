@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import NewOrderModal from '../components/NewOrderModal';
+import AccordionCard from '../components/ui/AccordionCard';
+import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
 import {
   Calendar,
   Download,
@@ -20,7 +22,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  User
+  User,
+  Search
 } from 'lucide-react';
 import { SkeletonTable } from '../components/ui/Skeleton';
 
@@ -35,6 +38,8 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingOrder, setViewingOrder] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const canDelete = role === 'super_admin';
 
@@ -248,163 +253,307 @@ export default function Orders() {
 
       </div>
 
-      {/* Main Data Table */}
-      {loading ? (
-        <SkeletonTable rows={8} cols={7} />
-      ) : orders.length === 0 ? (
-        <div className="py-20 text-center bg-white rounded-2xl border border-slate-200/80 space-y-3">
-          <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
-            <FileText size={24} />
-          </div>
-          <h3 className="font-semibold text-slate-800 text-base">No Orders Found</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto font-normal">
-            There are no active order records in the database.
-          </p>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-2xs hover:bg-red-700"
-          >
-            <Plus size={16} />
-            <span>Create New Order</span>
-          </button>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden scrollbar-hide">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+      {/* Filter & Search Controls Wrapped in CollapsibleFilterCard */}
+      {(() => {
+        const filteredOrders = orders.filter((ord) => {
+          const matchesStatus = statusFilter === 'all' || ord.status === statusFilter;
+          const searchLower = searchQuery.toLowerCase();
+          const custName = (ord.customerId?.name || ord.customerName || '').toLowerCase();
+          const company = (ord.customerId?.company || ord.company || '').toLowerCase();
+          const orderNo = (ord.orderNo || `ORD-${ord._id?.slice(-6)}`).toLowerCase();
+          const exec = (ord.salesExecutive?.name || '').toLowerCase();
+          const matchesSearch = !searchQuery || custName.includes(searchLower) || company.includes(searchLower) || orderNo.includes(searchLower) || exec.includes(searchLower);
+          return matchesStatus && matchesSearch;
+        });
 
-              {/* Table Header */}
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-500 font-semibold text-[11px] bg-slate-50/50">
-                  <th className="p-4 py-3.5">
-                    <div className="flex items-center gap-1.5">
-                      <span>Order ID</span>
-                      <ArrowUpDown size={12} className="text-slate-400" />
-                    </div>
-                  </th>
+        const activeCount = (statusFilter !== 'all' ? 1 : 0) + (searchQuery ? 1 : 0);
 
-                  <th className="p-4 py-3.5">Customer</th>
+        return (
+          <>
+            <CollapsibleFilterCard
+              title="Order Filters & Search"
+              activeCount={activeCount}
+              onClear={() => {
+                setStatusFilter('all');
+                setSearchQuery('');
+              }}
+            >
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                {/* Status Tabs */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
+                  {[
+                    { key: 'all', label: 'All Orders' },
+                    { key: 'confirmed', label: 'Confirmed' },
+                    { key: 'dispatched', label: 'Dispatched' },
+                    { key: 'delivered', label: 'Delivered' },
+                    { key: 'pending', label: 'Pending' },
+                    { key: 'cancelled', label: 'Cancelled' }
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setStatusFilter(tab.key)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                        statusFilter === tab.key
+                          ? 'bg-slate-900 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
 
-                  <th className="p-4 py-3.5">
-                    <div className="flex items-center gap-1.5">
-                      <span>Order Date</span>
-                      <ArrowUpDown size={12} className="text-slate-400" />
-                    </div>
-                  </th>
+                {/* Search Input */}
+                <div className="relative min-w-[220px]">
+                  <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search order ID, customer, executive..."
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </CollapsibleFilterCard>
 
-                  <th className="p-4 py-3.5">
-                    <div className="flex items-center gap-1.5">
-                      <span>Amount</span>
-                      <ArrowUpDown size={12} className="text-slate-400" />
-                    </div>
-                  </th>
+            {/* Main Data View */}
+            {loading ? (
+              <SkeletonTable rows={8} cols={7} />
+            ) : filteredOrders.length === 0 ? (
+              <div className="py-16 text-center bg-white rounded-2xl border border-slate-200/80 space-y-3">
+                <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
+                  <FileText size={24} />
+                </div>
+                <h3 className="font-semibold text-slate-800 text-base">No Orders Found</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto font-normal">
+                  {searchQuery || statusFilter !== 'all'
+                    ? 'No orders match your search query or selected filter criteria.'
+                    : 'There are no active order records in the database.'}
+                </p>
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-2xs hover:bg-red-700"
+                >
+                  <Plus size={16} />
+                  <span>Create New Order</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden scrollbar-hide">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500 font-semibold text-[11px] bg-slate-50/50">
+                          <th className="p-4 py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <span>Order ID</span>
+                              <ArrowUpDown size={12} className="text-slate-400" />
+                            </div>
+                          </th>
+                          <th className="p-4 py-3.5">Customer</th>
+                          <th className="p-4 py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <span>Order Date</span>
+                              <ArrowUpDown size={12} className="text-slate-400" />
+                            </div>
+                          </th>
+                          <th className="p-4 py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <span>Amount</span>
+                              <ArrowUpDown size={12} className="text-slate-400" />
+                            </div>
+                          </th>
+                          <th className="p-4 py-3.5">Status</th>
+                          <th className="p-4 py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <span>Delivery Date</span>
+                              <ArrowUpDown size={12} className="text-slate-400" />
+                            </div>
+                          </th>
+                          <th className="p-4 py-3.5">Sales Executive</th>
+                          <th className="p-4 py-3.5 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredOrders.map((ord) => {
+                          const custName = ord.customerId?.name || ord.customerName || 'N/A';
+                          const company = ord.customerId?.company || ord.company || 'Individual Account';
+                          const formattedOrderNo = ord.orderNo || `ORD-${ord._id?.slice(-6)}`;
+                          const orderDateStr = ord.orderDate ? new Date(ord.orderDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
+                          const amountVal = ord.amount || 0;
+                          const deliveryDateStr = ord.deliveryDate ? new Date(ord.deliveryDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : '-';
+                          const execName = ord.salesExecutive?.name || 'Unassigned';
+                          const execRole = ord.salesExecutive?.role ? (ord.salesExecutive.role === 'caller' ? 'Caller' : ord.salesExecutive.role) : 'Executive';
 
-                  <th className="p-4 py-3.5">Status</th>
+                          return (
+                            <tr key={ord._id} className="hover:bg-slate-50/80 transition group">
+                              <td
+                                className="p-4 font-bold text-blue-600 hover:underline cursor-pointer"
+                                onClick={() => setViewingOrder(ord)}
+                              >
+                                {formattedOrderNo}
+                              </td>
+                              <td className="p-4">
+                                <p className="font-bold text-slate-900 leading-tight">{custName}</p>
+                                <p className="text-[11px] text-slate-400 font-normal mt-0.5">{company}</p>
+                              </td>
+                              <td className="p-4 text-slate-700 font-medium">{orderDateStr}</td>
+                              <td className="p-4 font-bold text-slate-900">₹ {amountVal.toLocaleString('en-IN')}</td>
+                              <td className="p-4">{renderStatusBadge(ord.status)}</td>
+                              <td className="p-4">
+                                <div className="font-medium text-slate-900">{deliveryDateStr}</div>
+                              </td>
+                              <td className="p-4">
+                                <div className="flex items-center gap-2.5">
+                                  {ord.salesExecutive?.avatarUrl ? (
+                                    <img
+                                      src={ord.salesExecutive.avatarUrl}
+                                      alt={execName}
+                                      className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+                                      {getInitials(execName)}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p className="text-[10px] text-slate-400 font-medium leading-tight capitalize">{execRole}</p>
+                                    <p className="text-xs font-semibold text-slate-800">{execName}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center">
+                                  <button
+                                    onClick={() => setViewingOrder(ord)}
+                                    className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+                                    title="View Order Details"
+                                  >
+                                    <Eye size={15} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+                    <span className="text-slate-500 font-medium">Showing {filteredOrders.length} of {orders.length} orders</span>
+                  </div>
+                </div>
 
-                  <th className="p-4 py-3.5">
-                    <div className="flex items-center gap-1.5">
-                      <span>Delivery Date</span>
-                      <ArrowUpDown size={12} className="text-slate-400" />
-                    </div>
-                  </th>
+                {/* Mobile Accordion View */}
+                <div className="md:hidden space-y-3">
+                  {filteredOrders.map((ord) => {
+                    const custName = ord.customerId?.name || ord.customerName || 'N/A';
+                    const company = ord.customerId?.company || ord.company || 'Individual Account';
+                    const formattedOrderNo = ord.orderNo || `ORD-${ord._id?.slice(-6)}`;
+                    const orderDateStr = ord.orderDate ? new Date(ord.orderDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
+                    const amountVal = ord.amount || 0;
+                    const deliveryDateStr = ord.deliveryDate ? new Date(ord.deliveryDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : '-';
+                    const execName = ord.salesExecutive?.name || 'Unassigned';
 
-                  <th className="p-4 py-3.5">Sales Executive</th>
-
-                  <th className="p-4 py-3.5 text-center">Actions</th>
-                </tr>
-              </thead>
-
-              {/* Table Body */}
-              <tbody className="divide-y divide-slate-100">
-                {orders.map((ord) => {
-                  const custName = ord.customerId?.name || ord.customerName || 'N/A';
-                  const company = ord.customerId?.company || ord.company || 'Individual Account';
-                  const formattedOrderNo = ord.orderNo || `ORD-${ord._id?.slice(-6)}`;
-                  const orderDateStr = ord.orderDate ? new Date(ord.orderDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
-                  const amountVal = ord.amount || 0;
-                  const deliveryDateStr = ord.deliveryDate ? new Date(ord.deliveryDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : '-';
-                  const execName = ord.salesExecutive?.name || 'Unassigned';
-                  const execRole = ord.salesExecutive?.role ? (ord.salesExecutive.role === 'caller' ? 'Caller' : ord.salesExecutive.role) : 'Executive';
-
-                  return (
-                    <tr key={ord._id} className="hover:bg-slate-50/80 transition group">
-
-                      {/* Order ID */}
-                      <td
-                        className="p-4 font-bold text-blue-600 hover:underline cursor-pointer"
-                        onClick={() => setViewingOrder(ord)}
+                    return (
+                      <AccordionCard
+                        key={ord._id}
+                        title={
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm truncate">{formattedOrderNo}</span>
+                            </div>
+                            <p className="text-xs text-slate-500 font-normal truncate mt-0.5">{custName} • {company}</p>
+                          </div>
+                        }
+                        headerExtra={
+                          <div className="flex items-center gap-2 shrink-0">
+                            {renderStatusBadge(ord.status)}
+                          </div>
+                        }
                       >
-                        {formattedOrderNo}
-                      </td>
-
-                      {/* Customer */}
-                      <td className="p-4">
-                        <p className="font-bold text-slate-900 leading-tight">{custName}</p>
-                        <p className="text-[11px] text-slate-400 font-normal mt-0.5">{company}</p>
-                      </td>
-
-                      {/* Order Date */}
-                      <td className="p-4 text-slate-700 font-medium">{orderDateStr}</td>
-
-                      {/* Amount */}
-                      <td className="p-4 font-bold text-slate-900">₹ {amountVal.toLocaleString('en-IN')}</td>
-
-                      {/* Status */}
-                      <td className="p-4">{renderStatusBadge(ord.status)}</td>
-
-                      {/* Delivery Date */}
-                      <td className="p-4">
-                        <div className="font-medium text-slate-900">{deliveryDateStr}</div>
-                      </td>
-
-                      {/* Sales Executive */}
-                      <td className="p-4">
-                        <div className="flex items-center gap-2.5">
-                          {ord.salesExecutive?.avatarUrl ? (
-                            <img
-                              src={ord.salesExecutive.avatarUrl}
-                              alt={execName}
-                              className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0"
-                            />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
-                              {getInitials(execName)}
+                        <div className="grid grid-cols-2 gap-3 text-xs pt-1">
+                          <div>
+                            <span className="text-slate-400 font-medium text-[11px] block">Order Amount</span>
+                            <span className="font-bold text-slate-900 text-sm">₹ {amountVal.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium text-[11px] block">Order Date</span>
+                            <span className="font-semibold text-slate-800">{orderDateStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium text-[11px] block">Expected Delivery</span>
+                            <span className="font-semibold text-slate-800">{deliveryDateStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium text-[11px] block">Sales Executive</span>
+                            <span className="font-semibold text-slate-800">{execName}</span>
+                          </div>
+                          {ord.lineItems && ord.lineItems.length > 0 && (
+                            <div className="col-span-2 bg-slate-100/70 p-2.5 rounded-xl">
+                              <span className="text-slate-500 font-semibold text-[11px] block mb-1">
+                                Order Items ({ord.lineItems.length}):
+                              </span>
+                              <div className="space-y-1">
+                                {ord.lineItems.slice(0, 3).map((item, i) => (
+                                  <div key={i} className="flex items-center justify-between text-[11px] text-slate-700">
+                                    <span className="truncate">{item.name || item.description}</span>
+                                    <span className="font-semibold shrink-0">x{item.qty}</span>
+                                  </div>
+                                ))}
+                                {ord.lineItems.length > 3 && (
+                                  <span className="text-[10px] text-slate-400 italic block font-normal">+ {ord.lineItems.length - 3} more items</span>
+                                )}
+                              </div>
                             </div>
                           )}
-                          <div>
-                            <p className="text-[10px] text-slate-400 font-medium leading-tight capitalize">{execRole}</p>
-                            <p className="text-xs font-semibold text-slate-800">{execName}</p>
-                          </div>
                         </div>
-                      </td>
 
-                      {/* Actions - Eye View Only */}
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center">
+                        <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between gap-2">
                           <button
-                            onClick={() => setViewingOrder(ord)}
-                            className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
-                            title="View Order Details"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingOrder(ord);
+                            }}
+                            className="flex-1 py-2 px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition text-center cursor-pointer flex items-center justify-center gap-1.5"
                           >
-                            <Eye size={15} />
+                            <Eye size={14} />
+                            <span>View Full Details</span>
                           </button>
+                          {ord.customerId?._id && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/customers/${ord.customerId._id}`);
+                              }}
+                              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                            >
+                              Customer →
+                            </button>
+                          )}
                         </div>
-                      </td>
-
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Table Footer / Pagination Row */}
-          <div className="p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-            <span className="text-slate-500 font-medium">Showing {orders.length} of {summary?.totalOrders || orders.length} orders</span>
-          </div>
-
-        </div>
-      )}
+                      </AccordionCard>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       {/* View Order Details Popup Modal */}
       {viewingOrder && (
