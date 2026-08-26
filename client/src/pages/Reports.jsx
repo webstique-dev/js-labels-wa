@@ -199,10 +199,28 @@ export default function Reports() {
               <Wallet size={18} />
             </div>
           </div>
-          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">{overview?.totalRevenue?.display || '₹ 0'}</div>
+          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">
+            {overview?.totalRevenue?.hasPricing
+              ? overview.totalRevenue.display
+              : <span className="text-sm font-semibold text-slate-400 italic">No pricing recorded</span>}
+          </div>
           <div className="text-[11px] 2xl:text-xs font-semibold text-emerald-600 flex items-center gap-1 truncate">
-            <ArrowUp size={11} className="shrink-0" />
-            <span className="truncate">{overview?.totalRevenue?.change || 0}% vs prev period</span>
+            {overview?.totalRevenue?.hasPricing ? (
+              overview?.totalRevenue?.coverage && overview.totalRevenue.coverage.pricedCount < overview.totalRevenue.coverage.totalCount ? (
+                <span className="text-slate-500 font-medium truncate text-[10px] sm:text-[11px]">
+                  Based on {overview.totalRevenue.coverage.pricedCount} of {overview.totalRevenue.coverage.totalCount} orders with pricing
+                </span>
+              ) : (
+                <>
+                  <ArrowUp size={11} className="shrink-0" />
+                  <span className="truncate">{overview?.totalRevenue?.change || 0}% vs prev period</span>
+                </>
+              )
+            ) : (
+              <span className="text-slate-400 font-normal truncate">
+                {overview?.totalOrders?.value || 0} unpriced orders
+              </span>
+            )}
           </div>
         </div>
 
@@ -214,10 +232,28 @@ export default function Reports() {
               <ShoppingBag size={18} />
             </div>
           </div>
-          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">{overview?.avgOrderValue?.display || '₹ 0'}</div>
+          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">
+            {overview?.avgOrderValue?.hasPricing && overview?.avgOrderValue?.value != null
+              ? overview.avgOrderValue.display
+              : <span className="text-sm font-semibold text-slate-400 italic">Not tracked</span>}
+          </div>
           <div className="text-[11px] 2xl:text-xs font-semibold text-blue-600 flex items-center gap-1 truncate">
-            <ArrowUp size={11} className="shrink-0" />
-            <span className="truncate">{overview?.avgOrderValue?.change || 0}% vs prev period</span>
+            {overview?.avgOrderValue?.hasPricing ? (
+              overview?.avgOrderValue?.coverage && overview.avgOrderValue.coverage.pricedCount < overview.avgOrderValue.coverage.totalCount ? (
+                <span className="text-slate-500 font-medium truncate text-[10px] sm:text-[11px]">
+                  Calculated from {overview.avgOrderValue.coverage.pricedCount} priced orders
+                </span>
+              ) : (
+                <>
+                  <ArrowUp size={11} className="shrink-0" />
+                  <span className="truncate">{overview?.avgOrderValue?.change || 0}% vs prev period</span>
+                </>
+              )
+            ) : (
+              <span className="text-slate-400 font-normal truncate">
+                Pricing not tracked on orders
+              </span>
+            )}
           </div>
         </div>
 
@@ -287,7 +323,7 @@ export default function Reports() {
               <span>Revenue Trend Progression</span>
               <Info size={15} className="text-slate-400 shrink-0" />
             </h3>
-            <p className="text-xs 2xl:text-sm text-slate-500 font-normal">Real-time revenue curve calculated strictly from confirmed orders</p>
+            <p className="text-xs 2xl:text-sm text-slate-500 font-normal">Real-time revenue curve calculated strictly from orders with recorded pricing</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -327,8 +363,8 @@ export default function Reports() {
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
               <TrendingUp size={28} className="text-slate-300" />
-              <p className="text-sm font-bold text-slate-700">No Revenue Trend Data Available</p>
-              <p className="text-xs text-slate-400 font-normal">Create orders in the database to visualize live sales trends</p>
+              <p className="text-sm font-bold text-slate-700">No Pricing Data Recorded For This Period</p>
+              <p className="text-xs text-slate-400 font-normal">Orders in this period do not have prices attached. Pricing is optional across the CRM.</p>
             </div>
           )}
         </div>
@@ -337,12 +373,18 @@ export default function Reports() {
       {/* Section 2: Visual Analytics Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 2xl:gap-8">
         
-        {/* Card 1: Top Products by Sales */}
+        {/* Card 1: Top Products by Sales / Volume */}
         <div className="bg-white rounded-2xl p-5 2xl:p-6 border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
             <div>
-              <h3 className="font-bold text-slate-900 text-sm 2xl:text-base tracking-tight">Top Products by Sales</h3>
-              <p className="text-xs text-slate-400 font-normal">Product revenue distribution from orders</p>
+              <h3 className="font-bold text-slate-900 text-sm 2xl:text-base tracking-tight">
+                {topProducts[0]?.isQuantityBased ? 'Top Products by Volume' : 'Top Products by Sales'}
+              </h3>
+              <p className="text-xs text-slate-400 font-normal">
+                {topProducts[0]?.isQuantityBased
+                  ? 'Product volume distribution (by units ordered)'
+                  : 'Product revenue distribution from orders'}
+              </p>
             </div>
             <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
               {topProducts.length} Products
@@ -371,9 +413,15 @@ export default function Reports() {
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-[9px] 2xl:text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Total Sales</span>
-                  <span className="text-xs 2xl:text-sm font-extrabold text-slate-900">{overview?.totalRevenue?.display || '₹ 0'}</span>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
+                  <span className="text-[9px] 2xl:text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                    {topProducts[0]?.isQuantityBased ? 'Total Units' : 'Total Sales'}
+                  </span>
+                  <span className="text-xs 2xl:text-sm font-extrabold text-slate-900 truncate max-w-[120px]">
+                    {topProducts[0]?.isQuantityBased
+                      ? `${topProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0).toLocaleString('en-IN')}`
+                      : (overview?.totalRevenue?.hasPricing ? overview.totalRevenue.display : '—')}
+                  </span>
                 </div>
               </div>
 
@@ -394,7 +442,7 @@ export default function Reports() {
               </div>
             </div>
           ) : (
-            <div className="p-8 text-center text-slate-400 text-xs font-normal">No product sales data recorded in database yet.</div>
+            <div className="p-8 text-center text-slate-400 text-xs font-normal">No product records in database for this period.</div>
           )}
         </div>
 
@@ -498,8 +546,19 @@ export default function Reports() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-3.5 2xl:py-4 px-2 text-center font-bold text-slate-800 text-xs sm:text-sm 2xl:text-base">{c.orders}</td>
-                    <td className="py-3.5 2xl:py-4 px-2 text-right font-bold text-slate-900 text-xs sm:text-sm 2xl:text-base">{c.revenue}</td>
+                    <td className="py-3.5 2xl:py-4 px-2 text-center font-bold text-slate-800 text-xs sm:text-sm 2xl:text-base">
+                      {c.orders}
+                      {c.pricedOrders !== undefined && c.pricedOrders < c.orders && c.pricedOrders > 0 && (
+                        <span className="block text-[10px] text-slate-400 font-normal">({c.pricedOrders} priced)</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 2xl:py-4 px-2 text-right font-bold text-slate-900 text-xs sm:text-sm 2xl:text-base">
+                      {c.hasPricing ? (
+                        c.revenue
+                      ) : (
+                        <span className="text-slate-400 font-normal italic text-xs">Pricing not tracked</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               ) : (
@@ -529,7 +588,7 @@ export default function Reports() {
                   }
                   headerExtra={
                     <span className="font-bold text-slate-900 text-sm shrink-0">
-                      {c.revenue}
+                      {c.hasPricing ? c.revenue : <span className="text-slate-400 font-normal italic text-xs">Unpriced</span>}
                     </span>
                   }
                 >
@@ -540,7 +599,9 @@ export default function Reports() {
                     </div>
                     <div>
                       <span className="text-slate-400 font-medium text-[11px] block">Total Revenue</span>
-                      <span className="font-bold text-emerald-600">{c.revenue}</span>
+                      <span className="font-bold text-emerald-600">
+                        {c.hasPricing ? c.revenue : <span className="text-slate-400 font-normal italic text-xs">Pricing not tracked</span>}
+                      </span>
                     </div>
                   </div>
 

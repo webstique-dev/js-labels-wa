@@ -157,23 +157,27 @@ const getCustomerSummary = async (req, res) => {
     const customerObjId = new mongoose.Types.ObjectId(id);
 
     // Fetch basic order metrics
-    const orders = await Order.find({ customerId: customerObjId }).sort({ orderDate: -1 });
+    const orders = await Order.find({ customerId: customerObjId, isDeleted: { $ne: true } }).sort({ orderDate: -1 });
 
     const totalOrders = orders.length;
-    const totalSpent = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
-    const lastOrder = orders.length > 0 ? { orderDate: orders[0].orderDate, amount: orders[0].amount } : null;
-    const avgOrderValue = totalOrders > 0 ? Math.round(totalSpent / totalOrders) : 0;
+    const pricedOrders = orders.filter(o => o.amount != null && !isNaN(o.amount) && o.amount > 0);
+    const pricedCount = pricedOrders.length;
+    const hasPricing = pricedCount > 0;
+    const totalSpent = hasPricing ? pricedOrders.reduce((sum, o) => sum + o.amount, 0) : null;
+    const avgOrderValue = hasPricing ? Math.round(totalSpent / pricedCount) : null;
+    const lastOrder = orders.length > 0 ? { orderDate: orders[0].orderDate || orders[0].createdAt, amount: orders[0].amount } : null;
     const repeatOrders = totalOrders > 1 ? totalOrders - 1 : 0;
     const repeatOrderRate = totalOrders > 0 ? Math.round((repeatOrders / totalOrders) * 100) : 0;
 
     // Aggregate Top Products across customer's orders
     const topProducts = await Order.aggregate([
-      { $match: { customerId: customerObjId, status: { $ne: 'cancelled' } } },
+      { $match: { customerId: customerObjId, isDeleted: { $ne: true }, status: { $ne: 'cancelled' } } },
       { $unwind: "$lineItems" },
       {
         $group: {
-          _id: "$lineItems.name",
+          _id: { $ifNull: ["$lineItems.productId", "$lineItems.name"] },
           name: { $first: "$lineItems.name" },
+          dimensionKey: { $first: "$lineItems.dimensionKey" },
           totalQty: { $sum: "$lineItems.qty" },
           totalAmount: {
             $sum: {
@@ -193,6 +197,11 @@ const getCustomerSummary = async (req, res) => {
     return res.json({
       totalOrders,
       totalSpent,
+      hasPricing,
+      pricingCoverage: {
+        pricedCount,
+        totalCount: totalOrders
+      },
       lastOrder,
       avgOrderValue,
       repeatOrders,

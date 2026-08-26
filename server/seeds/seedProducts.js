@@ -11,52 +11,105 @@ const seedProducts = async () => {
   }
 
   try {
+    if (!process.env.MONGO_URI) {
+      console.error('Error: MONGO_URI is missing in .env file');
+      process.exit(1);
+    }
+
     await mongoose.connect(process.env.MONGO_URI);
     console.log('Connected to MongoDB for product seeding...');
 
     await Product.deleteMany({});
     console.log('Cleared existing products.');
 
-    const products = await Product.create([
+    const initialProducts = [
       {
-        name: 'Premium BOPP Labels',
-        category: 'BOPP Film',
-        unitPrice: 1.25,
-        defaultUsageCycleDays: 30
+        name: '4x45 Standard Label',
+        widthMm: 4,
+        heightMm: 45,
+        category: 'BOPP',
+        defaultUsageCycleDays: 30,
+        unitPrice: null,
+        status: 'active'
       },
       {
-        name: 'Barcode Labels 50x25mm',
+        name: '10x15 Barcode Label',
+        widthMm: 10,
+        heightMm: 15,
+        category: 'Barcode',
+        defaultUsageCycleDays: 30,
+        unitPrice: null,
+        status: 'active'
+      },
+      {
+        name: '30x20 Carton Label',
+        widthMm: 30,
+        heightMm: 20,
         category: 'Thermal Paper',
-        unitPrice: 0.85,
-        defaultUsageCycleDays: 30
+        defaultUsageCycleDays: 45,
+        unitPrice: null,
+        status: 'active'
       },
       {
-        name: 'Transparent Poly Labels',
-        category: 'Clear Film',
-        unitPrice: 1.80,
-        defaultUsageCycleDays: 45
+        name: '20x25 Transparent Label',
+        widthMm: 20,
+        heightMm: 25,
+        category: 'Transparent',
+        defaultUsageCycleDays: 45,
+        unitPrice: null,
+        status: 'active'
       },
       {
-        name: 'Matt Finish Paper Labels',
-        category: 'Paper',
-        unitPrice: 0.95,
-        defaultUsageCycleDays: 30
+        name: '25x25 Round Label',
+        widthMm: 25,
+        heightMm: 25,
+        category: 'Chromo Paper',
+        defaultUsageCycleDays: 30,
+        unitPrice: null,
+        status: 'active'
       },
       {
-        name: 'Glossy Product Labels',
-        category: 'Paper',
-        unitPrice: 1.10,
-        defaultUsageCycleDays: 30
+        name: '50x25 Shipping Barcode Label',
+        widthMm: 50,
+        heightMm: 25,
+        category: 'Barcode',
+        defaultUsageCycleDays: 30,
+        unitPrice: null,
+        status: 'active'
       },
       {
-        name: 'Tamper Evident Security Seals',
+        name: '100x150 Logistics Pallet Label',
+        widthMm: 100,
+        heightMm: 150,
+        category: 'Thermal Paper',
+        defaultUsageCycleDays: 45,
+        unitPrice: null,
+        status: 'active'
+      },
+      {
+        name: '15x15 Tamper Evident Void Seal',
+        widthMm: 15,
+        heightMm: 15,
         category: 'Security Film',
-        unitPrice: 1.50,
-        defaultUsageCycleDays: 45
+        defaultUsageCycleDays: 45,
+        unitPrice: null,
+        status: 'active'
       }
-    ]);
+    ];
 
-    console.log(`Seeded ${products.length} label products successfully.`);
+    // Create products using .create or new Product().save() to trigger pre-save hooks
+    const createdProducts = [];
+    for (const p of initialProducts) {
+      const doc = new Product(p);
+      await doc.save();
+      createdProducts.push(doc);
+    }
+
+    console.log(`Successfully seeded ${createdProducts.length} dimension-based products:`);
+    createdProducts.forEach(p => {
+      console.log(` - ${p.name} [Dim: ${p.dimensionKey}] (Cycle: ${p.defaultUsageCycleDays}d, Price: ${p.unitPrice ?? 'Not set'})`);
+    });
+
     process.exit(0);
   } catch (error) {
     console.error('Error seeding products:', error);

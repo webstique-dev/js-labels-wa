@@ -57,20 +57,32 @@ const getReportsOverview = async (req, res) => {
     ]);
 
     const targetOrders = periodOrders.length > 0 ? periodOrders : allOrders;
-    const totalRevValue = targetOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
-    const prevRevValue = prevPeriodOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
-    const revChange = calcChange(totalRevValue, prevRevValue);
+    const totalOrdersCount = targetOrders.length;
 
-    let revDisplay = `₹ ${totalRevValue.toLocaleString('en-IN')}`;
-    if (totalRevValue >= 100000) {
-      revDisplay = `₹ ${(totalRevValue / 100000).toFixed(1)} Lakhs`;
+    // Filter only orders that have actual recorded pricing
+    const pricedOrders = targetOrders.filter(o => o.amount != null && !isNaN(o.amount) && o.amount > 0);
+    const pricedOrdersCount = pricedOrders.length;
+    const hasPricing = pricedOrdersCount > 0;
+    const totalRevValue = hasPricing ? pricedOrders.reduce((sum, o) => sum + o.amount, 0) : null;
+
+    const prevPricedOrders = prevPeriodOrders.filter(o => o.amount != null && !isNaN(o.amount) && o.amount > 0);
+    const prevRevValue = prevPricedOrders.reduce((sum, o) => sum + o.amount, 0);
+    const revChange = (hasPricing && prevRevValue > 0) ? calcChange(totalRevValue, prevRevValue) : 0;
+
+    let revDisplay = 'No pricing recorded';
+    if (hasPricing && totalRevValue !== null) {
+      if (totalRevValue >= 100000) {
+        revDisplay = `₹ ${(totalRevValue / 100000).toFixed(1)} Lakhs`;
+      } else {
+        revDisplay = `₹ ${totalRevValue.toLocaleString('en-IN')}`;
+      }
     }
 
-    const orderCount = targetOrders.length;
-    const avgOrderVal = orderCount > 0 ? Math.round(totalRevValue / orderCount) : 0;
-    const prevOrderCount = prevPeriodOrders.length;
+    // Average Order Value calculated strictly against priced orders
+    const avgOrderVal = hasPricing ? Math.round(totalRevValue / pricedOrdersCount) : null;
+    const prevOrderCount = prevPricedOrders.length;
     const prevAov = prevOrderCount > 0 ? Math.round(prevRevValue / prevOrderCount) : 0;
-    const aovChange = calcChange(avgOrderVal, prevAov);
+    const aovChange = (avgOrderVal != null && prevAov > 0) ? calcChange(avgOrderVal, prevAov) : 0;
 
     const customerOrderCounts = {};
     allOrders.forEach(o => {
@@ -83,20 +95,29 @@ const getReportsOverview = async (req, res) => {
     const repeatOrderRateVal = totalCustomers > 0 ? Math.round((repeatCustomerCount / totalCustomers) * 1000) / 10 : 0;
 
     const winRateVal = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 1000) / 10 : 0;
-    const totalOrdersCount = allOrders.length;
     const prevTotalOrdersCount = prevPeriodOrders.length;
     const ordersChange = calcChange(totalOrdersCount, prevTotalOrdersCount);
 
     return res.json({
       totalRevenue: {
         value: totalRevValue,
+        hasPricing,
         display: revDisplay,
-        change: revChange
+        change: revChange,
+        coverage: {
+          pricedCount: pricedOrdersCount,
+          totalCount: totalOrdersCount
+        }
       },
       avgOrderValue: {
         value: avgOrderVal,
-        display: `₹ ${avgOrderVal.toLocaleString('en-IN')}`,
-        change: aovChange
+        hasPricing,
+        display: avgOrderVal != null ? `₹ ${avgOrderVal.toLocaleString('en-IN')}` : 'Not tracked',
+        change: aovChange,
+        coverage: {
+          pricedCount: pricedOrdersCount,
+          totalCount: totalOrdersCount
+        }
       },
       repeatOrderRate: {
         value: repeatOrderRateVal,
@@ -130,10 +151,12 @@ const getRevenueTrend = async (req, res) => {
   try {
     const { from, to } = parseDates(req.query.from || req.query.fromDate, req.query.to || req.query.toDate, req.query.period);
 
+    // Only include orders that have real numeric amount
     const trend = await Order.aggregate([
       {
         $match: {
           isDeleted: { $ne: true },
+          amount: { $ne: null, $gt: 0 },
           createdAt: { $gte: from, $lte: to }
         }
       },
@@ -150,8 +173,14 @@ const getRevenueTrend = async (req, res) => {
       return res.json(trend.map(item => ({ date: item._id, revenue: item.revenue })));
     }
 
+    // Fallback: check all-time if specific range had 0 priced orders
     const allTrend = await Order.aggregate([
-      { $match: { isDeleted: { $ne: true } } },
+      {
+        $match: {
+          isDeleted: { $ne: true },
+          amount: { $ne: null, $gt: 0 }
+        }
+      },
       {
         $group: {
           _id: { $dateToString: { format: "%b %d", date: "$createdAt" } },
@@ -181,32 +210,65 @@ const getTopProducts = async (req, res) => {
       {
         $group: {
           _id: "$lineItems.name",
-          totalSales: { $sum: { $multiply: ["$lineItems.price", "$lineItems.qty"] } },
+          totalSales: {
+            $sum: {
+              $cond: [
+                { $gt: ["$lineItems.lineTotal", 0] },
+                "$lineItems.lineTotal",
+                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
+              ]
+            }
+          },
+          totalQty: { $sum: "$lineItems.qty" },
           count: { $sum: 1 }
         }
       },
-      { $sort: { totalSales: -1 } }
+      { $sort: { totalSales: -1, totalQty: -1 } }
     ]);
 
     const totalSalesSum = productStats.reduce((sum, p) => sum + (p.totalSales || 0), 0);
+    const totalQtySum = productStats.reduce((sum, p) => sum + (p.totalQty || 0), 0);
     const COLORS = ['#2563EB', '#9333EA', '#F97316', '#F59E0B', '#7C3AED', '#94A3B8'];
 
-    if (productStats && productStats.length > 0 && totalSalesSum > 0) {
-      const formatted = productStats.slice(0, 6).map((item, idx) => {
-        const pct = Math.round((item.totalSales / totalSalesSum) * 100);
-        let salesDisplay = `₹ ${item.totalSales.toLocaleString('en-IN')}`;
-        if (item.totalSales >= 100000) {
-          salesDisplay = `₹ ${(item.totalSales / 100000).toFixed(1)}L`;
-        }
-        return {
-          name: item._id || 'Standard Labels',
-          percentage: pct,
-          sales: salesDisplay,
-          value: item.totalSales,
-          color: COLORS[idx % COLORS.length]
-        };
-      });
-      return res.json(formatted);
+    if (productStats && productStats.length > 0) {
+      // Case A: Sales pricing exists
+      if (totalSalesSum > 0) {
+        const formatted = productStats.slice(0, 6).map((item, idx) => {
+          const pct = Math.round((item.totalSales / totalSalesSum) * 100);
+          let salesDisplay = `₹ ${item.totalSales.toLocaleString('en-IN')}`;
+          if (item.totalSales >= 100000) {
+            salesDisplay = `₹ ${(item.totalSales / 100000).toFixed(1)}L`;
+          }
+          return {
+            name: item._id || 'Standard Labels',
+            percentage: pct,
+            sales: salesDisplay,
+            value: item.totalSales,
+            totalQty: item.totalQty,
+            isQuantityBased: false,
+            color: COLORS[idx % COLORS.length]
+          };
+        });
+        return res.json(formatted);
+      }
+
+      // Case B: No pricing recorded, but quantities exist — gracefully show quantity share!
+      if (totalQtySum > 0) {
+        const sortedByQty = [...productStats].sort((a, b) => b.totalQty - a.totalQty);
+        const formatted = sortedByQty.slice(0, 6).map((item, idx) => {
+          const pct = Math.round((item.totalQty / totalQtySum) * 100);
+          return {
+            name: item._id || 'Standard Labels',
+            percentage: pct,
+            sales: `${item.totalQty.toLocaleString('en-IN')} units`,
+            value: item.totalQty,
+            totalQty: item.totalQty,
+            isQuantityBased: true,
+            color: COLORS[idx % COLORS.length]
+          };
+        });
+        return res.json(formatted);
+      }
     }
 
     return res.json([]);
@@ -272,11 +334,28 @@ const getTopCustomersReport = async (req, res) => {
       {
         $group: {
           _id: "$customerId",
-          totalRevenue: { $sum: "$amount" },
+          totalRevenue: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$amount", null] }, { $gt: ["$amount", 0] }] },
+                "$amount",
+                0
+              ]
+            }
+          },
+          pricedOrdersCount: {
+            $sum: {
+              $cond: [
+                { $and: [{ $ne: ["$amount", null] }, { $gt: ["$amount", 0] }] },
+                1,
+                0
+              ]
+            }
+          },
           orderCount: { $sum: 1 }
         }
       },
-      { $sort: { totalRevenue: -1 } },
+      { $sort: { totalRevenue: -1, orderCount: -1 } },
       { $limit: 5 }
     ]);
 
@@ -305,11 +384,17 @@ const getTopCustomersReport = async (req, res) => {
 
       const result = customerAggregation.map((item, idx) => {
         const cDoc = customerMap[item._id?.toString()] || {};
-        const name = cDoc.name || 'Enterprise Customer';
-        const company = cDoc.company || 'Traders Ltd.';
-        let revDisplay = `₹ ${item.totalRevenue.toLocaleString('en-IN')}`;
-        if (item.totalRevenue >= 100000) {
-          revDisplay = `₹ ${(item.totalRevenue / 100000).toFixed(1)} Lakhs`;
+        const name = cDoc.name || 'Customer Account';
+        const company = cDoc.company || '—';
+        const hasPricing = item.totalRevenue > 0;
+
+        let revDisplay = 'Pricing not tracked';
+        if (hasPricing) {
+          if (item.totalRevenue >= 100000) {
+            revDisplay = `₹ ${(item.totalRevenue / 100000).toFixed(1)} Lakhs`;
+          } else {
+            revDisplay = `₹ ${item.totalRevenue.toLocaleString('en-IN')}`;
+          }
         }
 
         return {
@@ -319,24 +404,13 @@ const getTopCustomersReport = async (req, res) => {
           initials: getInitials(name),
           initialsBg: COLOR_BG_LIST[idx % COLOR_BG_LIST.length],
           orders: item.orderCount,
+          pricedOrders: item.pricedOrdersCount,
+          hasPricing,
           revenue: revDisplay
         };
       });
 
       return res.json(result);
-    }
-
-    const allCustomers = await Customer.find({ isDeleted: { $ne: true } }).limit(5);
-    if (allCustomers && allCustomers.length > 0) {
-      return res.json(allCustomers.map((c, idx) => ({
-        id: c._id.toString(),
-        name: c.name,
-        company: c.company || 'Enterprise Customer',
-        initials: getInitials(c.name),
-        initialsBg: COLOR_BG_LIST[idx % COLOR_BG_LIST.length],
-        orders: 1,
-        revenue: '₹ 15,420'
-      })));
     }
 
     return res.json([]);
@@ -349,7 +423,28 @@ const getTopCustomersReport = async (req, res) => {
 // GET /api/reports/executive-performance
 const getExecutivePerformance = async (req, res) => {
   try {
-    return res.json([]);
+    const executives = await User.find({ role: { $in: ['caller', 'manager', 'super_admin'] }, isDeleted: { $ne: true } });
+    
+    const performance = await Promise.all(executives.map(async (exec) => {
+      const orders = await Order.find({ salesExecutive: exec._id, isDeleted: { $ne: true } });
+      const pricedOrders = orders.filter(o => o.amount != null && !isNaN(o.amount) && o.amount > 0);
+      const totalRev = pricedOrders.reduce((sum, o) => sum + o.amount, 0);
+
+      return {
+        id: exec._id,
+        name: exec.name,
+        email: exec.email,
+        role: exec.role,
+        avatarUrl: exec.avatarUrl,
+        totalOrders: orders.length,
+        pricedOrdersCount: pricedOrders.length,
+        totalRevenue: totalRev,
+        hasPricing: pricedOrders.length > 0,
+        revenueDisplay: pricedOrders.length > 0 ? `₹ ${totalRev.toLocaleString('en-IN')}` : 'Pricing not tracked'
+      };
+    }));
+
+    return res.json(performance.filter(p => p.totalOrders > 0));
   } catch (error) {
     console.error('Error fetching executive performance:', error);
     return res.status(500).json({ message: 'Server error fetching executive performance' });
@@ -465,7 +560,7 @@ const exportReportCSV = async (req, res) => {
       o.customerId?.company || '—',
       o.orderDate ? new Date(o.orderDate) : new Date(o.createdAt),
       o.expectedReorderDate ? new Date(o.expectedReorderDate) : '—',
-      Number(o.amount) || 0,
+      o.amount != null ? Number(o.amount) : 'Not tracked',
       o.status || 'confirmed',
       o.salesExecutive?.name || 'Executive'
     ]);
@@ -494,5 +589,3 @@ module.exports = {
   getExecutivePerformance,
   exportReportCSV
 };
-
-

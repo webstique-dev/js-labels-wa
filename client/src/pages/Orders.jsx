@@ -409,7 +409,13 @@ export default function Orders() {
                                 <p className="text-[11px] text-slate-400 font-normal mt-0.5">{company}</p>
                               </td>
                               <td className="p-4 text-slate-700 font-medium">{orderDateStr}</td>
-                              <td className="p-4 font-bold text-slate-900">₹ {amountVal.toLocaleString('en-IN')}</td>
+                              <td className="p-4 font-bold text-slate-900">
+                                {ord.amount != null ? (
+                                  `₹ ${Number(ord.amount).toLocaleString('en-IN')}`
+                                ) : (
+                                  <span className="text-slate-400 font-normal italic">Not set</span>
+                                )}
+                              </td>
                               <td className="p-4">{renderStatusBadge(ord.status)}</td>
                               <td className="p-4">
                                 <div className="font-medium text-slate-900">{deliveryDateStr}</div>
@@ -486,7 +492,11 @@ export default function Orders() {
                         <div className="grid grid-cols-2 gap-3 text-xs pt-1">
                           <div>
                             <span className="text-slate-400 font-medium text-[11px] block">Order Amount</span>
-                            <span className="font-bold text-slate-900 text-sm">₹ {amountVal.toLocaleString('en-IN')}</span>
+                            <span className="font-bold text-slate-900 text-sm">
+                              {ord.amount != null ? `₹ ${Number(ord.amount).toLocaleString('en-IN')}` : (
+                                <span className="text-slate-400 font-normal italic">Not set</span>
+                              )}
+                            </span>
                           </div>
                           <div>
                             <span className="text-slate-400 font-medium text-[11px] block">Order Date</span>
@@ -508,8 +518,13 @@ export default function Orders() {
                               <div className="space-y-1">
                                 {ord.lineItems.slice(0, 3).map((item, i) => (
                                   <div key={i} className="flex items-center justify-between text-[11px] text-slate-700">
-                                    <span className="truncate">{item.name || item.description}</span>
-                                    <span className="font-semibold shrink-0">x{item.qty}</span>
+                                    <span className="truncate">
+                                      <span className="font-semibold text-slate-900">{item.name || 'Label Product'}</span>
+                                      {item.dimensionKey && (
+                                        <span className="ml-1 text-[10px] text-slate-500 font-mono">[{item.dimensionKey}]</span>
+                                      )}
+                                    </span>
+                                    <span className="font-semibold shrink-0">x{item.qty?.toLocaleString('en-IN')}</span>
                                   </div>
                                 ))}
                                 {ord.lineItems.length > 3 && (
@@ -648,22 +663,34 @@ export default function Orders() {
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-[10px]">
-                          <th className="p-2.5">Item Description</th>
+                        <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-[10px] uppercase">
+                          <th className="p-2.5">Product & Dimension</th>
                           <th className="p-2.5 text-right">Qty</th>
                           <th className="p-2.5 text-right">Amount</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {viewingOrder.lineItems.map((item, idx) => {
-                          const lineAmt = item.lineTotal !== undefined && item.lineTotal !== null
+                          const lineAmt = item.lineTotal != null
                             ? item.lineTotal
-                            : (item.amount || (item.rate && item.qty ? (item.qty / 1000) * item.rate : 0));
+                            : (item.price != null && item.qty ? item.qty * item.price : null);
+
                           return (
                             <tr key={idx}>
-                              <td className="p-2.5 font-medium text-slate-800">{item.name || item.description}</td>
-                              <td className="p-2.5 text-right text-slate-600">{item.qty?.toLocaleString('en-IN')}</td>
-                              <td className="p-2.5 text-right font-bold text-slate-900">₹ {lineAmt.toLocaleString('en-IN')}</td>
+                              <td className="p-2.5">
+                                <div className="font-medium text-slate-800">{item.name || 'Label Product'}</div>
+                                {item.dimensionKey && (
+                                  <div className="text-[10px] text-slate-400 font-mono">Dimension: {item.dimensionKey}</div>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right text-slate-600 font-medium">{item.qty?.toLocaleString('en-IN')}</td>
+                              <td className="p-2.5 text-right font-bold text-slate-900">
+                                {lineAmt != null ? (
+                                  `₹ ${Number(lineAmt).toLocaleString('en-IN')}`
+                                ) : (
+                                  <span className="text-slate-400 font-normal italic">Not set</span>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
@@ -675,7 +702,11 @@ export default function Orders() {
 
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 font-bold text-sm text-slate-900">
                 <span>Total Order Value</span>
-                <span className="text-red-600">₹ {(viewingOrder.amount || 0).toLocaleString('en-IN')}</span>
+                {viewingOrder.amount != null ? (
+                  <span className="text-red-600">₹ {Number(viewingOrder.amount).toLocaleString('en-IN')}</span>
+                ) : (
+                  <span className="text-slate-400 font-normal italic text-xs">Pricing not tracked for this order</span>
+                )}
               </div>
 
               {viewingOrder.deliveryAddress && (

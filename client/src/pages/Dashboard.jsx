@@ -573,12 +573,39 @@ export default function Dashboard() {
           to="/customers"
           className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-emerald-300 transition group"
         >
-          <div>
-            <span className="text-slate-600 font-semibold text-xs">Reorder Forecast</span>
-            <div className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mt-2">
-              {formatReorderAmount(alerts?.reorderForecast)}
+          <div className="min-w-0 pr-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-600 font-semibold text-xs">Reorder Forecast</span>
+              {alerts?.reorderForecast <= 0 && alerts?.reorderForecastQty > 0 && (
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                  Qty Mode
+                </span>
+              )}
             </div>
-            <span className="text-blue-600 font-semibold text-xs mt-1 block">Next 30 Days</span>
+
+            <div className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mt-2 truncate">
+              {alerts?.reorderForecast > 0
+                ? formatReorderAmount(alerts.reorderForecast)
+                : (alerts?.reorderForecastQty > 0
+                    ? `~${alerts.reorderForecastQty.toLocaleString('en-IN')} Labels`
+                    : '—')}
+            </div>
+
+            <div className="text-[11px] font-medium text-slate-500 mt-1 truncate">
+              {alerts?.reorderForecast > 0 ? (
+                alerts?.pricingCoverage && alerts.pricingCoverage.pricedCount < alerts.pricingCoverage.totalCount ? (
+                  <span className="text-blue-600 font-semibold">
+                    Next 30D ({alerts.pricingCoverage.pricedCount}/{alerts.pricingCoverage.totalCount} customers priced)
+                  </span>
+                ) : (
+                  <span className="text-blue-600 font-semibold">Next 30 Days Expected</span>
+                )
+              ) : alerts?.reorderForecastQty > 0 ? (
+                <span className="text-amber-700 font-medium">Next 30 Days (Qty estimate)</span>
+              ) : (
+                <span className="text-slate-400 font-normal">Next 30 Days (No reorders)</span>
+              )}
+            </div>
           </div>
           <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
             <TrendingUp size={22} />

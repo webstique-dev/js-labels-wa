@@ -2,20 +2,19 @@ const mongoose = require('mongoose');
 const softDeletePlugin = require('../utils/softDelete');
 
 const lineItemSchema = new mongoose.Schema({
-  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+  dimensionKey: { type: String, required: true },
   name: { type: String },
-  description: { type: String },
-  qty: { type: Number },
-  rate: { type: Number },
-  price: { type: Number },
-  lineTotal: { type: Number }
+  qty: { type: Number, required: true },
+  price: { type: Number, required: false, default: null },
+  lineTotal: { type: Number, required: false, default: null }
 }, { _id: false });
 
 const orderSchema = new mongoose.Schema({
   orderNo: { type: String, unique: true, sparse: true },
   customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
   orderDate: { type: Date, default: Date.now },
-  amount: { type: Number, required: true },
+  amount: { type: Number, required: false, default: null },
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'production', 'quality_check', 'dispatched', 'delivered', 'cancelled'],

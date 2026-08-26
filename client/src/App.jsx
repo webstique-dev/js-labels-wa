@@ -15,6 +15,7 @@ import Customers from './pages/Customers';
 import CustomerDetails from './pages/CustomerDetails';
 import Orders from './pages/Orders';
 import Products from './pages/Products';
+import Production from './pages/Production';
 import FollowUps from './pages/FollowUps';
 import Reminders from './pages/Reminders';
 import Reports from './pages/Reports';
@@ -110,6 +111,14 @@ export default function App() {
                   element={
                     <RoleGuard module="products">
                       <Products />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="/production"
+                  element={
+                    <RoleGuard module="production">
+                      <Production />
                     </RoleGuard>
                   }
                 />

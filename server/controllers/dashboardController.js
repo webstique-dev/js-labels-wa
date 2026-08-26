@@ -15,10 +15,10 @@ const buildFilters = (req) => {
   const scope = req.scopeFilter || {};
   const { period, assignedTo, source, startDate, endDate } = req.query;
 
-  const leadFilter = { ...scope };
-  const custFilter = req.user.role === 'caller' ? { salesExecutive: req.user.id } : {};
-  const followUpFilter = req.user.role === 'caller' ? { assignedTo: req.user.id } : {};
-  const orderFilter = req.user.role === 'caller' ? { salesExecutive: req.user.id } : {};
+  const leadFilter = { ...scope, isDeleted: { $ne: true } };
+  const custFilter = req.user.role === 'caller' ? { salesExecutive: req.user.id, isDeleted: { $ne: true } } : { isDeleted: { $ne: true } };
+  const followUpFilter = req.user.role === 'caller' ? { assignedTo: req.user.id, isDeleted: { $ne: true } } : { isDeleted: { $ne: true } };
+  const orderFilter = req.user.role === 'caller' ? { salesExecutive: req.user.id, isDeleted: { $ne: true } } : { isDeleted: { $ne: true } };
   const activityFilter = {};
 
   // Executive / Caller Filter (for Super Admin / Manager)
@@ -108,7 +108,7 @@ const getDashboardSummary = async (req, res) => {
     const customers = await Customer.find(custFilter);
     let repeatCustCount = 0;
     for (const c of customers) {
-      const orderCount = await Order.countDocuments({ customerId: c._id });
+      const orderCount = await Order.countDocuments({ customerId: c._id, isDeleted: { $ne: true } });
       if (orderCount > 1) repeatCustCount++;
     }
 
@@ -237,18 +237,34 @@ const getDashboardAlerts = async (req, res) => {
       expectedReorderDate: { $gte: now, $lte: in7Days }
     });
 
-    // 4. Reorder Forecast (Sum of orders for customers due in 30 days)
+    // 4. Reorder Forecast (Computing both revenue and quantity forecasts for customers due in 30 days)
     const dueCustomers30Days = await Customer.find({
       ...custFilter,
       expectedReorderDate: { $gte: now, $lte: in30Days }
     });
 
     let reorderForecastAmount = 0;
+    let reorderForecastQty = 0;
+    let pricedCustomerCount = 0;
+
     for (const c of dueCustomers30Days) {
-      const orders = await Order.find({ customerId: c._id });
+      const orders = await Order.find({ customerId: c._id, isDeleted: { $ne: true } });
       if (orders.length > 0) {
-        const totalSpent = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
-        reorderForecastAmount += Math.round(totalSpent / orders.length);
+        // Quantity calculation (always available from line items)
+        const totalQtyAcrossOrders = orders.reduce((sum, o) => {
+          const itemQty = (o.lineItems || []).reduce((isum, li) => isum + (li.qty || 0), 0);
+          return sum + itemQty;
+        }, 0);
+        const avgQty = Math.round(totalQtyAcrossOrders / orders.length);
+        reorderForecastQty += avgQty;
+
+        // Revenue calculation (only from orders with recorded pricing)
+        const pricedOrders = orders.filter(o => o.amount != null && !isNaN(o.amount) && o.amount > 0);
+        if (pricedOrders.length > 0) {
+          const totalSpent = pricedOrders.reduce((sum, o) => sum + o.amount, 0);
+          reorderForecastAmount += Math.round(totalSpent / pricedOrders.length);
+          pricedCustomerCount++;
+        }
       }
     }
 
@@ -256,7 +272,12 @@ const getDashboardAlerts = async (req, res) => {
       overdueFollowups,
       dueToday,
       upcomingReminders,
-      reorderForecast: reorderForecastAmount
+      reorderForecast: reorderForecastAmount,
+      reorderForecastQty,
+      pricingCoverage: {
+        pricedCount: pricedCustomerCount,
+        totalCount: dueCustomers30Days.length
+      }
     });
   } catch (error) {
     console.error('Error fetching dashboard alerts:', error);
@@ -271,4 +292,3 @@ module.exports = {
   getDashboardActivityFeed,
   getDashboardAlerts
 };
-

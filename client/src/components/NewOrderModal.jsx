@@ -1,14 +1,179 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../api/axios';
-import { Plus, Trash2, X, ChevronDown, ChevronUp, FileText, CreditCard, MapPin, AlignLeft } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  X,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  CreditCard,
+  Ruler,
+  Search,
+  Check,
+  Clock,
+  IndianRupee,
+  Info
+} from 'lucide-react';
 import CustomDatePicker from './ui/DatePicker';
 import { useNotification } from '../context/NotificationContext';
-
 import LoadingButton from './ui/LoadingButton';
+
+/**
+ * Searchable Product Dropdown Component for Order Line Items
+ */
+function SearchableProductSelect({ products, selectedProductId, onSelectProduct, disabled }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  const selectedProduct = useMemo(() => {
+    return products.find(p => p._id === selectedProductId) || null;
+  }, [products, selectedProductId]);
+
+  // Filter products by search term (name, dimensionKey, or category)
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return products;
+    const term = searchTerm.toLowerCase().trim();
+    const normalizedDim = term.replace(/\s*x\s*/g, 'x');
+
+    return products.filter(p => {
+      const nameMatch = (p.name || '').toLowerCase().includes(term);
+      const catMatch = (p.category || '').toLowerCase().includes(term);
+      const dimKey = (p.dimensionKey || `${p.widthMm}x${p.heightMm}`).toLowerCase();
+      const dimMatch = dimKey.includes(term) || dimKey.includes(normalizedDim);
+      return nameMatch || catMatch || dimMatch;
+    });
+  }, [products, searchTerm]);
+
+  // Click outside to close
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Selector Box */}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen(prev => !prev)}
+        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 hover:border-slate-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 rounded-xl text-left flex items-center justify-between gap-2 text-xs transition cursor-pointer disabled:opacity-50"
+      >
+        {selectedProduct ? (
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-white font-mono font-bold text-[11px] rounded-md shadow-2xs shrink-0">
+              <Ruler size={12} className="text-red-400 stroke-[2.5]" />
+              {selectedProduct.dimensionKey || `${selectedProduct.widthMm}x${selectedProduct.heightMm}`}
+            </span>
+            <span className="font-semibold text-slate-900 truncate">
+              {selectedProduct.name}
+            </span>
+            {selectedProduct.category && (
+              <span className="text-[10px] text-slate-400 font-normal shrink-0">
+                ({selectedProduct.category})
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-slate-400 font-normal">
+            -- Select product by dimension or name --
+          </span>
+        )}
+        <ChevronDown size={15} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-2 space-y-1.5 max-h-64 overflow-hidden flex flex-col">
+          {/* Search Field */}
+          <div className="relative">
+            <Search size={14} className="text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Type dimension (e.g. 4x45) or name..."
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 font-medium focus:bg-white focus:border-red-500 focus:outline-none"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Product Items List */}
+          <div className="overflow-y-auto scrollbar-hide space-y-1 max-h-48 pt-0.5">
+            {filteredProducts.length === 0 ? (
+              <div className="p-4 text-center text-xs text-slate-400">
+                No matching products found
+              </div>
+            ) : (
+              filteredProducts.map((p) => {
+                const isSelected = p._id === selectedProductId;
+                const dimStr = p.dimensionKey || `${p.widthMm}x${p.heightMm}`;
+                return (
+                  <button
+                    key={p._id}
+                    type="button"
+                    onClick={() => {
+                      onSelectProduct(p);
+                      setIsOpen(false);
+                      setSearchTerm('');
+                    }}
+                    className={`w-full text-left p-2.5 rounded-xl transition flex items-center justify-between gap-2 text-xs cursor-pointer ${
+                      isSelected
+                        ? 'bg-red-50 border border-red-200 text-red-900'
+                        : 'hover:bg-slate-50 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-white font-mono font-bold text-[10px] rounded-md shrink-0">
+                        <Ruler size={11} className="text-red-400" />
+                        {dimStr}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-slate-900 truncate">{p.name}</p>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {p.category || 'General'} • {p.defaultUsageCycleDays || 30}d cycle
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {p.unitPrice != null && (
+                        <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                          ₹{p.unitPrice}
+                        </span>
+                      )}
+                      {isSelected && <Check size={14} className="text-red-600" />}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead, initialCustomer }) {
   const notify = useNotification();
   const [existingCustomers, setExistingCustomers] = useState([]);
+  const [productsList, setProductsList] = useState([]);
   const [loadingResources, setLoadingResources] = useState(false);
 
   // Customer Mode: 'existing' or 'new'
@@ -25,9 +190,10 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
     address: ''
   });
 
-  // Custom Spec Line Items (Description, Qty, Rate per 1000, Total Amount)
+  // Dimension-based Line Items from Product catalog
+  // productId, qty, price (optional)
   const [lineItems, setLineItems] = useState([
-    { description: '', qty: 1000, rate: '', lineTotal: '' }
+    { productId: '', qty: 1000, price: '' }
   ]);
 
   // Order Details
@@ -36,12 +202,12 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
   const [expectedReorderDate, setExpectedReorderDate] = useState('');
   const [isManualReorderOverride, setIsManualReorderOverride] = useState(false);
 
-  // Auto-calculate expectedReorderDate when deliveryDate or usageCycleDays changes (if not manually overridden)
+  // Auto-calculate expectedReorderDate when deliveryDate or usageCycleDays changes
   useEffect(() => {
     if (!isManualReorderOverride && deliveryDate) {
       const d = new Date(deliveryDate);
       if (!isNaN(d.getTime())) {
-        const cycle = parseInt(usageCycleDays) || 30;
+        const cycle = parseInt(usageCycleDays, 10) || 30;
         const calcDate = new Date(d.getTime() + cycle * 24 * 60 * 60 * 1000);
         const yyyy = calcDate.getFullYear();
         const mm = String(calcDate.getMonth() + 1).padStart(2, '0');
@@ -83,49 +249,76 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
     }
   }, [initialLead, initialCustomer]);
 
-  // Load Existing Customers on Modal Open
+  // Load Existing Customers & Products on Modal Open
   useEffect(() => {
     if (isOpen) {
-      const fetchCustomers = async () => {
+      const fetchData = async () => {
         try {
           setLoadingResources(true);
-          const custRes = await api.get('/customers');
-          setExistingCustomers(custRes.data?.customers || (Array.isArray(custRes.data) ? custRes.data : []));
+          const [custRes, prodRes] = await Promise.allSettled([
+            api.get('/customers'),
+            api.get('/products?limit=100&status=active')
+          ]);
+
+          if (custRes.status === 'fulfilled') {
+            const cData = custRes.value.data;
+            setExistingCustomers(Array.isArray(cData) ? cData : (cData?.customers || []));
+          }
+
+          if (prodRes.status === 'fulfilled') {
+            const pData = prodRes.value.data;
+            const prods = Array.isArray(pData) ? pData : (pData?.products || []);
+            setProductsList(prods);
+
+            // If line items is empty/unselected, pre-select first product if available
+            setLineItems(prev => {
+              if (prev.length === 1 && !prev[0].productId && prods.length > 0) {
+                const first = prods[0];
+                return [{ productId: first._id, qty: 1000, price: '' }];
+              }
+              return prev;
+            });
+          }
         } catch (err) {
-          console.error('Error loading existing customers:', err);
+          console.error('Error loading resources for order form:', err);
         } finally {
           setLoadingResources(false);
         }
       };
-      fetchCustomers();
+      fetchData();
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  // Handle Line Item Field Change (Auto-calculates lineTotal when qty or rate changes)
-  const handleItemChange = (index, field, value) => {
+  // Handle Product Selection for a line item
+  const handleSelectProduct = (index, product) => {
     const updated = [...lineItems];
-    const item = { ...updated[index], [field]: value };
+    updated[index] = {
+      ...updated[index],
+      productId: product._id
+    };
 
-    if (field === 'qty' || field === 'rate') {
-      const qty = field === 'qty' ? (parseFloat(value) || 0) : (parseFloat(item.qty) || 0);
-      const rate = field === 'rate' ? (parseFloat(value) || 0) : (parseFloat(item.rate) || 0);
-      if (qty > 0 && rate > 0) {
-        item.lineTotal = Math.round((qty / 1000) * rate);
-      } else if (value === '' || parseFloat(value) === 0) {
-        item.lineTotal = '';
-      }
+    // Auto-fill Usage Cycle from product default if available
+    if (product.defaultUsageCycleDays && index === 0) {
+      setUsageCycleDays(product.defaultUsageCycleDays);
     }
 
-    updated[index] = item;
+    setLineItems(updated);
+  };
+
+  // Handle Line Item Field Change
+  const handleItemFieldChange = (index, field, value) => {
+    const updated = [...lineItems];
+    updated[index] = {
+      ...updated[index],
+      [field]: value
+    };
     setLineItems(updated);
   };
 
   const addLineItem = () => {
     setLineItems([
       ...lineItems,
-      { description: '', qty: 1000, rate: '', lineTotal: '' }
+      { productId: '', qty: 1000, price: '' }
     ]);
   };
 
@@ -134,14 +327,25 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
     setLineItems(lineItems.filter((_, i) => i !== index));
   };
 
-  // Grand Total Calculation
-  const calculatedGrandTotal = lineItems.reduce((sum, item) => {
-    const totalVal = parseFloat(item.lineTotal);
-    if (!isNaN(totalVal) && totalVal > 0) return sum + totalVal;
-    const qty = parseFloat(item.qty) || 0;
-    const rate = parseFloat(item.rate) || 0;
-    return sum + (qty > 0 && rate > 0 ? (qty / 1000) * rate : 0);
-  }, 0);
+  // Grand Total Calculation (Only if ALL line items have price set)
+  const isAllPriced = useMemo(() => {
+    if (lineItems.length === 0) return false;
+    return lineItems.every(item => {
+      if (!item.productId) return false;
+      if (item.price === '' || item.price === null || item.price === undefined) return false;
+      const p = parseFloat(item.price);
+      return !isNaN(p) && p >= 0;
+    });
+  }, [lineItems]);
+
+  const calculatedGrandTotal = useMemo(() => {
+    if (!isAllPriced) return null;
+    return lineItems.reduce((sum, item) => {
+      const qty = parseInt(item.qty, 10) || 0;
+      const price = parseFloat(item.price) || 0;
+      return sum + (qty * price);
+    }, 0);
+  }, [lineItems, isAllPriced]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -173,27 +377,19 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
     // Validate line items
     for (let i = 0; i < lineItems.length; i++) {
       const item = lineItems[i];
-      if (!item.description || !item.description.trim()) {
-        notify.error(`Item ${i + 1}: Label Description is required`);
+      if (!item.productId) {
+        notify.error(`Item #${i + 1}: Please select a product from the catalog`);
         return;
       }
-      if (!item.qty || parseFloat(item.qty) <= 0) {
-        notify.error(`Item ${i + 1}: Valid Quantity is required`);
-        return;
-      }
-      if (!item.rate || parseFloat(item.rate) <= 0) {
-        notify.error(`Item ${i + 1}: Valid Rate (per 1000 units) is required`);
+      const qty = parseInt(item.qty, 10);
+      if (isNaN(qty) || qty <= 0) {
+        notify.error(`Item #${i + 1}: Valid Quantity is required`);
         return;
       }
     }
 
     if (!expectedReorderDate) {
       notify.error('Expected Reorder Date is required');
-      return;
-    }
-
-    if (calculatedGrandTotal <= 0) {
-      notify.error('Order Total Amount must be greater than ₹0');
       return;
     }
 
@@ -205,17 +401,16 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
         newCustomer: customerMode === 'new' ? newCustomerForm : undefined,
         leadId: initialLead?._id,
         lineItems: lineItems.map(i => ({
-          description: i.description.trim(),
-          name: i.description.trim(),
-          qty: parseFloat(i.qty),
-          rate: parseFloat(i.rate),
-          lineTotal: parseFloat(i.lineTotal) || (parseFloat(i.qty) / 1000) * parseFloat(i.rate)
+          productId: i.productId,
+          qty: parseInt(i.qty, 10),
+          price: (i.price !== '' && i.price !== null && i.price !== undefined)
+            ? parseFloat(i.price)
+            : undefined
         })),
-        totalAmount: calculatedGrandTotal,
         deliveryDate: deliveryDate || undefined,
         expectedReorderDate: expectedReorderDate,
         isExpectedReorderDateOverridden: isManualReorderOverride,
-        usageCycleDays: parseInt(usageCycleDays) || 30,
+        usageCycleDays: parseInt(usageCycleDays, 10) || 30,
         poNumber: poNumber.trim() || undefined,
         advanceReceived,
         advanceAmount: advanceReceived ? (parseFloat(advanceAmount) || 0) : 0,
@@ -225,7 +420,9 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
 
       const res = await api.post('/orders', payload);
       notify.success('Order created successfully');
-      onSuccess(res.data);
+      if (typeof onSuccess === 'function') {
+        onSuccess(res.data);
+      }
       onClose();
     } catch (err) {
       console.error('Error creating order:', err);
@@ -234,6 +431,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -249,8 +448,8 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
             </h3>
             <p className="text-xs text-slate-500">
               {initialCustomer?.name
-                ? `Create a custom label order directly for ${initialCustomer.name}`
-                : (initialLead ? 'Converts lead into an active Customer and logs confirmed order' : 'Select customer and specify custom label specifications')}
+                ? `Create a dimension-based label order for ${initialCustomer.name}`
+                : (initialLead ? 'Converts lead into an active Customer and logs confirmed order' : 'Select customer and pick products from dimension catalog')}
             </p>
           </div>
           <button
@@ -273,16 +472,18 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
                   <button
                     type="button"
                     onClick={() => setCustomerMode('existing')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${customerMode === 'existing' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
-                      }`}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
+                      customerMode === 'existing' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                    }`}
                   >
                     Existing Customer
                   </button>
                   <button
                     type="button"
                     onClick={() => setCustomerMode('new')}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${customerMode === 'new' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
-                      }`}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
+                      customerMode === 'new' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                    }`}
                   >
                     + New Customer
                   </button>
@@ -356,10 +557,15 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
             )}
           </div>
 
-          {/* Section 2: Order Line Items (Custom Specs - Replaces Product Dropdown) */}
+          {/* Section 2: Dimension-Based Order Line Items from Product Catalog */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase text-slate-600">2. Order Line Items (Custom Specs)</span>
+              <div className="flex items-center gap-1.5">
+                <Ruler size={15} className="text-red-600" />
+                <span className="text-xs font-semibold uppercase text-slate-700">
+                  2. Order Line Items (Product Catalog)
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={addLineItem}
@@ -371,97 +577,126 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
             </div>
 
             <div className="space-y-3">
-              {lineItems.map((item, index) => (
-                <div key={index} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      Item #{index + 1}
-                    </span>
-                    {lineItems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeLineItem(index)}
-                        className="text-slate-400 hover:text-red-600 p-1 cursor-pointer"
-                        title="Remove Item"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    )}
-                  </div>
+              {lineItems.map((item, index) => {
+                const selectedProd = productsList.find(p => p._id === item.productId);
+                const hasItemPrice = item.price !== '' && item.price !== null && !isNaN(parseFloat(item.price));
+                const itemLineTotal = hasItemPrice
+                  ? (parseInt(item.qty, 10) || 0) * parseFloat(item.price)
+                  : null;
 
-                  {/* Label Description Input */}
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      Label Description *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={item.description}
-                      onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                      placeholder="e.g. 500ml bottle label, matte finish, 8x5cm"
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-red-500"
-                    />
-                  </div>
+                return (
+                  <div key={index} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Line Item #{index + 1}
+                      </span>
+                      {lineItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLineItem(index)}
+                          className="text-slate-400 hover:text-red-600 p-1 transition cursor-pointer"
+                          title="Remove Item"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
 
-                  {/* Qty, Rate per 1000, and Line Total Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {/* Searchable Product Dropdown */}
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Quantity *
+                        Select Product (by Dimension or Name) <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="number"
-                        min="1"
-                        required
-                        value={item.qty}
-                        onChange={(e) => handleItemChange(index, 'qty', e.target.value)}
-                        placeholder="1000"
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
+                      <SearchableProductSelect
+                        products={productsList}
+                        selectedProductId={item.productId}
+                        onSelectProduct={(prod) => handleSelectProduct(index, prod)}
                       />
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Rate (per 1000 units) *
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+
+                    {/* Quantity and Optional Unit Price Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-start">
+                      {/* Quantity Input */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Quantity <span className="text-red-500">*</span>
+                        </label>
                         <input
                           type="number"
-                          min="0"
-                          step="0.01"
+                          min="1"
                           required
-                          value={item.rate}
-                          onChange={(e) => handleItemChange(index, 'rate', e.target.value)}
-                          placeholder="e.g. 250"
-                          className="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
+                          value={item.qty}
+                          onChange={(e) => handleItemFieldChange(index, 'qty', e.target.value)}
+                          placeholder="1000"
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500 font-mono"
                         />
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Total Amount (₹)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.lineTotal}
-                        onChange={(e) => handleItemChange(index, 'lineTotal', e.target.value)}
-                        placeholder="Calculated"
-                        className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
-                      />
+
+                      {/* Optional Unit Price Input */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-semibold text-slate-700">
+                            Unit Price (₹)
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+                        </div>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.price}
+                            onChange={(e) => handleItemFieldChange(index, 'price', e.target.value)}
+                            placeholder={selectedProd?.unitPrice != null ? `Ref: ₹${selectedProd.unitPrice}` : 'e.g. 1.25'}
+                            className="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500 font-mono"
+                          />
+                        </div>
+                        {selectedProd?.unitPrice != null && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Reference price: ₹{selectedProd.unitPrice}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Line Total Display */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Line Total
+                        </label>
+                        <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center justify-between min-h-[38px]">
+                          {itemLineTotal != null ? (
+                            <span className="text-slate-900">₹{itemLineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          ) : (
+                            <span className="text-slate-400 font-normal italic text-[11px]">Not tracked</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* Grand Total Bar */}
-            <div className="p-3.5 bg-slate-900 text-white rounded-xl flex items-center justify-between shadow-md">
-              <span className="text-xs font-semibold uppercase tracking-wider">Order Total Amount</span>
-              <span className="text-xl font-bold text-emerald-400">₹{calculatedGrandTotal.toLocaleString('en-IN')}</span>
-            </div>
+            {/* Grand Total Bar / Pricing Status */}
+            {calculatedGrandTotal != null ? (
+              <div className="p-3.5 bg-slate-900 text-white rounded-xl flex items-center justify-between shadow-md">
+                <span className="text-xs font-semibold uppercase tracking-wider">Order Total Amount</span>
+                <span className="text-lg sm:text-xl font-bold text-emerald-400">
+                  ₹{calculatedGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-slate-100 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Info size={15} className="text-slate-400 shrink-0" />
+                  <span className="font-medium">Pricing status:</span>
+                </div>
+                <span className="font-semibold text-slate-500 italic">
+                  Pricing not tracked for this order
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Section 3: Delivery & Reorder Settings */}
@@ -549,16 +784,18 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
                       <button
                         type="button"
                         onClick={() => setAdvanceReceived(false)}
-                        className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${!advanceReceived ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'
-                          }`}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                          !advanceReceived ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                        }`}
                       >
                         No
                       </button>
                       <button
                         type="button"
                         onClick={() => setAdvanceReceived(true)}
-                        className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${advanceReceived ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
-                          }`}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                          advanceReceived ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                        }`}
                       >
                         Yes
                       </button>
@@ -570,47 +807,43 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                         Advance Amount Received (₹)
                       </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={advanceAmount}
-                          onChange={(e) => setAdvanceAmount(e.target.value)}
-                          placeholder="e.g. 5000"
-                          className="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
-                        />
-                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={advanceAmount}
+                        onChange={(e) => setAdvanceAmount(e.target.value)}
+                        placeholder="e.g. 5000"
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
+                      />
                     </div>
                   )}
                 </div>
 
                 {/* Delivery Address */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                    <MapPin size={13} className="text-slate-400" />
-                    <span>Delivery Address</span>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Delivery / Shipping Address
                   </label>
                   <input
                     type="text"
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="Delivery address (if different from customer address)"
+                    placeholder="e.g. Plot 12, GIDC Industrial Estate, Vatva, Ahmedabad"
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
                   />
                 </div>
 
-                {/* Notes / Special Instructions */}
+                {/* Internal Notes */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                    <AlignLeft size={13} className="text-slate-400" />
-                    <span>Notes / Special Instructions</span>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Internal Notes / Remarks
                   </label>
                   <textarea
                     rows={2}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="e.g. Handle with care, pack in bundles of 500"
+                    placeholder="Add any specific instructions for production or dispatch..."
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -618,21 +851,20 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
             )}
           </div>
 
-          {/* Submit Actions */}
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          {/* Action Buttons */}
+          <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              disabled={isSubmitting}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
             >
               Cancel
             </button>
             <LoadingButton
               type="submit"
               loading={isSubmitting}
-              loadingText="Creating Order..."
-              disabled={calculatedGrandTotal <= 0}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-xl shadow-md transition"
+              className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-red-600/20 transition cursor-pointer"
             >
               Confirm & Create Order
             </LoadingButton>

@@ -13,7 +13,7 @@ const getOrders = async (req, res) => {
 
     let queryFilter = { ...req.scopeFilter };
 
-    if (status) queryFilter.status = status;
+    if (status && status !== 'all') queryFilter.status = status;
 
     if (from || to) {
       queryFilter.orderDate = {};
@@ -21,15 +21,16 @@ const getOrders = async (req, res) => {
       if (to) queryFilter.orderDate.$lte = new Date(to);
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
 
     const [orders, total, allOrdersForSummary] = await Promise.all([
       Order.find(queryFilter)
         .populate('customerId', 'name company phone email city')
         .populate('salesExecutive', 'name email avatarUrl role')
+        .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice')
         .sort({ orderDate: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(parseInt(limit, 10)),
       Order.countDocuments(queryFilter),
       Order.find(req.scopeFilter || {})
     ]);
@@ -52,8 +53,8 @@ const getOrders = async (req, res) => {
       if (summary.statusCounts[o.status] !== undefined) {
         summary.statusCounts[o.status] += 1;
       }
-      if (o.status !== 'cancelled') {
-        summary.totalRevenue += (o.amount || 0);
+      if (o.status !== 'cancelled' && o.amount != null && !isNaN(o.amount)) {
+        summary.totalRevenue += o.amount;
       }
     });
 
@@ -61,8 +62,8 @@ const getOrders = async (req, res) => {
       orders,
       total,
       summary,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit))
+      page: parseInt(page, 10),
+      pages: Math.ceil(total / parseInt(limit, 10)) || 1
     });
   } catch (error) {
     console.error('Error fetching orders:', error);
@@ -101,8 +102,8 @@ const getOrdersSummary = async (req, res) => {
       if (summary[o.status] !== undefined) {
         summary[o.status] += 1;
       }
-      if (o.status !== 'cancelled') {
-        summary.totalRevenue += (o.amount || 0);
+      if (o.status !== 'cancelled' && o.amount != null && !isNaN(o.amount)) {
+        summary.totalRevenue += o.amount;
       }
     });
 
@@ -129,8 +130,7 @@ const createOrder = async (req, res) => {
       advanceReceived,
       advanceAmount,
       deliveryAddress,
-      notes,
-      totalAmount: customTotalAmount
+      notes
     } = req.body;
 
     if (!lineItems || !Array.isArray(lineItems) || lineItems.length === 0) {
@@ -142,7 +142,6 @@ const createOrder = async (req, res) => {
     }
 
     const parsedExpectedReorderDate = new Date(expectedReorderDate);
-
     const execId = req.user?.id || req.user?._id || undefined;
 
     // 1. If customerId is not provided, create Customer inline
@@ -151,14 +150,19 @@ const createOrder = async (req, res) => {
         return res.status(400).json({ message: 'Customer selection or new customer details are required' });
       }
 
+      const cleanPhone = (newCustomer.phone || '').toString().replace(/\D/g, '').slice(0, 10);
+      if (cleanPhone.length !== 10) {
+        return res.status(400).json({ message: 'Customer phone number must be 10 digits' });
+      }
+
       const createdCustomer = await Customer.create({
-        name: newCustomer.name,
-        company: newCustomer.company,
-        phone: newCustomer.phone,
-        email: newCustomer.email,
+        name: newCustomer.name.trim(),
+        company: newCustomer.company ? newCustomer.company.trim() : undefined,
+        phone: cleanPhone,
+        email: newCustomer.email ? newCustomer.email.trim().toLowerCase() : undefined,
         city: newCustomer.city || undefined,
         address: deliveryAddress || newCustomer.address,
-        gstNo: newCustomer.gstNo,
+        gstNo: newCustomer.gstNo ? newCustomer.gstNo.trim() : undefined,
         leadId: leadId || newCustomer.leadId,
         salesExecutive: execId,
         expectedReorderDate: parsedExpectedReorderDate
@@ -167,43 +171,59 @@ const createOrder = async (req, res) => {
       customerId = createdCustomer._id;
     }
 
-    // 2. Compute custom line items & total amount
+    // 2. Validate and process line items from Product catalog
+    let allPriced = true;
     let computedAmount = 0;
     const processedLineItems = [];
 
-    for (const item of lineItems) {
-      const name = (item.description || item.name || '').trim() || 'Custom Label Spec';
-      const qty = parseInt(item.qty) || 0;
-      const rate = parseFloat(item.rate) || 0;
-
-      let lineTotal = item.lineTotal !== undefined && item.lineTotal !== '' ? parseFloat(item.lineTotal) : 0;
-      if (!lineTotal && rate > 0 && qty > 0) {
-        lineTotal = (qty / 1000) * rate;
-      }
-      if (!lineTotal && item.price && qty > 0) {
-        lineTotal = qty * parseFloat(item.price);
+    for (let i = 0; i < lineItems.length; i++) {
+      const item = lineItems[i];
+      if (!item.productId) {
+        return res.status(400).json({ message: `Item #${i + 1}: Product selection is required` });
       }
 
-      computedAmount += lineTotal;
+      const product = await Product.findById(item.productId);
+      if (!product) {
+        return res.status(400).json({ message: `Item #${i + 1}: Referenced product not found` });
+      }
+
+      const qty = parseInt(item.qty, 10);
+      if (isNaN(qty) || qty <= 0) {
+        return res.status(400).json({ message: `Item #${i + 1}: Quantity must be a positive number` });
+      }
+
+      // Copy dimensionKey and name directly from Product
+      const dimensionKey = product.dimensionKey || `${product.widthMm}x${product.heightMm}`;
+      const name = product.name;
+
+      let price = null;
+      let lineTotal = null;
+
+      if (item.price !== undefined && item.price !== null && item.price !== '') {
+        const parsedPrice = parseFloat(item.price);
+        if (!isNaN(parsedPrice) && parsedPrice >= 0) {
+          price = parsedPrice;
+          lineTotal = qty * price;
+          computedAmount += lineTotal;
+        } else {
+          allPriced = false;
+        }
+      } else {
+        allPriced = false;
+      }
 
       processedLineItems.push({
-        productId: item.productId || undefined,
+        productId: product._id,
+        dimensionKey,
         name,
-        description: name,
         qty,
-        rate,
-        price: rate > 0 ? (rate / 1000) : (qty > 0 ? lineTotal / qty : 0),
+        price,
         lineTotal
       });
     }
 
-    const finalOrderAmount = customTotalAmount !== undefined && parseFloat(customTotalAmount) > 0
-      ? parseFloat(customTotalAmount)
-      : computedAmount;
-
-    if (finalOrderAmount <= 0) {
-      return res.status(400).json({ message: 'Order Total Amount must be greater than ₹0' });
-    }
+    // Amount is only computed/stored if all line items have pricing set
+    const finalOrderAmount = allPriced ? computedAmount : null;
 
     // 3. Auto-generate Order Number
     const orderNo = `ORD-${Date.now().toString().slice(-6)}`;
@@ -219,12 +239,12 @@ const createOrder = async (req, res) => {
       expectedReorderDate: parsedExpectedReorderDate,
       isExpectedReorderDateOverridden: Boolean(isExpectedReorderDateOverridden),
       salesExecutive: execId,
-      usageCycleDays: parseInt(usageCycleDays) || 30,
-      poNumber: poNumber || undefined,
+      usageCycleDays: parseInt(usageCycleDays, 10) || 30,
+      poNumber: poNumber ? poNumber.trim() : undefined,
       advanceReceived: Boolean(advanceReceived),
       advanceAmount: parseFloat(advanceAmount) || 0,
-      deliveryAddress: deliveryAddress || undefined,
-      notes: notes || undefined,
+      deliveryAddress: deliveryAddress ? deliveryAddress.trim() : undefined,
+      notes: notes ? notes.trim() : undefined,
       lineItems: processedLineItems
     });
 
@@ -238,11 +258,15 @@ const createOrder = async (req, res) => {
 
     // 6. Create Activity Entry for Customer
     if (execId) {
+      const priceText = finalOrderAmount != null
+        ? `for ₹${finalOrderAmount.toLocaleString('en-IN')}`
+        : `(pricing not tracked)`;
+
       await Activity.create({
         relatedType: 'customer',
         relatedId: customerId,
         type: 'status_change',
-        description: `Order ${orderNo} (${newOrder.status.toUpperCase()}) created for ₹${finalOrderAmount.toLocaleString('en-IN')}`,
+        description: `Order ${orderNo} (${newOrder.status.toUpperCase()}) created ${priceText}`,
         createdBy: execId
       });
     }
@@ -268,7 +292,8 @@ const createOrder = async (req, res) => {
 
     const populatedOrder = await Order.findById(newOrder._id)
       .populate('customerId', 'name company phone email city')
-      .populate('salesExecutive', 'name email avatarUrl role');
+      .populate('salesExecutive', 'name email avatarUrl role')
+      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice');
 
     return res.status(201).json(populatedOrder);
   } catch (error) {
@@ -294,7 +319,8 @@ const updateOrder = async (req, res) => {
       usageCycleDays,
       poNumber,
       deliveryAddress,
-      notes
+      notes,
+      lineItems
     } = req.body;
 
     const order = await Order.findById(id);
@@ -307,10 +333,65 @@ const updateOrder = async (req, res) => {
     }
 
     if (deliveryDate !== undefined) order.deliveryDate = deliveryDate ? new Date(deliveryDate) : undefined;
-    if (usageCycleDays !== undefined) order.usageCycleDays = parseInt(usageCycleDays) || 30;
-    if (poNumber !== undefined) order.poNumber = poNumber;
-    if (deliveryAddress !== undefined) order.deliveryAddress = deliveryAddress;
-    if (notes !== undefined) order.notes = notes;
+    if (usageCycleDays !== undefined) order.usageCycleDays = parseInt(usageCycleDays, 10) || 30;
+    if (poNumber !== undefined) order.poNumber = poNumber ? poNumber.trim() : undefined;
+    if (deliveryAddress !== undefined) order.deliveryAddress = deliveryAddress ? deliveryAddress.trim() : undefined;
+    if (notes !== undefined) order.notes = notes ? notes.trim() : undefined;
+
+    // If lineItems are updated
+    if (lineItems && Array.isArray(lineItems) && lineItems.length > 0) {
+      let allPriced = true;
+      let computedAmount = 0;
+      const processedLineItems = [];
+
+      for (let i = 0; i < lineItems.length; i++) {
+        const item = lineItems[i];
+        if (!item.productId) {
+          return res.status(400).json({ message: `Item #${i + 1}: Product selection is required` });
+        }
+
+        const product = await Product.findById(item.productId);
+        if (!product) {
+          return res.status(400).json({ message: `Item #${i + 1}: Referenced product not found` });
+        }
+
+        const qty = parseInt(item.qty, 10);
+        if (isNaN(qty) || qty <= 0) {
+          return res.status(400).json({ message: `Item #${i + 1}: Quantity must be a positive number` });
+        }
+
+        const dimensionKey = product.dimensionKey || `${product.widthMm}x${product.heightMm}`;
+        const name = product.name;
+
+        let price = null;
+        let lineTotal = null;
+
+        if (item.price !== undefined && item.price !== null && item.price !== '') {
+          const parsedPrice = parseFloat(item.price);
+          if (!isNaN(parsedPrice) && parsedPrice >= 0) {
+            price = parsedPrice;
+            lineTotal = qty * price;
+            computedAmount += lineTotal;
+          } else {
+            allPriced = false;
+          }
+        } else {
+          allPriced = false;
+        }
+
+        processedLineItems.push({
+          productId: product._id,
+          dimensionKey,
+          name,
+          qty,
+          price,
+          lineTotal
+        });
+      }
+
+      order.lineItems = processedLineItems;
+      order.amount = allPriced ? computedAmount : null;
+    }
 
     if (expectedReorderDate && !isNaN(new Date(expectedReorderDate).getTime())) {
       const parsedDate = new Date(expectedReorderDate);
@@ -332,7 +413,8 @@ const updateOrder = async (req, res) => {
 
     const updatedOrder = await Order.findById(order._id)
       .populate('customerId', 'name company phone email city')
-      .populate('salesExecutive', 'name email avatarUrl role');
+      .populate('salesExecutive', 'name email avatarUrl role')
+      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice');
 
     return res.json(updatedOrder);
   } catch (error) {
@@ -416,7 +498,8 @@ const updateOrderStatus = async (req, res) => {
 
     const updatedOrder = await Order.findById(order._id)
       .populate('customerId', 'name company phone email city')
-      .populate('salesExecutive', 'name email avatarUrl role');
+      .populate('salesExecutive', 'name email avatarUrl role')
+      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice');
 
     return res.json(updatedOrder);
   } catch (error) {

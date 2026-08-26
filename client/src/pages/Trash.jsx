@@ -10,6 +10,7 @@ const TABS = [
   { key: 'orders', label: 'Orders' },
   { key: 'leads', label: 'Leads' },
   { key: 'customers', label: 'Customers' },
+  { key: 'products', label: 'Products' },
   { key: 'users', label: 'Users' },
   { key: 'followups', label: 'Follow-ups' }
 ];
@@ -186,6 +187,11 @@ export default function Trash() {
                           {activeTab === 'customers' && (
                             <div className="text-xs text-slate-400 font-normal">
                               Phone: {item.phone || 'N/A'} • City: {item.city || 'N/A'}
+                            </div>
+                          )}
+                          {activeTab === 'products' && (
+                            <div className="text-xs text-slate-400 font-normal">
+                              Dimension: {item.dimensionKey || `${item.widthMm}x${item.heightMm}`} • Category: {item.category || 'General'} • Cycle: {item.defaultUsageCycleDays || 30}d
                             </div>
                           )}
                           {activeTab === 'followups' && (

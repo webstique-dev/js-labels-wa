@@ -6,6 +6,8 @@ import {
   UserPlus,
   Building2,
   ShoppingBag,
+  Ruler,
+  Factory,
   Calendar,
   Bell,
   BarChart3,
@@ -42,6 +44,18 @@ const NAV_ITEMS = [
     label: 'Orders',
     path: '/orders',
     icon: <ShoppingBag size={20} />
+  },
+  {
+    key: 'products',
+    label: 'Products',
+    path: '/products',
+    icon: <Ruler size={20} />
+  },
+  {
+    key: 'production',
+    label: 'Production',
+    path: '/production',
+    icon: <Factory size={20} />
   },
   {
     key: 'followups',

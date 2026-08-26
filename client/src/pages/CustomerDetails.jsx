@@ -311,13 +311,15 @@ export default function CustomerDetails() {
 
   // Business Summary Metrics derived dynamically from DB
   const totalOrdersCount = summary?.totalOrders ?? orders.length;
-  const totalSpentAmt = summary?.totalSpent ?? orders.reduce((sum, o) => sum + (o.amount || 0), 0);
+  const pricedOrdersInLocal = orders.filter(o => o.amount != null && !isNaN(o.amount) && o.amount > 0);
+  const hasPricingData = summary?.hasPricing !== undefined ? summary.hasPricing : pricedOrdersInLocal.length > 0;
+  const totalSpentAmt = summary?.totalSpent !== undefined ? summary.totalSpent : (hasPricingData ? pricedOrdersInLocal.reduce((sum, o) => sum + o.amount, 0) : null);
   const lastOrderDateStr = summary?.lastOrder?.orderDate
     ? new Date(summary.lastOrder.orderDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : (orders.length > 0
         ? new Date(orders[0].orderDate || orders[0].createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
         : 'No orders');
-  const avgOrderVal = summary?.avgOrderValue ?? (totalOrdersCount > 0 ? Math.round(totalSpentAmt / totalOrdersCount) : 0);
+  const avgOrderVal = summary?.avgOrderValue !== undefined ? summary.avgOrderValue : (hasPricingData && pricedOrdersInLocal.length > 0 ? Math.round(totalSpentAmt / pricedOrdersInLocal.length) : null);
   const repeatOrdersCount = summary?.repeatOrders ?? (totalOrdersCount > 1 ? totalOrdersCount - 1 : 0);
   const repeatOrderRatePct = summary?.repeatOrderRate ?? (totalOrdersCount > 0 ? Math.round((repeatOrdersCount / totalOrdersCount) * 100) : 0);
 
@@ -783,7 +785,16 @@ export default function CustomerDetails() {
                     </div>
                     <span className="text-[10px] font-medium text-slate-500 uppercase">Total Spent</span>
                   </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">₹ {totalSpentAmt.toLocaleString('en-IN')}</div>
+                  <div className="text-lg font-bold text-slate-900 pl-1">
+                    {totalSpentAmt != null ? (
+                      `₹ ${Number(totalSpentAmt).toLocaleString('en-IN')}`
+                    ) : (
+                      <span className="text-slate-400 text-xs font-semibold italic">Not tracked</span>
+                    )}
+                  </div>
+                  {summary?.pricingCoverage && summary.pricingCoverage.pricedCount < summary.pricingCoverage.totalCount && summary.pricingCoverage.pricedCount > 0 && (
+                    <p className="text-[9px] text-slate-400 pl-1">Based on {summary.pricingCoverage.pricedCount} of {summary.pricingCoverage.totalCount} orders</p>
+                  )}
                 </div>
 
                 {/* 3. Last Order */}
@@ -805,7 +816,13 @@ export default function CustomerDetails() {
                     </div>
                     <span className="text-[10px] font-medium text-slate-500 uppercase">Avg. Order Value</span>
                   </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">₹ {avgOrderVal.toLocaleString('en-IN')}</div>
+                  <div className="text-lg font-bold text-slate-900 pl-1">
+                    {avgOrderVal != null ? (
+                      `₹ ${Number(avgOrderVal).toLocaleString('en-IN')}`
+                    ) : (
+                      <span className="text-slate-400 text-xs font-semibold italic">Not tracked</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* 5. Repeat Orders */}
@@ -945,10 +962,17 @@ export default function CustomerDetails() {
                   {summary.topProducts.map((prod, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-xl">
                       <div className="min-w-0 pr-2">
-                        <p className="font-semibold text-slate-900 truncate">{prod.name}</p>
-                        <p className="text-[10px] text-slate-400 font-normal">{prod.totalQty.toLocaleString('en-IN')} units purchased</p>
+                        <p className="font-semibold text-slate-900 truncate">
+                          {prod.name}
+                          {prod.dimensionKey && (
+                            <span className="ml-1.5 text-[10px] text-slate-500 font-mono font-normal">[{prod.dimensionKey}]</span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-normal">{prod.totalQty?.toLocaleString('en-IN')} units purchased</p>
                       </div>
-                      <span className="font-bold text-slate-800 shrink-0">₹ {prod.totalAmount.toLocaleString('en-IN')}</span>
+                      <span className="font-bold text-slate-800 shrink-0">
+                        {prod.totalAmount > 0 ? `₹ ${prod.totalAmount.toLocaleString('en-IN')}` : '—'}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1055,7 +1079,11 @@ export default function CustomerDetails() {
                             <div className="space-y-0.5">
                               {ord.lineItems.map((li, idx) => (
                                 <div key={idx} className="font-medium text-slate-800">
-                                  {li.name || li.description} <span className="text-slate-400 font-normal">({li.qty} units)</span>
+                                  {li.name || 'Label Product'}{' '}
+                                  {li.dimensionKey && (
+                                    <span className="text-slate-500 font-mono text-[11px]">[{li.dimensionKey}]</span>
+                                  )}{' '}
+                                  <span className="text-slate-400 font-normal">({li.qty} units)</span>
                                 </div>
                               ))}
                             </div>
@@ -1063,7 +1091,13 @@ export default function CustomerDetails() {
                             <span className="text-slate-400 italic">No line items specified</span>
                           )}
                         </td>
-                        <td className="p-4 font-bold text-slate-900">₹ {(ord.amount || 0).toLocaleString('en-IN')}</td>
+                        <td className="p-4 font-bold text-slate-900">
+                          {ord.amount != null ? (
+                            `₹ ${Number(ord.amount).toLocaleString('en-IN')}`
+                          ) : (
+                            <span className="text-slate-400 font-normal italic">Not set</span>
+                          )}
+                        </td>
                         <td className="p-4">
                           <span className={`px-2.5 py-0.5 border text-[10px] font-semibold rounded-md uppercase ${getStatusBadgeClass(ord.status)}`}>
                             {ord.status}
@@ -1117,7 +1151,11 @@ export default function CustomerDetails() {
                     <div className="grid grid-cols-2 gap-3 text-xs pt-1">
                       <div>
                         <span className="text-slate-400 font-medium text-[11px] block">Order Amount</span>
-                        <span className="font-bold text-slate-900 text-sm">₹ {(ord.amount || 0).toLocaleString('en-IN')}</span>
+                        <span className="font-bold text-slate-900 text-sm">
+                          {ord.amount != null ? `₹ ${Number(ord.amount).toLocaleString('en-IN')}` : (
+                            <span className="text-slate-400 font-normal italic">Not set</span>
+                          )}
+                        </span>
                       </div>
                       <div>
                         <span className="text-slate-400 font-medium text-[11px] block">Order Date</span>
@@ -1131,7 +1169,12 @@ export default function CustomerDetails() {
                           <div className="space-y-1">
                             {ord.lineItems.map((li, idx) => (
                               <div key={idx} className="flex items-center justify-between text-[11px] text-slate-700">
-                                <span className="truncate">{li.name || li.description}</span>
+                                <span className="truncate">
+                                  <span className="font-semibold text-slate-900">{li.name || 'Label Product'}</span>
+                                  {li.dimensionKey && (
+                                    <span className="ml-1 text-[10px] text-slate-500 font-mono">[{li.dimensionKey}]</span>
+                                  )}
+                                </span>
                                 <span className="font-semibold shrink-0">x{li.qty}</span>
                               </div>
                             ))}
@@ -1241,22 +1284,34 @@ export default function CustomerDetails() {
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-[10px]">
-                          <th className="p-2.5">Item Description</th>
+                        <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-[10px] uppercase">
+                          <th className="p-2.5">Product & Dimension</th>
                           <th className="p-2.5 text-right">Qty</th>
                           <th className="p-2.5 text-right">Amount</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {viewingOrder.lineItems.map((item, idx) => {
-                          const lineAmt = item.lineTotal !== undefined && item.lineTotal !== null
+                          const lineAmt = item.lineTotal != null
                             ? item.lineTotal
-                            : (item.amount || (item.rate && item.qty ? (item.qty / 1000) * item.rate : 0));
+                            : (item.price != null && item.qty ? item.qty * item.price : null);
+
                           return (
                             <tr key={idx}>
-                              <td className="p-2.5 font-medium text-slate-800">{item.name || item.description}</td>
+                              <td className="p-2.5">
+                                <div className="font-medium text-slate-800">{item.name || 'Label Product'}</div>
+                                {item.dimensionKey && (
+                                  <div className="text-[10px] text-slate-400 font-mono">Dimension: {item.dimensionKey}</div>
+                                )}
+                              </td>
                               <td className="p-2.5 text-right text-slate-600">{item.qty?.toLocaleString('en-IN')}</td>
-                              <td className="p-2.5 text-right font-bold text-slate-900">₹ {lineAmt.toLocaleString('en-IN')}</td>
+                              <td className="p-2.5 text-right font-bold text-slate-900">
+                                {lineAmt != null ? (
+                                  `₹ ${Number(lineAmt).toLocaleString('en-IN')}`
+                                ) : (
+                                  <span className="text-slate-400 font-normal italic">Not set</span>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
@@ -1268,7 +1323,11 @@ export default function CustomerDetails() {
 
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 font-bold text-sm text-slate-900">
                 <span>Total Order Value</span>
-                <span className="text-red-600">₹ {(viewingOrder.amount || 0).toLocaleString('en-IN')}</span>
+                {viewingOrder.amount != null ? (
+                  <span className="text-red-600">₹ {Number(viewingOrder.amount).toLocaleString('en-IN')}</span>
+                ) : (
+                  <span className="text-slate-400 font-normal italic text-xs">Pricing not tracked for this order</span>
+                )}
               </div>
 
               {viewingOrder.deliveryAddress && (
