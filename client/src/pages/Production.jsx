@@ -149,7 +149,7 @@ export default function Production() {
         </div>
 
         {/* 3 Top Summary KPI Cards Skeleton */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 2xl:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 min-[1200px]:grid-cols-3 gap-4 2xl:gap-6">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
@@ -163,7 +163,7 @@ export default function Production() {
         </div>
 
         {/* Dimension Cards Grid Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 2xl:gap-6 pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 min-[1440px]:grid-cols-3 gap-4 sm:gap-5 2xl:gap-6 pt-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
               <Skeleton className="h-6 w-32 rounded-lg" />
@@ -178,16 +178,16 @@ export default function Production() {
   }
 
   return (
-    <div className="space-y-6 2xl:space-y-8 pb-12 font-sans">
+    <div className="space-y-5 sm:space-y-6 2xl:space-y-8 pb-12 font-sans max-w-full overflow-hidden">
       
       {/* Top Header & Planning Horizon Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 sm:gap-4">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl sm:text-2xl 2xl:text-3xl font-bold text-slate-900 tracking-tight">
               Production Planning & Machine Forecast
             </h1>
-            <span className="px-2.5 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded-md uppercase tracking-wider">
+            <span className="px-2.5 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded-md uppercase tracking-wider shrink-0">
               Live Reference
             </span>
           </div>
@@ -196,12 +196,12 @@ export default function Production() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0 justify-between sm:justify-end">
           {/* Horizon Toggle */}
-          <div className="flex items-center gap-2 bg-white border border-slate-200 p-1 rounded-xl shadow-2xs">
+          <div className="flex items-center gap-1 sm:gap-2 bg-white border border-slate-200 p-1 rounded-xl shadow-2xs">
             <button
               onClick={() => setTrailingMonths(2)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
                 trailingMonths === 2
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -211,7 +211,7 @@ export default function Production() {
             </button>
             <button
               onClick={() => setTrailingMonths(3)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
                 trailingMonths === 3
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -224,7 +224,7 @@ export default function Production() {
           <button
             onClick={() => fetchForecasts(trailingMonths)}
             title="Refresh Forecast Data"
-            className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl shadow-2xs transition cursor-pointer"
+            className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl shadow-2xs transition cursor-pointer shrink-0"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -232,73 +232,73 @@ export default function Production() {
       </div>
 
       {/* Row 1: Summary Header KPI Cards (Shop-Floor At-a-Glance) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 2xl:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 min-[1200px]:grid-cols-3 gap-3.5 sm:gap-4 2xl:gap-6">
         
         {/* Card 1: Total Forecasted Volume */}
-        <div className="bg-white p-5 2xl:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5 transition duration-200 hover:shadow-md hover:border-slate-300">
-          <div className="flex items-center justify-between">
-            <span className="text-xs 2xl:text-sm font-semibold text-slate-500">Upcoming Total Demand</span>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Layers size={20} />
+        <div className="bg-white p-4 sm:p-5 2xl:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 transition duration-200 hover:shadow-md hover:border-slate-300 min-w-0">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Upcoming Total Demand</span>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <Layers size={18} />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <div className="text-xl sm:text-2xl 2xl:text-3xl font-extrabold text-slate-900 tracking-tight truncate">
             ~{summaryMetrics.totalForecastVolume.toLocaleString('en-IN')}
-            <span className="text-sm font-bold text-slate-400 ml-1.5 font-sans">Labels</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-400 ml-1.5 font-sans">Labels</span>
           </div>
-          <div className="text-xs font-semibold text-blue-600 flex items-center gap-1.5">
+          <div className="text-xs font-semibold text-blue-600 flex items-center gap-1.5 truncate">
             <Calendar size={13} className="shrink-0" />
-            <span>Target Month: {forecastData?.forecastForMonth || 'Upcoming Month'}</span>
+            <span className="truncate">Target Month: {forecastData?.forecastForMonth || 'Upcoming Month'}</span>
           </div>
         </div>
 
         {/* Card 2: Active Dimensions in Catalog */}
-        <div className="bg-white p-5 2xl:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5 transition duration-200 hover:shadow-md hover:border-slate-300">
-          <div className="flex items-center justify-between">
-            <span className="text-xs 2xl:text-sm font-semibold text-slate-500">Active Tooling Dimensions</span>
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Ruler size={20} />
+        <div className="bg-white p-4 sm:p-5 2xl:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 transition duration-200 hover:shadow-md hover:border-slate-300 min-w-0">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Active Tooling Dimensions</span>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Ruler size={18} />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <div className="text-xl sm:text-2xl 2xl:text-3xl font-extrabold text-slate-900 tracking-tight truncate">
             {summaryMetrics.totalDimensions}
-            <span className="text-sm font-bold text-slate-400 ml-1.5 font-sans">Sizes Tracked</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-400 ml-1.5 font-sans">Sizes Tracked</span>
           </div>
-          <div className="text-xs font-semibold text-indigo-600 flex items-center gap-1.5">
+          <div className="text-xs font-semibold text-indigo-600 flex items-center gap-1.5 truncate">
             <Factory size={13} className="shrink-0" />
-            <span>Multi-customer historical order history</span>
+            <span className="truncate">Multi-customer order history</span>
           </div>
         </div>
 
         {/* Card 3: Machine Setup Batching Opportunity */}
-        <div className="bg-white p-5 2xl:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5 transition duration-200 hover:shadow-md hover:border-slate-300">
-          <div className="flex items-center justify-between">
-            <span className="text-xs 2xl:text-sm font-semibold text-slate-500">Setup Batching Opportunity</span>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <Sparkles size={20} />
+        <div className="bg-white p-4 sm:p-5 2xl:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 transition duration-200 hover:shadow-md hover:border-slate-300 min-w-0 sm:col-span-2 min-[1200px]:col-span-1">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Setup Batching Opportunity</span>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <Sparkles size={18} />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <div className="text-xl sm:text-2xl 2xl:text-3xl font-extrabold text-slate-900 tracking-tight truncate">
             {summaryMetrics.totalBatchHoursSaved}
-            <span className="text-sm font-bold text-slate-400 ml-1.5 font-sans">Hrs Saved</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-400 ml-1.5 font-sans">Hrs Saved</span>
           </div>
-          <div className="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
+          <div className="text-xs font-semibold text-amber-700 flex items-center gap-1.5 truncate">
             <Clock size={13} className="shrink-0" />
-            <span>Across {summaryMetrics.batchingDimensionsCount} combined multi-order runs</span>
+            <span className="truncate">Across {summaryMetrics.batchingDimensionsCount} combined multi-order runs</span>
           </div>
         </div>
 
       </div>
 
       {/* Row 2: Search & Filter Controls */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
         
         {/* Search Bar */}
         <div className="relative flex-1 min-w-0">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search dimensions (e.g. 4x45, 10x15), product names, or customers..."
+            placeholder="Search dimensions (e.g. 4x45), product names, or customers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition"
@@ -306,7 +306,7 @@ export default function Production() {
         </div>
 
         {/* Category Pills (Scrollable on mobile) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-0.5">
           <button
             onClick={() => setSelectedCategory('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer ${
@@ -333,9 +333,9 @@ export default function Production() {
         </div>
       </div>
 
-      {/* Row 3: The Core Dimension Forecast Grid (Shop-Floor Readable) */}
+      {/* Row 3: The Core Dimension Forecast Grid (Optimized for < 1440px & Shop-Floor Screens) */}
       {filteredForecasts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 2xl:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 min-[1440px]:grid-cols-3 gap-4 sm:gap-5 2xl:gap-6">
           {filteredForecasts.map((d, index) => {
             const trend = getTrendData(d.trailingMonths);
             const isSingleValue = d.forecastRangeLow === d.forecastRangeHigh;
@@ -349,23 +349,23 @@ export default function Production() {
             return (
               <div
                 key={d.dimensionKey}
-                className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between space-y-4 group"
+                className="bg-white rounded-2xl p-4 sm:p-5 2xl:p-6 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between space-y-3.5 group min-w-0"
               >
                 
                 {/* 1. Dimension Header & Product Catalog Association */}
-                <div className="space-y-1.5 border-b border-slate-100 pb-3.5">
+                <div className="space-y-1.5 border-b border-slate-100 pb-3 min-w-0">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2.5 py-1 bg-slate-900 text-white font-mono font-bold text-xs rounded-lg shadow-2xs">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="px-2.5 py-0.5 bg-slate-900 text-white font-mono font-bold text-xs rounded-lg shadow-2xs shrink-0">
                         [{d.dimensionKey}]
                       </span>
-                      <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+                      <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
                         {formatDimensionDimensions(d.dimensionKey)}
                       </h2>
                     </div>
 
                     {/* Rank Badge */}
-                    <span className="text-[11px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                    <span className="text-[11px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md shrink-0">
                       #{index + 1}
                     </span>
                   </div>
@@ -380,7 +380,7 @@ export default function Production() {
                   {d.categories && d.categories.length > 0 && (
                     <div className="flex items-center gap-1.5 flex-wrap pt-1">
                       {d.categories.map((cat, ci) => (
-                        <span key={ci} className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-slate-600 text-[10px] font-semibold rounded-md">
+                        <span key={ci} className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-slate-600 text-[10px] font-semibold rounded-md shrink-0">
                           {cat}
                         </span>
                       ))}
@@ -389,16 +389,16 @@ export default function Production() {
                 </div>
 
                 {/* 2. MAIN FORECAST HERO SECTION (Dominant, Bold, Large) */}
-                <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100/60 rounded-xl border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <div className="p-3.5 sm:p-4 bg-gradient-to-br from-slate-50 to-slate-100/60 rounded-xl border border-slate-200/80 space-y-1.5 min-w-0">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       Machine Production Forecast
                     </span>
 
                     {/* Trend Pill */}
                     {trend && (
                       <span
-                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border shrink-0 ${
                           trend.direction === 'up'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : trend.direction === 'down'
@@ -415,38 +415,38 @@ export default function Production() {
                   </div>
 
                   {/* THE PROMINENT FORECAST NUMBER */}
-                  <div className="text-2xl sm:text-3xl 2xl:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                  <div className="text-xl sm:text-2xl min-[1440px]:text-3xl 2xl:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight break-normal">
                     {hasForecastData ? (
                       isSingleValue ? (
-                        <>~{d.forecastRangeHigh.toLocaleString('en-IN')} <span className="text-base sm:text-lg font-bold text-slate-400">Labels</span></>
+                        <>~{d.forecastRangeHigh.toLocaleString('en-IN')} <span className="text-sm sm:text-base font-bold text-slate-400">Labels</span></>
                       ) : (
-                        <>{d.forecastRangeLow.toLocaleString('en-IN')} – {d.forecastRangeHigh.toLocaleString('en-IN')} <span className="text-base sm:text-lg font-bold text-slate-400">Labels</span></>
+                        <>{d.forecastRangeLow.toLocaleString('en-IN')} – {d.forecastRangeHigh.toLocaleString('en-IN')} <span className="text-sm sm:text-base font-bold text-slate-400">Labels</span></>
                       )
                     ) : (
-                      <span className="text-lg font-bold text-slate-400 italic">Insufficient Data</span>
+                      <span className="text-base sm:text-lg font-bold text-slate-400 italic">Insufficient Data</span>
                     )}
                   </div>
 
-                  <div className="text-xs font-semibold text-blue-700 flex items-center gap-1.5">
+                  <div className="text-xs font-semibold text-blue-700 flex items-center gap-1.5 truncate">
                     <Calendar size={13} className="shrink-0" />
-                    <span>Expected demand in {d.forecastForMonth}</span>
+                    <span className="truncate">Expected demand in {d.forecastForMonth}</span>
                   </div>
 
                   {/* Low Confidence Note */}
                   {d.lowConfidence && (
-                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-700 bg-amber-50/90 border border-amber-200/80 px-2.5 py-1 rounded-lg mt-1.5">
+                    <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-medium text-amber-700 bg-amber-50/90 border border-amber-200/80 px-2 py-0.5 rounded-lg mt-1">
                       <AlertCircle size={12} className="shrink-0 text-amber-600" />
-                      <span>Based on limited history — forecast may be less accurate</span>
+                      <span className="truncate">Based on limited history — forecast may be less accurate</span>
                     </div>
                   )}
                 </div>
 
                 {/* 3. Previous Trailing Months History Line */}
-                <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                <div className="text-xs text-slate-600 bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-100 space-y-0.5 min-w-0">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     Previous {d.trailingMonthsCount} Months Record
                   </div>
-                  <div className="font-semibold text-slate-800 leading-snug">
+                  <div className="font-semibold text-slate-800 leading-snug break-words">
                     {previousMonthsSummary ? (
                       <>
                         <span>{previousMonthsSummary}</span>
@@ -460,29 +460,29 @@ export default function Production() {
                 </div>
 
                 {/* 4. Top Customers Driving Demand Breakdown */}
-                <div className="space-y-2 pt-1">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <span>Top Drivers ({d.mostRecentCompletedMonth || 'Recent'}):</span>
-                    <span className="text-[10px] text-slate-400 font-semibold">Share</span>
+                <div className="space-y-1.5 pt-0.5 min-w-0">
+                  <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <span className="truncate">Top Drivers ({d.mostRecentCompletedMonth || 'Recent'}):</span>
+                    <span className="text-[10px] text-slate-400 font-semibold shrink-0">Share</span>
                   </div>
 
                   {d.topContributingCustomers && d.topContributingCustomers.length > 0 ? (
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       {d.topContributingCustomers.slice(0, 3).map((cust, ci) => (
-                        <div key={ci} className="flex items-center justify-between text-xs py-1 px-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-lg transition border border-slate-100">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-[11px] font-bold text-slate-400">{ci + 1}.</span>
+                        <div key={ci} className="flex items-center justify-between text-xs py-1 px-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-lg transition border border-slate-100 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0 truncate">
+                            <span className="text-[10px] font-bold text-slate-400 shrink-0">{ci + 1}.</span>
                             <span className="font-semibold text-slate-800 truncate">{cust.customerName}</span>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0 pl-2">
+                          <div className="flex items-center gap-1 shrink-0 pl-2">
                             <span className="text-[11px] font-bold text-slate-900">{cust.percentage}%</span>
-                            <span className="text-[10px] text-slate-400 font-normal">({cust.qty?.toLocaleString('en-IN')})</span>
+                            <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">({cust.qty?.toLocaleString('en-IN')})</span>
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-xs text-slate-400 italic py-1">No driver breakdown recorded for this period.</div>
+                    <div className="text-xs text-slate-400 italic py-0.5">No driver breakdown recorded for this period.</div>
                   )}
                 </div>
 
@@ -491,7 +491,7 @@ export default function Production() {
           })}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl p-12 border border-slate-200/80 shadow-2xs text-center space-y-3">
+        <div className="bg-white rounded-2xl p-8 sm:p-12 border border-slate-200/80 shadow-2xs text-center space-y-3">
           <Factory size={36} className="mx-auto text-slate-300" />
           <h3 className="text-base font-bold text-slate-800">No Matching Dimensions Found</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
