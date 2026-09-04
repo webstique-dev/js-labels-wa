@@ -29,7 +29,16 @@ const seedProducts = async () => {
         heightMm: 45,
         category: 'BOPP',
         defaultUsageCycleDays: 30,
-        unitPrice: null,
+        unitPrice: 0.85,
+        status: 'active'
+      },
+      {
+        name: '4x45 Matte Finish Label',
+        widthMm: 4,
+        heightMm: 45,
+        category: 'Matte BOPP',
+        defaultUsageCycleDays: 30,
+        unitPrice: 0.95,
         status: 'active'
       },
       {
@@ -38,7 +47,7 @@ const seedProducts = async () => {
         heightMm: 15,
         category: 'Barcode',
         defaultUsageCycleDays: 30,
-        unitPrice: null,
+        unitPrice: 0.70,
         status: 'active'
       },
       {
@@ -47,7 +56,7 @@ const seedProducts = async () => {
         heightMm: 20,
         category: 'Thermal Paper',
         defaultUsageCycleDays: 45,
-        unitPrice: null,
+        unitPrice: 1.25,
         status: 'active'
       },
       {
@@ -56,7 +65,7 @@ const seedProducts = async () => {
         heightMm: 25,
         category: 'Transparent',
         defaultUsageCycleDays: 45,
-        unitPrice: null,
+        unitPrice: 1.40,
         status: 'active'
       },
       {
@@ -65,7 +74,7 @@ const seedProducts = async () => {
         heightMm: 25,
         category: 'Chromo Paper',
         defaultUsageCycleDays: 30,
-        unitPrice: null,
+        unitPrice: 1.10,
         status: 'active'
       },
       {
@@ -74,7 +83,7 @@ const seedProducts = async () => {
         heightMm: 25,
         category: 'Barcode',
         defaultUsageCycleDays: 30,
-        unitPrice: null,
+        unitPrice: 0.90,
         status: 'active'
       },
       {
@@ -83,7 +92,7 @@ const seedProducts = async () => {
         heightMm: 150,
         category: 'Thermal Paper',
         defaultUsageCycleDays: 45,
-        unitPrice: null,
+        unitPrice: 2.80,
         status: 'active'
       },
       {
@@ -92,7 +101,7 @@ const seedProducts = async () => {
         heightMm: 15,
         category: 'Security Film',
         defaultUsageCycleDays: 45,
-        unitPrice: null,
+        unitPrice: 3.50,
         status: 'active'
       }
     ];
