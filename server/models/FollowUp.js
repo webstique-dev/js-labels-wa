@@ -7,7 +7,24 @@ const followUpSchema = new mongoose.Schema({
   dueDate: { type: Date, required: true },
   status: { type: String, enum: ['open', 'done', 'overdue'], default: 'open' },
   notes: { type: String },
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  rescheduleHistory: [
+    {
+      previousDueDate: { type: Date },
+      newDueDate: { type: Date },
+      reason: { type: String },
+      rescheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      rescheduledAt: { type: Date, default: Date.now }
+    }
+  ],
+  notesList: [
+    {
+      content: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
+      updatedAt: { type: Date },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    }
+  ]
 }, {
   timestamps: true
 });

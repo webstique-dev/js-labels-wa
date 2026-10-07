@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { AlertTriangle, HelpCircle, Info, X } from 'lucide-react';
+import Button from '../components/ui/Button';
 
 const ConfirmContext = createContext();
 
@@ -100,14 +101,10 @@ function ConfirmDialogModal({ config, onClose }) {
     );
   };
 
-  const getConfirmButtonStyles = () => {
-    if (isDanger) {
-      return 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-rose-600/20';
-    }
-    if (isWarning) {
-      return 'bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-amber-600/20';
-    }
-    return 'bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white shadow-slate-900/20';
+  const getConfirmVariant = () => {
+    if (isDanger) return 'danger';
+    if (isWarning) return 'primary';
+    return 'dark';
   };
 
   return (
@@ -122,41 +119,40 @@ function ConfirmDialogModal({ config, onClose }) {
               <p className="text-xs text-slate-500 mt-1 font-normal leading-relaxed">{message}</p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             disabled={isProcessing}
             onClick={() => onClose(false)}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition disabled:opacity-50 cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-1"
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             disabled={isProcessing}
             onClick={() => onClose(false)}
-            className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition disabled:opacity-50 cursor-pointer"
+            className="text-slate-600 hover:bg-slate-100"
           >
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            disabled={isProcessing}
+            variant={getConfirmVariant()}
+            size="sm"
+            loading={isProcessing}
+            loadingText="Processing..."
             onClick={handleConfirmClick}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer ${getConfirmButtonStyles()}`}
           >
-            {isProcessing ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Processing...</span>
-              </>
-            ) : (
-              <span>{confirmLabel}</span>
-            )}
-          </button>
+            {confirmLabel}
+          </Button>
         </div>
       </div>
     </div>

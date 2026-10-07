@@ -18,7 +18,28 @@ const leadSchema = new mongoose.Schema({
   nextFollowUpDate: { type: Date },
   followUpDate: { type: String },
   followUpTime: { type: String },
-  followUpNotes: { type: String }
+  followUpNotes: { type: String },
+  rescheduleHistory: [
+    {
+      previousDueDate: { type: Date },
+      previousDate: { type: String },
+      previousTime: { type: String },
+      newDueDate: { type: Date },
+      newDate: { type: String },
+      newTime: { type: String },
+      reason: { type: String },
+      rescheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      rescheduledAt: { type: Date, default: Date.now }
+    }
+  ],
+  followUpNotesList: [
+    {
+      content: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
+      updatedAt: { type: Date },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    }
+  ]
 }, {
   timestamps: true
 });

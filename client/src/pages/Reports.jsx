@@ -2,15 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer,
-  AreaChart,
-  Area,
   PieChart,
   Pie,
   Cell,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid
+  Tooltip
 } from 'recharts';
 import api from '../api/axios';
 import { useNotification } from '../context/NotificationContext';
@@ -18,7 +13,6 @@ import {
   Calendar,
   Filter,
   Download,
-  Wallet,
   ShoppingBag,
   RefreshCw,
   TrendingUp,
@@ -188,72 +182,34 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Row 1: Top 6 KPI Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4 2xl:gap-6">
+      {/* Row 1: Top 4 KPI Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 2xl:gap-6">
         
-        {/* 1. Total Revenue */}
+        {/* 1. Total Customers */}
         <div className="bg-white p-4 2xl:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5 min-w-0 transition duration-200 hover:shadow-md hover:border-slate-300">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Total Revenue</span>
-            <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <Wallet size={18} />
+            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Total Customers</span>
+            <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+              <Users size={18} />
             </div>
           </div>
-          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">
-            {overview?.totalRevenue?.hasPricing
-              ? overview.totalRevenue.display
-              : <span className="text-sm font-semibold text-slate-400 italic">No pricing recorded</span>}
-          </div>
-          <div className="text-[11px] 2xl:text-xs font-semibold text-emerald-600 flex items-center gap-1 truncate">
-            {overview?.totalRevenue?.hasPricing ? (
-              overview?.totalRevenue?.coverage && overview.totalRevenue.coverage.pricedCount < overview.totalRevenue.coverage.totalCount ? (
-                <span className="text-slate-500 font-medium truncate text-[10px] sm:text-[11px]">
-                  Based on {overview.totalRevenue.coverage.pricedCount} of {overview.totalRevenue.coverage.totalCount} orders with pricing
-                </span>
-              ) : (
-                <>
-                  <ArrowUp size={11} className="shrink-0" />
-                  <span className="truncate">{overview?.totalRevenue?.change || 0}% vs prev period</span>
-                </>
-              )
-            ) : (
-              <span className="text-slate-400 font-normal truncate">
-                {overview?.totalOrders?.value || 0} unpriced orders
-              </span>
-            )}
+          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">{overview?.totalCustomers?.display || '0'}</div>
+          <div className="text-[11px] 2xl:text-xs font-semibold text-teal-600 flex items-center gap-1 truncate">
+            <span className="truncate">Database Records</span>
           </div>
         </div>
 
-        {/* 2. Average Order Value */}
+        {/* 2. Total Orders */}
         <div className="bg-white p-4 2xl:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5 min-w-0 transition duration-200 hover:shadow-md hover:border-slate-300">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Avg Order Value</span>
-            <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <ShoppingBag size={18} />
+            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Total Orders</span>
+            <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <FileText size={18} />
             </div>
           </div>
-          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">
-            {overview?.avgOrderValue?.hasPricing && overview?.avgOrderValue?.value != null
-              ? overview.avgOrderValue.display
-              : <span className="text-sm font-semibold text-slate-400 italic">Not tracked</span>}
-          </div>
-          <div className="text-[11px] 2xl:text-xs font-semibold text-blue-600 flex items-center gap-1 truncate">
-            {overview?.avgOrderValue?.hasPricing ? (
-              overview?.avgOrderValue?.coverage && overview.avgOrderValue.coverage.pricedCount < overview.avgOrderValue.coverage.totalCount ? (
-                <span className="text-slate-500 font-medium truncate text-[10px] sm:text-[11px]">
-                  Calculated from {overview.avgOrderValue.coverage.pricedCount} priced orders
-                </span>
-              ) : (
-                <>
-                  <ArrowUp size={11} className="shrink-0" />
-                  <span className="truncate">{overview?.avgOrderValue?.change || 0}% vs prev period</span>
-                </>
-              )
-            ) : (
-              <span className="text-slate-400 font-normal truncate">
-                Pricing not tracked on orders
-              </span>
-            )}
+          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">{overview?.totalOrders?.display || '0'}</div>
+          <div className="text-[11px] 2xl:text-xs font-semibold text-rose-600 flex items-center gap-1 truncate">
+            <span className="truncate">Orders Created</span>
           </div>
         </div>
 
@@ -285,89 +241,6 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* 5. Total Customers */}
-        <div className="bg-white p-4 2xl:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5 min-w-0 transition duration-200 hover:shadow-md hover:border-slate-300">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Total Customers</span>
-            <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-              <Users size={18} />
-            </div>
-          </div>
-          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">{overview?.totalCustomers?.display || '0'}</div>
-          <div className="text-[11px] 2xl:text-xs font-semibold text-teal-600 flex items-center gap-1 truncate">
-            <span className="truncate">Database Records</span>
-          </div>
-        </div>
-
-        {/* 6. Total Orders */}
-        <div className="bg-white p-4 2xl:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5 min-w-0 transition duration-200 hover:shadow-md hover:border-slate-300">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-xs 2xl:text-sm font-semibold text-slate-500 truncate">Total Orders</span>
-            <div className="w-8 h-8 2xl:w-10 2xl:h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-              <FileText size={18} />
-            </div>
-          </div>
-          <div className="text-lg xl:text-xl 2xl:text-2xl font-extrabold text-slate-900 truncate">{overview?.totalOrders?.display || '0'}</div>
-          <div className="text-[11px] 2xl:text-xs font-semibold text-rose-600 flex items-center gap-1 truncate">
-            <span className="truncate">Orders Created</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Section 1: Revenue Trend Area Chart */}
-      <div className="bg-white rounded-2xl p-5 2xl:p-6 border border-slate-200/80 shadow-2xs space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
-          <div>
-            <h3 className="font-bold text-slate-900 text-base 2xl:text-lg tracking-tight flex items-center gap-2">
-              <span>Revenue Trend Progression</span>
-              <Info size={15} className="text-slate-400 shrink-0" />
-            </h3>
-            <p className="text-xs 2xl:text-sm text-slate-500 font-normal">Real-time revenue curve calculated strictly from orders with recorded pricing</p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 font-medium">Filter Period:</span>
-            <select
-              value={periodFilter}
-              onChange={(e) => setPeriodFilter(e.target.value)}
-              className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none"
-            >
-              {PERIOD_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="h-72 md:h-84 lg:h-96 2xl:h-[420px] w-full pt-2">
-          {trendData && trendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData}>
-                <defs>
-                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#64748B' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: '#64748B' }} axisLine={false} tickLine={false} tickFormatter={(val) => `₹${val}`} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#FFF', borderRadius: '12px', borderColor: '#E2E8F0', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                  formatter={(val) => [`₹ ${val.toLocaleString('en-IN')}`, 'Revenue']}
-                />
-                <Area type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-              <TrendingUp size={28} className="text-slate-300" />
-              <p className="text-sm font-bold text-slate-700">No Pricing Data Recorded For This Period</p>
-              <p className="text-xs text-slate-400 font-normal">Orders in this period do not have prices attached. Pricing is optional across the CRM.</p>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Section 2: Visual Analytics Breakdown */}
@@ -378,12 +251,10 @@ export default function Reports() {
           <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
             <div>
               <h3 className="font-bold text-slate-900 text-sm 2xl:text-base tracking-tight">
-                {topProducts[0]?.isQuantityBased ? 'Top Products by Volume' : 'Top Products by Sales'}
+                Top Products by Volume
               </h3>
               <p className="text-xs text-slate-400 font-normal">
-                {topProducts[0]?.isQuantityBased
-                  ? 'Product volume distribution (by units ordered)'
-                  : 'Product revenue distribution from orders'}
+                Product volume distribution (by units ordered)
               </p>
             </div>
             <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
@@ -415,12 +286,10 @@ export default function Reports() {
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
                   <span className="text-[9px] 2xl:text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                    {topProducts[0]?.isQuantityBased ? 'Total Units' : 'Total Sales'}
+                    Total Units
                   </span>
                   <span className="text-xs 2xl:text-sm font-extrabold text-slate-900 truncate max-w-[120px]">
-                    {topProducts[0]?.isQuantityBased
-                      ? `${topProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0).toLocaleString('en-IN')}`
-                      : (overview?.totalRevenue?.hasPricing ? overview.totalRevenue.display : '—')}
+                    {topProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -434,8 +303,7 @@ export default function Reports() {
                       <span className="text-slate-700 text-xs truncate font-semibold">{p.name}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 text-xs">
-                      <span className="text-slate-400 font-medium">{p.percentage}%</span>
-                      <span className="font-bold text-slate-900">{p.sales}</span>
+                      <span className="font-bold text-slate-900">{p.percentage}%</span>
                     </div>
                   </div>
                 ))}
@@ -508,12 +376,12 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Section 3: Top Customers Table (Full-Width Card) */}
+      {/* Section 2: Top Customers Table (Full-Width Card) */}
       <div className="bg-white rounded-2xl p-5 2xl:p-6 border border-slate-200/80 shadow-2xs space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
           <div>
-            <h3 className="font-bold text-slate-900 text-sm sm:text-base 2xl:text-lg tracking-tight">Top Customers by Revenue</h3>
-            <p className="text-xs 2xl:text-sm text-slate-400 font-normal">Highest contributing customer accounts recorded in database</p>
+            <h3 className="font-bold text-slate-900 text-sm sm:text-base 2xl:text-lg tracking-tight">Top Customers by Order Activity</h3>
+            <p className="text-xs 2xl:text-sm text-slate-400 font-normal">Most active customer accounts recorded in database</p>
           </div>
           <button onClick={() => navigate('/customers')} className="text-xs sm:text-sm font-bold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1 cursor-pointer transition">
             <span>View All Customers</span>
@@ -527,8 +395,7 @@ export default function Reports() {
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-bold text-[10px] sm:text-xs uppercase tracking-wider">
                 <th className="pb-3 px-2">Customer Name & Company</th>
-                <th className="pb-3 px-2 text-center">Orders Placed</th>
-                <th className="pb-3 px-2 text-right">Total Revenue (₹)</th>
+                <th className="pb-3 px-2 text-right">Orders Placed</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -546,24 +413,14 @@ export default function Reports() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-3.5 2xl:py-4 px-2 text-center font-bold text-slate-800 text-xs sm:text-sm 2xl:text-base">
-                      {c.orders}
-                      {c.pricedOrders !== undefined && c.pricedOrders < c.orders && c.pricedOrders > 0 && (
-                        <span className="block text-[10px] text-slate-400 font-normal">({c.pricedOrders} priced)</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 2xl:py-4 px-2 text-right font-bold text-slate-900 text-xs sm:text-sm 2xl:text-base">
-                      {c.hasPricing ? (
-                        c.revenue
-                      ) : (
-                        <span className="text-slate-400 font-normal italic text-xs">Pricing not tracked</span>
-                      )}
+                    <td className="py-3.5 2xl:py-4 px-2 text-right font-bold text-slate-800 text-xs sm:text-sm 2xl:text-base">
+                      {c.orders} {c.orders === 1 ? 'Order' : 'Orders'}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={3} className="p-6 text-center text-slate-400 italic">No customer revenue records found.</td>
+                  <td colSpan={2} className="p-6 text-center text-slate-400 italic">No customer records found.</td>
                 </tr>
               )}
             </tbody>
@@ -587,25 +444,12 @@ export default function Reports() {
                     </div>
                   }
                   headerExtra={
-                    <span className="font-bold text-slate-900 text-sm shrink-0">
-                      {c.hasPricing ? c.revenue : <span className="text-slate-400 font-normal italic text-xs">Unpriced</span>}
+                    <span className="font-bold text-slate-900 text-xs shrink-0">
+                      {c.orders} {c.orders === 1 ? 'Order' : 'Orders'}
                     </span>
                   }
                 >
-                  <div className="grid grid-cols-2 gap-3 text-xs pt-1">
-                    <div>
-                      <span className="text-slate-400 font-medium text-[11px] block">Orders Placed</span>
-                      <span className="font-bold text-slate-900">{c.orders} Orders</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 font-medium text-[11px] block">Total Revenue</span>
-                      <span className="font-bold text-emerald-600">
-                        {c.hasPricing ? c.revenue : <span className="text-slate-400 font-normal italic text-xs">Pricing not tracked</span>}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-200/80">
+                  <div className="pt-2">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -620,7 +464,7 @@ export default function Reports() {
                 </AccordionCard>
               ))
             ) : (
-              <div className="p-6 text-center text-slate-400 italic">No customer revenue records found.</div>
+              <div className="p-6 text-center text-slate-400 italic">No customer records found.</div>
             )}
           </div>
         </div>

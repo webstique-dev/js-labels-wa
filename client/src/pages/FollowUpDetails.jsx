@@ -11,7 +11,6 @@ import {
   Phone,
   Mail,
   MapPin,
-  CreditCard,
   Calendar,
   Clock,
   Plus,
@@ -35,6 +34,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { initiatePhoneCall, openWhatsApp, openEmail, WhatsAppIcon } from '../utils/contactUtils';
 import SkeletonFollowUpDetails from '../components/ui/Skeleton';
 import NewOrderModal from '../components/NewOrderModal';
+import Button from '../components/ui/Button';
 import LoadingButton from '../components/ui/LoadingButton';
 import {
   getLiveReorderProbability,
@@ -228,7 +228,7 @@ export default function FollowUpDetails() {
   // Add Note action
   const handleAddNoteSubmit = async (e) => {
     e.preventDefault();
-    if (!newNoteInput.trim()) return;
+    if (!newNoteInput.trim() || isSavingNote) return;
 
     try {
       setIsSavingNote(true);
@@ -389,6 +389,7 @@ export default function FollowUpDetails() {
   // Profile Edit Submit
   const handleEditProfileSubmit = async (e) => {
     e.preventDefault();
+    if (isSavingProfile) return;
     try {
       setIsSavingProfile(true);
       const isCustomer = followUpData?.relatedType === 'customer' || (entity && (entity.leadId || entity.customerType || entity.gstNo !== undefined));
@@ -782,7 +783,7 @@ export default function FollowUpDetails() {
 
               {/* GST Row */}
               <div className="flex items-center gap-2.5 pt-1">
-                <CreditCard size={14} className="text-slate-400 shrink-0" />
+                <FileText size={14} className="text-slate-400 shrink-0" />
                 <span className="font-bold text-slate-900 uppercase">
                   {gstNo !== '-' ? `GST: ${gstNo}` : 'GST: -'}
                 </span>
@@ -1107,21 +1108,24 @@ export default function FollowUpDetails() {
                   required
                 />
                 <div className="flex items-center justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="xs"
+                    disabled={isSavingNote}
                     onClick={() => setIsAddingNote(false)}
-                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
                   >
                     Cancel
-                  </button>
-                  <LoadingButton
+                  </Button>
+                  <Button
                     type="submit"
+                    variant="primary"
+                    size="xs"
                     loading={isSavingNote}
-                    loadingText="Saving..."
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                    loadingText="Saving Note..."
                   >
                     Save Note
-                  </LoadingButton>
+                  </Button>
                 </div>
               </form>
             )}
@@ -1390,21 +1394,24 @@ export default function FollowUpDetails() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isSavingProfile}
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Cancel
-                </button>
-                <LoadingButton
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="sm"
                   loading={isSavingProfile}
-                  loadingText="Saving..."
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-2xs cursor-pointer"
+                  loadingText="Saving Changes..."
                 >
                   Save Changes
-                </LoadingButton>
+                </Button>
               </div>
 
             </form>

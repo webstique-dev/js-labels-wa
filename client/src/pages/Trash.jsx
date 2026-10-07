@@ -176,7 +176,7 @@ export default function Trash() {
                           <div className="font-semibold text-slate-800">{displayName}</div>
                           {activeTab === 'orders' && item.customerId && (
                             <div className="text-xs text-slate-400 font-normal">
-                              Customer: {item.customerId.name || 'Deleted Customer'} • ₹{(item.amount || 0).toLocaleString('en-IN')}
+                              Customer: {item.customerId.name || 'Deleted Customer'}
                             </div>
                           )}
                           {activeTab === 'leads' && (
@@ -251,9 +251,9 @@ export default function Trash() {
                     <div className="space-y-2 text-xs pt-1">
                       {activeTab === 'orders' && item.customerId && (
                         <div>
-                          <span className="text-slate-400 font-medium text-[11px] block">Customer & Amount</span>
+                          <span className="text-slate-400 font-medium text-[11px] block">Customer</span>
                           <span className="font-semibold text-slate-800">
-                            {item.customerId.name || 'Deleted Customer'} • ₹{(item.amount || 0).toLocaleString('en-IN')}
+                            {item.customerId.name || 'Deleted Customer'}
                           </span>
                         </div>
                       )}

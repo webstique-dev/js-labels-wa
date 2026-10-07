@@ -36,6 +36,8 @@ const getLeads = async (req, res) => {
       Lead.find(queryFilter)
         .populate('assignedTo', 'name email avatarUrl role')
         .populate('createdBy', 'name email avatarUrl role')
+        .populate('followUpNotesList.createdBy', 'name email avatarUrl role')
+        .populate('rescheduleHistory.rescheduledBy', 'name email avatarUrl role')
         .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
@@ -104,6 +106,18 @@ const createLead = async (req, res) => {
 
     const finalAssignedTo = req.user.role === 'caller' ? req.user.id : (assignedTo || null);
     const finalSource = (source && source.trim()) ? source.trim() : null;
+
+    // Deduplication safeguard against rapid duplicate submissions (e.g. double/triple clicks within 4s)
+    const recentDuplicate = await Lead.findOne({
+      phone: cleanPhone,
+      createdBy: req.user.id,
+      createdAt: { $gte: new Date(Date.now() - 4000) }
+    }).populate('assignedTo', 'name email avatarUrl role')
+      .populate('createdBy', 'name email avatarUrl role');
+
+    if (recentDuplicate) {
+      return res.status(200).json(recentDuplicate);
+    }
 
     const newLead = await Lead.create({
       name: name.trim(),
@@ -198,7 +212,7 @@ const updateLeadStatus = async (req, res) => {
       lead.cancelReason = undefined;
     }
 
-    // If moving to follow_up, create a FollowUp document to sync with Followups List and Details pages
+    // If moving to follow_up, sync with FollowUp document and populate notes
     if (status === 'follow_up') {
       let dueDate = new Date();
       if (followUpDate && followUpTime) {
@@ -214,14 +228,43 @@ const updateLeadStatus = async (req, res) => {
       lead.followUpTime = followUpTime;
       lead.followUpNotes = notes || '';
 
-      await FollowUp.create({
-        relatedType: 'lead',
-        relatedId: lead._id,
-        dueDate: validDueDate,
-        notes: notes || '',
-        status: 'open',
-        assignedTo: lead.assignedTo || req.user.id
-      });
+      if (notes && notes.trim()) {
+        if (!lead.followUpNotesList) lead.followUpNotesList = [];
+        lead.followUpNotesList.push({
+          content: notes.trim(),
+          createdAt: new Date(),
+          createdBy: req.user.id
+        });
+      }
+
+      let openFu = await FollowUp.findOne({ relatedType: 'lead', relatedId: lead._id, status: 'open' });
+      if (openFu) {
+        openFu.dueDate = validDueDate;
+        openFu.notes = notes || openFu.notes;
+        if (notes && notes.trim()) {
+          if (!openFu.notesList) openFu.notesList = [];
+          openFu.notesList.push({
+            content: notes.trim(),
+            createdAt: new Date(),
+            createdBy: req.user.id
+          });
+        }
+        await openFu.save();
+      } else {
+        await FollowUp.create({
+          relatedType: 'lead',
+          relatedId: lead._id,
+          dueDate: validDueDate,
+          notes: notes || '',
+          status: 'open',
+          assignedTo: lead.assignedTo || req.user.id,
+          notesList: (notes && notes.trim()) ? [{
+            content: notes.trim(),
+            createdAt: new Date(),
+            createdBy: req.user.id
+          }] : []
+        });
+      }
     }
 
     await lead.save();
@@ -353,7 +396,9 @@ const getLeadById = async (req, res) => {
 
     const lead = await Lead.findById(id)
       .populate('assignedTo', 'name email phone avatarUrl role')
-      .populate('createdBy', 'name email phone avatarUrl role');
+      .populate('createdBy', 'name email phone avatarUrl role')
+      .populate('followUpNotesList.createdBy', 'name email avatarUrl role')
+      .populate('rescheduleHistory.rescheduledBy', 'name email avatarUrl role');
 
     if (!lead) {
       return res.status(404).json({ message: 'Lead not found' });
@@ -520,12 +565,289 @@ const updateLead = async (req, res) => {
 
     const updatedLead = await Lead.findById(lead._id)
       .populate('assignedTo', 'name email avatarUrl role')
-      .populate('createdBy', 'name email avatarUrl role');
+      .populate('createdBy', 'name email avatarUrl role')
+      .populate('followUpNotesList.createdBy', 'name email avatarUrl role')
+      .populate('rescheduleHistory.rescheduledBy', 'name email avatarUrl role');
 
     return res.json(updatedLead);
   } catch (error) {
     console.error('Error updating lead:', error);
     return res.status(500).json({ message: 'Server error updating lead' });
+  }
+};
+
+// PATCH /api/leads/:id/reschedule-followup
+const rescheduleFollowUp = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { followUpDate, followUpTime, reason, notes } = req.body;
+
+    if (!followUpDate) {
+      return res.status(400).json({ message: 'Follow-up date is required' });
+    }
+
+    const lead = await Lead.findById(id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    if (req.user.role === 'caller' && lead.assignedTo && lead.assignedTo.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Forbidden: You can only reschedule follow-ups for your assigned leads' });
+    }
+
+    let newDueDate = new Date();
+    if (followUpDate && followUpTime) {
+      newDueDate = new Date(`${followUpDate}T${followUpTime}`);
+    } else {
+      newDueDate = new Date(followUpDate);
+    }
+    if (isNaN(newDueDate.getTime())) {
+      newDueDate = new Date();
+    }
+
+    // Save previous schedule to rescheduleHistory
+    if (!lead.rescheduleHistory) lead.rescheduleHistory = [];
+    lead.rescheduleHistory.push({
+      previousDueDate: lead.nextFollowUpDate || (lead.followUpDate ? new Date(`${lead.followUpDate}T${lead.followUpTime || '00:00'}`) : null),
+      previousDate: lead.followUpDate || '',
+      previousTime: lead.followUpTime || '',
+      newDueDate: newDueDate,
+      newDate: followUpDate,
+      newTime: followUpTime || '',
+      reason: reason ? reason.trim() : undefined,
+      rescheduledBy: req.user.id,
+      rescheduledAt: new Date()
+    });
+
+    // Update current schedule
+    lead.nextFollowUpDate = newDueDate;
+    lead.followUpDate = followUpDate;
+    lead.followUpTime = followUpTime || '';
+    lead.status = 'follow_up';
+
+    // If new note provided with rescheduling
+    if (notes && notes.trim()) {
+      if (!lead.followUpNotesList) lead.followUpNotesList = [];
+      lead.followUpNotesList.push({
+        content: notes.trim(),
+        createdAt: new Date(),
+        createdBy: req.user.id
+      });
+      lead.followUpNotes = notes.trim();
+    }
+
+    await lead.save();
+
+    // Sync open FollowUp document (do NOT create duplicate open follow-up)
+    let openFu = await FollowUp.findOne({ relatedType: 'lead', relatedId: lead._id, status: 'open' });
+    if (openFu) {
+      if (!openFu.rescheduleHistory) openFu.rescheduleHistory = [];
+      openFu.rescheduleHistory.push({
+        previousDueDate: openFu.dueDate,
+        newDueDate: newDueDate,
+        reason: reason ? reason.trim() : undefined,
+        rescheduledBy: req.user.id,
+        rescheduledAt: new Date()
+      });
+      openFu.dueDate = newDueDate;
+      if (notes && notes.trim()) {
+        openFu.notes = notes.trim();
+        if (!openFu.notesList) openFu.notesList = [];
+        openFu.notesList.push({
+          content: notes.trim(),
+          createdAt: new Date(),
+          createdBy: req.user.id
+        });
+      }
+      await openFu.save();
+    } else {
+      await FollowUp.create({
+        relatedType: 'lead',
+        relatedId: lead._id,
+        dueDate: newDueDate,
+        notes: notes || lead.followUpNotes || '',
+        status: 'open',
+        assignedTo: lead.assignedTo || req.user.id,
+        rescheduleHistory: [
+          {
+            previousDueDate: lead.nextFollowUpDate,
+            newDueDate: newDueDate,
+            reason: reason ? reason.trim() : undefined,
+            rescheduledBy: req.user.id,
+            rescheduledAt: new Date()
+          }
+        ],
+        notesList: (notes && notes.trim()) ? [{
+          content: notes.trim(),
+          createdAt: new Date(),
+          createdBy: req.user.id
+        }] : []
+      });
+    }
+
+    // Format readable date and time for audit timeline
+    const formattedDateStr = newDueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const formattedTimeStr = followUpTime || newDueDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    await Activity.create({
+      relatedType: 'lead',
+      relatedId: lead._id,
+      type: 'status_change',
+      description: `Follow-up rescheduled to ${formattedDateStr} at ${formattedTimeStr}${reason ? ` (Reason: ${reason})` : ''}`,
+      createdBy: req.user.id
+    });
+
+    const populatedLead = await Lead.findById(lead._id)
+      .populate('assignedTo', 'name email avatarUrl role')
+      .populate('createdBy', 'name email avatarUrl role')
+      .populate('followUpNotesList.createdBy', 'name email avatarUrl role')
+      .populate('rescheduleHistory.rescheduledBy', 'name email avatarUrl role');
+
+    return res.json(populatedLead);
+  } catch (error) {
+    console.error('Error rescheduling follow-up:', error);
+    return res.status(500).json({ message: 'Server error rescheduling follow-up' });
+  }
+};
+
+// POST /api/leads/:id/followup-notes
+const addFollowUpNote = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Note content is required' });
+    }
+
+    const lead = await Lead.findById(id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    if (req.user.role === 'caller' && lead.assignedTo && lead.assignedTo.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Forbidden: You can only add notes to your assigned leads' });
+    }
+
+    if (!lead.followUpNotesList) lead.followUpNotesList = [];
+    const newNote = {
+      content: content.trim(),
+      createdAt: new Date(),
+      createdBy: req.user.id
+    };
+    lead.followUpNotesList.push(newNote);
+    lead.followUpNotes = content.trim(); // store latest note for quick display
+
+    await lead.save();
+
+    // Also sync to Activity and FollowUp
+    await Activity.create({
+      relatedType: 'lead',
+      relatedId: lead._id,
+      type: 'note',
+      description: content.trim(),
+      createdBy: req.user.id
+    });
+
+    const openFu = await FollowUp.findOne({ relatedType: 'lead', relatedId: lead._id, status: 'open' });
+    if (openFu) {
+      openFu.notes = content.trim();
+      if (!openFu.notesList) openFu.notesList = [];
+      openFu.notesList.push(newNote);
+      await openFu.save();
+    }
+
+    const populatedLead = await Lead.findById(lead._id)
+      .populate('assignedTo', 'name email avatarUrl role')
+      .populate('createdBy', 'name email avatarUrl role')
+      .populate('followUpNotesList.createdBy', 'name email avatarUrl role')
+      .populate('rescheduleHistory.rescheduledBy', 'name email avatarUrl role');
+
+    return res.status(201).json(populatedLead);
+  } catch (error) {
+    console.error('Error adding follow-up note:', error);
+    return res.status(500).json({ message: 'Server error adding follow-up note' });
+  }
+};
+
+// PATCH /api/leads/:id/followup-notes/:noteId
+const updateFollowUpNote = async (req, res) => {
+  try {
+    const { id, noteId } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Note content is required' });
+    }
+
+    const lead = await Lead.findById(id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    if (req.user.role === 'caller' && lead.assignedTo && lead.assignedTo.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Forbidden: You can only edit notes on your assigned leads' });
+    }
+
+    const note = lead.followUpNotesList?.id(noteId);
+    if (!note) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    note.content = content.trim();
+    note.updatedAt = new Date();
+
+    // Update latest note if this was the latest note
+    const lastNote = lead.followUpNotesList[lead.followUpNotesList.length - 1];
+    if (lastNote && lastNote._id.toString() === noteId) {
+      lead.followUpNotes = content.trim();
+    }
+
+    await lead.save();
+
+    const populatedLead = await Lead.findById(lead._id)
+      .populate('assignedTo', 'name email avatarUrl role')
+      .populate('createdBy', 'name email avatarUrl role')
+      .populate('followUpNotesList.createdBy', 'name email avatarUrl role')
+      .populate('rescheduleHistory.rescheduledBy', 'name email avatarUrl role');
+
+    return res.json(populatedLead);
+  } catch (error) {
+    console.error('Error updating follow-up note:', error);
+    return res.status(500).json({ message: 'Server error updating follow-up note' });
+  }
+};
+
+// DELETE /api/leads/:id/followup-notes/:noteId
+const deleteFollowUpNote = async (req, res) => {
+  try {
+    const { id, noteId } = req.params;
+
+    const lead = await Lead.findById(id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    if (req.user.role === 'caller' && lead.assignedTo && lead.assignedTo.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Forbidden: You can only delete notes on your assigned leads' });
+    }
+
+    lead.followUpNotesList = (lead.followUpNotesList || []).filter(n => n._id.toString() !== noteId);
+    const lastNote = lead.followUpNotesList.length > 0 ? lead.followUpNotesList[lead.followUpNotesList.length - 1] : null;
+    lead.followUpNotes = lastNote ? lastNote.content : '';
+
+    await lead.save();
+
+    const populatedLead = await Lead.findById(lead._id)
+      .populate('assignedTo', 'name email avatarUrl role')
+      .populate('createdBy', 'name email avatarUrl role')
+      .populate('followUpNotesList.createdBy', 'name email avatarUrl role')
+      .populate('rescheduleHistory.rescheduledBy', 'name email avatarUrl role');
+
+    return res.json(populatedLead);
+  } catch (error) {
+    console.error('Error deleting follow-up note:', error);
+    return res.status(500).json({ message: 'Server error deleting follow-up note' });
   }
 };
 
@@ -537,5 +859,9 @@ module.exports = {
   updateLeadStatus,
   reassignLead,
   addLeadActivity,
-  deleteLead
+  deleteLead,
+  rescheduleFollowUp,
+  addFollowUpNote,
+  updateFollowUpNote,
+  deleteFollowUpNote
 };

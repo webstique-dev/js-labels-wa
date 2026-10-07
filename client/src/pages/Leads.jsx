@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import NewOrderModal from '../components/NewOrderModal';
+import Button from '../components/ui/Button';
 import LoadingButton from '../components/ui/LoadingButton';
 import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
 import {
@@ -33,12 +34,33 @@ import {
   Calendar,
   User,
   CheckCircle2,
-  Pencil
+  Pencil,
+  CalendarClock,
+  RotateCcw,
+  History,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Skeleton, SkeletonCard } from '../components/ui/Skeleton';
 import { initiatePhoneCall, openWhatsApp, openEmail, WhatsAppIcon } from '../utils/contactUtils';
 import CustomDatePicker from '../components/ui/DatePicker';
 import CustomTimePicker from '../components/ui/TimePicker';
+
+const formatDateTime = (dateString) => {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  }) + ' at ' + date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+};
 
 const COLUMNS = [
   {
@@ -201,19 +223,6 @@ const getFollowUpStatusInfo = (lead) => {
   return { isUrgent: false, isOverdue: false, label: 'Follow-up Scheduled' };
 };
 
-const calculateColumnTotal = (columnLeads) => {
-  const sum = columnLeads.reduce((acc, lead) => {
-    const val = lead.orderAmount || lead.estimatedValue || lead.amount || 0;
-    return acc + val;
-  }, 0);
-
-  if (sum === 0) return null;
-  if (sum >= 10000000) return `₹ ${(sum / 10000000).toFixed(1)} Cr`;
-  if (sum >= 100000) return `₹ ${(sum / 100000).toFixed(1)} Lakhs`;
-  if (sum >= 1000) return `₹ ${(sum / 1000).toFixed(1)} K`;
-  return `₹ ${sum.toLocaleString('en-IN')}`;
-};
-
 export default function Leads() {
   const { user, role, permissions } = useAuth();
   const notify = useNotification();
@@ -260,18 +269,22 @@ export default function Leads() {
     priority: 'medium'
   });
   const [isUpdatingLead, setIsUpdatingLead] = useState(false);
+  const [isCreatingLead, setIsCreatingLead] = useState(false);
 
   // Reassign Modal
   const [reassignModalLead, setReassignModalLead] = useState(null);
   const [reassignTargetUser, setReassignTargetUser] = useState('');
+  const [isReassigning, setIsReassigning] = useState(false);
 
   // Cancel Reason Modal
   const [pendingCancelMove, setPendingCancelMove] = useState(null);
   const [cancelReasonInput, setCancelReasonInput] = useState('');
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
 
   // Quick Activity Modal
   const [activeActivityModal, setActiveActivityModal] = useState(null);
   const [activityNote, setActivityNote] = useState('');
+  const [isSubmittingActivity, setIsSubmittingActivity] = useState(false);
 
   // Order Received Drag Modal
   const [orderModalLead, setOrderModalLead] = useState(null);
@@ -293,6 +306,24 @@ export default function Leads() {
   const [followUpTimeInput, setFollowUpTimeInput] = useState(getLiveTimeStr());
   const [followUpNotesInput, setFollowUpNotesInput] = useState('');
   const [isSchedulingFollowUp, setIsSchedulingFollowUp] = useState(false);
+
+  // Reschedule Follow-up Modal State (Unlimited Rescheduling)
+  const [rescheduleModalLead, setRescheduleModalLead] = useState(null);
+  const [rescheduleDateInput, setRescheduleDateInput] = useState(getLiveDateStr());
+  const [rescheduleTimeInput, setRescheduleTimeInput] = useState(getLiveTimeStr());
+  const [rescheduleReasonInput, setRescheduleReasonInput] = useState('');
+  const [rescheduleNotesInput, setRescheduleNotesInput] = useState('');
+  const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false);
+  const [showRescheduleHistory, setShowRescheduleHistory] = useState(false);
+
+  // Follow-up Notes Modal State (View, Add, Edit, Delete Notes)
+  const [followUpNotesModalLead, setFollowUpNotesModalLead] = useState(null);
+  const [newFollowUpNoteInput, setNewFollowUpNoteInput] = useState('');
+  const [isAddingFollowUpNote, setIsAddingFollowUpNote] = useState(false);
+  const [editingFollowUpNoteId, setEditingFollowUpNoteId] = useState(null);
+  const [editingFollowUpNoteText, setEditingFollowUpNoteText] = useState('');
+  const [isUpdatingFollowUpNote, setIsUpdatingFollowUpNote] = useState(false);
+  const [deletingFollowUpNoteId, setDeletingFollowUpNoteId] = useState(null);
 
   const canCreate = permissions.leads?.includes('create');
   const canDelete = permissions.leads?.includes('delete') || role === 'super_admin' || role === 'manager';
@@ -356,9 +387,10 @@ export default function Leads() {
   // Reassign Lead
   const handleReassignSubmit = async (e) => {
     e.preventDefault();
-    if (!reassignModalLead || !reassignTargetUser) return;
+    if (!reassignModalLead || !reassignTargetUser || isReassigning) return;
 
     try {
+      setIsReassigning(true);
       await api.patch(`/leads/${reassignModalLead._id}/assign`, { assignedTo: reassignTargetUser });
       notify.success(`Reassigned lead "${reassignModalLead.name}" successfully`);
       setReassignModalLead(null);
@@ -366,6 +398,8 @@ export default function Leads() {
       fetchLeads();
     } catch (err) {
       notify.error(err.response?.data?.message || 'Failed to reassign lead');
+    } finally {
+      setIsReassigning(false);
     }
   };
 
@@ -453,8 +487,10 @@ export default function Leads() {
 
   // Submit Cancel Reason
   const confirmCancelMove = async () => {
-    if (!pendingCancelMove || !cancelReasonInput.trim()) {
-      notify.error('Please provide a reason for marking lead as Order-Lost');
+    if (!pendingCancelMove || !cancelReasonInput.trim() || isSubmittingCancel) {
+      if (!cancelReasonInput.trim()) {
+        notify.error('Please provide a reason for marking lead as Order-Lost');
+      }
       return;
     }
 
@@ -463,23 +499,27 @@ export default function Leads() {
     setLeads(updatedLeads);
 
     try {
+      setIsSubmittingCancel(true);
       await api.patch(`/leads/${leadId}/status`, {
         status: destStatus,
         cancelReason: cancelReasonInput
       });
       notify.info('Lead marked as Order-Lost');
+      setPendingCancelMove(null);
+      setCancelReasonInput('');
+      fetchLeads();
     } catch (err) {
       setLeads(leads);
       notify.error(err.response?.data?.message || 'Failed to mark lead as Order-Lost');
     } finally {
-      setPendingCancelMove(null);
-      setCancelReasonInput('');
+      setIsSubmittingCancel(false);
     }
   };
 
   // Confirm Follow-up Schedule on Drag to follow_up
   const confirmFollowUpMove = async (e) => {
     e.preventDefault();
+    if (isSchedulingFollowUp) return;
     if (!pendingFollowUpMove || !followUpDateInput || !followUpTimeInput) {
       notify.error('Please select both follow-up date and time');
       return;
@@ -505,13 +545,13 @@ export default function Leads() {
         notes: followUpNotesInput
       });
       notify.success('Follow-up scheduled successfully & lead moved!');
+      setPendingFollowUpMove(null);
       await fetchLeads();
     } catch (err) {
       setLeads(leads);
       notify.error(err.response?.data?.message || 'Failed to schedule follow-up');
     } finally {
       setIsSchedulingFollowUp(false);
-      setPendingFollowUpMove(null);
     }
   };
 
@@ -533,6 +573,7 @@ export default function Leads() {
   // Submit Add Lead Form
   const handleAddLeadSubmit = async (e) => {
     e.preventDefault();
+    if (isCreatingLead) return;
 
     // Validate 10-digit phone number
     const cleanPhone = (newLeadForm.phone || '').replace(/\D/g, '');
@@ -551,6 +592,7 @@ export default function Leads() {
     }
 
     try {
+      setIsCreatingLead(true);
       const payload = {
         ...newLeadForm,
         name: newLeadForm.name.trim(),
@@ -566,6 +608,8 @@ export default function Leads() {
       fetchLeads();
     } catch (err) {
       notify.error(err.response?.data?.message || 'Failed to create lead');
+    } finally {
+      setIsCreatingLead(false);
     }
   };
 
@@ -585,7 +629,7 @@ export default function Leads() {
   // Submit Edit Lead Form
   const handleEditLeadSubmit = async (e) => {
     e.preventDefault();
-    if (!editLeadModalLead) return;
+    if (!editLeadModalLead || isUpdatingLead) return;
 
     const cleanPhone = (editLeadForm.phone || '').replace(/\D/g, '');
     if (cleanPhone.length !== 10) {
@@ -620,6 +664,142 @@ export default function Leads() {
       notify.error(err.response?.data?.message || 'Failed to update lead details');
     } finally {
       setIsUpdatingLead(false);
+    }
+  };
+
+  // Quick Activity Submit
+  const handleActivitySubmit = async (e) => {
+    e.preventDefault();
+    if (!activeActivityModal || !activityNote.trim() || isSubmittingActivity) return;
+
+    try {
+      setIsSubmittingActivity(true);
+      await api.post(`/leads/${activeActivityModal.leadId}/activity`, {
+        type: activeActivityModal.type || 'note',
+        description: activityNote.trim()
+      });
+      notify.success('Activity logged successfully');
+      setActiveActivityModal(null);
+      setActivityNote('');
+      fetchLeads();
+    } catch (err) {
+      notify.error(err.response?.data?.message || 'Failed to log activity');
+    } finally {
+      setIsSubmittingActivity(false);
+    }
+  };
+
+  // Open Reschedule Follow-up Modal
+  const openRescheduleModal = (lead) => {
+    setRescheduleModalLead(lead);
+    setRescheduleDateInput(lead.followUpDate || getLiveDateStr());
+    setRescheduleTimeInput(lead.followUpTime || getLiveTimeStr());
+    setRescheduleReasonInput('');
+    setRescheduleNotesInput('');
+    setShowRescheduleHistory(false);
+  };
+
+  // Submit Reschedule Follow-up (Unlimited rescheduling support)
+  const handleRescheduleSubmit = async (e) => {
+    e.preventDefault();
+    if (!rescheduleModalLead || isSubmittingReschedule) return;
+
+    try {
+      setIsSubmittingReschedule(true);
+      const res = await api.patch(`/leads/${rescheduleModalLead._id}/reschedule-followup`, {
+        followUpDate: rescheduleDateInput,
+        followUpTime: rescheduleTimeInput,
+        reason: rescheduleReasonInput,
+        notes: rescheduleNotesInput
+      });
+
+      notify.success('Follow-up rescheduled successfully!');
+      setLeads((prev) => prev.map((l) => (l._id === rescheduleModalLead._id ? res.data : l)));
+      setRescheduleModalLead(null);
+    } catch (err) {
+      notify.error(err.response?.data?.message || 'Failed to reschedule follow-up');
+    } finally {
+      setIsSubmittingReschedule(false);
+    }
+  };
+
+  // Open Follow-up Notes Modal
+  const openFollowUpNotesModal = (lead) => {
+    setFollowUpNotesModalLead(lead);
+    setNewFollowUpNoteInput('');
+    setEditingFollowUpNoteId(null);
+    setEditingFollowUpNoteText('');
+  };
+
+  // Add Follow-up Note
+  const handleAddFollowUpNoteSubmit = async (e) => {
+    e.preventDefault();
+    if (!followUpNotesModalLead || !newFollowUpNoteInput.trim() || isAddingFollowUpNote) return;
+
+    try {
+      setIsAddingFollowUpNote(true);
+      const res = await api.post(`/leads/${followUpNotesModalLead._id}/followup-notes`, {
+        content: newFollowUpNoteInput.trim()
+      });
+
+      notify.success('Follow-up note added successfully!');
+      setNewFollowUpNoteInput('');
+      setFollowUpNotesModalLead(res.data);
+      setLeads((prev) => prev.map((l) => (l._id === followUpNotesModalLead._id ? res.data : l)));
+    } catch (err) {
+      notify.error(err.response?.data?.message || 'Failed to add follow-up note');
+    } finally {
+      setIsAddingFollowUpNote(false);
+    }
+  };
+
+  // Update Follow-up Note
+  const handleUpdateFollowUpNote = async (noteId) => {
+    if (!followUpNotesModalLead || !editingFollowUpNoteText.trim() || isUpdatingFollowUpNote) return;
+
+    try {
+      setIsUpdatingFollowUpNote(true);
+      const res = await api.patch(`/leads/${followUpNotesModalLead._id}/followup-notes/${noteId}`, {
+        content: editingFollowUpNoteText.trim()
+      });
+
+      notify.success('Note updated successfully!');
+      setEditingFollowUpNoteId(null);
+      setEditingFollowUpNoteText('');
+      setFollowUpNotesModalLead(res.data);
+      setLeads((prev) => prev.map((l) => (l._id === followUpNotesModalLead._id ? res.data : l)));
+    } catch (err) {
+      notify.error(err.response?.data?.message || 'Failed to update note');
+    } finally {
+      setIsUpdatingFollowUpNote(false);
+    }
+  };
+
+  // Delete Follow-up Note
+  const handleDeleteFollowUpNote = async (noteId) => {
+    if (!followUpNotesModalLead || deletingFollowUpNoteId) return;
+
+    const isConfirmed = await confirm({
+      title: 'Delete Follow-up Note',
+      message: 'Are you sure you want to delete this note? This action cannot be undone.',
+      confirmLabel: 'Delete Note',
+      cancelLabel: 'Cancel',
+      variant: 'danger'
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      setDeletingFollowUpNoteId(noteId);
+      const res = await api.delete(`/leads/${followUpNotesModalLead._id}/followup-notes/${noteId}`);
+
+      notify.success('Note deleted successfully');
+      setFollowUpNotesModalLead(res.data);
+      setLeads((prev) => prev.map((l) => (l._id === followUpNotesModalLead._id ? res.data : l)));
+    } catch (err) {
+      notify.error(err.response?.data?.message || 'Failed to delete note');
+    } finally {
+      setDeletingFollowUpNoteId(null);
     }
   };
 
@@ -769,13 +949,14 @@ export default function Leads() {
 
                 {/* Add Lead Red Button */}
                 {canCreate && (
-                  <button
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={Plus}
                     onClick={() => openAddLeadForStage('new')}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Plus size={16} />
-                    <span>Add Lead</span>
-                  </button>
+                    Add Lead
+                  </Button>
                 )}
               </div>
             </div>
@@ -917,7 +1098,6 @@ export default function Leads() {
                 });
               }
 
-              const columnTotalStr = calculateColumnTotal(columnLeads);
               const IconComp = column.icon;
 
               const isDraggingCard = Boolean(activeDragSourceStatus);
@@ -956,11 +1136,6 @@ export default function Leads() {
                             </span>
                           )}
                         </h3>
-                        {columnTotalStr && (
-                          <span className="text-xs text-slate-500 font-medium block">
-                            {columnTotalStr}
-                          </span>
-                        )}
                       </div>
                     </div>
 
@@ -1004,6 +1179,8 @@ export default function Leads() {
                                   canDelete={canDelete}
                                   onDelete={() => handleDeleteLead(lead._id, lead.name)}
                                   onEdit={() => openEditLeadModal(lead)}
+                                  onReschedule={() => openRescheduleModal(lead)}
+                                  onOpenNotes={() => openFollowUpNotesModal(lead)}
                                   onReassign={() => {
                                     setReassignModalLead(lead);
                                     setReassignTargetUser(lead.assignedTo?._id || '');
@@ -1031,14 +1208,16 @@ export default function Leads() {
                   {/* Bottom + Add Lead Action - Only in New stage */}
                   {column.id === 'new' && (
                     <div className="pt-2">
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
+                        icon={Plus}
                         onClick={() => openAddLeadForStage(column.id)}
-                        className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-semibold text-blue-600 hover:text-blue-700 transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                        className="w-full text-blue-600 hover:text-blue-700"
                       >
-                        <Plus size={14} />
-                        <span>Add Lead</span>
-                      </button>
+                        Add Lead
+                      </Button>
                     </div>
                   )}
 
@@ -1065,6 +1244,8 @@ export default function Leads() {
                   canDelete={canDelete}
                   onDelete={() => handleDeleteLead(lead._id, lead.name)}
                   onEdit={() => openEditLeadModal(lead)}
+                  onReschedule={() => openRescheduleModal(lead)}
+                  onOpenNotes={() => openFollowUpNotesModal(lead)}
                   onReassign={() => {
                     setReassignModalLead(lead);
                     setReassignTargetUser(lead.assignedTo?._id || '');
@@ -1116,19 +1297,24 @@ export default function Leads() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isReassigning}
                   onClick={() => setReassignModalLead(null)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs"
+                  variant="primary"
+                  size="sm"
+                  loading={isReassigning}
+                  loadingText="Reassigning..."
                 >
                   Confirm Reassign
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -1161,20 +1347,25 @@ export default function Leads() {
               className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-rose-500"
             />
             <div className="flex justify-end gap-2 pt-2">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
+                disabled={isSubmittingCancel}
                 onClick={() => setPendingCancelMove(null)}
-                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
               >
                 Cancel Move
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="danger"
+                size="sm"
+                loading={isSubmittingCancel}
+                loadingText="Submitting..."
                 onClick={confirmCancelMove}
-                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs"
               >
                 Submit Order-Lost
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1347,20 +1538,25 @@ export default function Leads() {
               )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isCreatingLead}
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  variant="primary"
+                  size="sm"
+                  loading={isCreatingLead}
+                  loadingText="Creating Lead..."
+                  icon={Plus}
                 >
-                  <Plus size={16} />
-                  <span>Create Lead</span>
-                </button>
+                  Create Lead
+                </Button>
               </div>
             </form>
           </div>
@@ -1489,21 +1685,24 @@ export default function Leads() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isUpdatingLead}
                   onClick={() => setEditLeadModalLead(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                 >
                   Cancel
-                </button>
-                <LoadingButton
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="sm"
                   loading={isUpdatingLead}
-                  loadingText="Saving Changes..."
-                  className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition"
+                  loadingText="Saving Lead Details..."
                 >
                   Save Lead Details
-                </LoadingButton>
+                </Button>
               </div>
             </form>
           </div>
@@ -1538,19 +1737,24 @@ export default function Leads() {
               />
 
               <div className="flex justify-end gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isSubmittingActivity}
                   onClick={() => setActiveActivityModal(null)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs"
+                  variant="primary"
+                  size="sm"
+                  loading={isSubmittingActivity}
+                  loadingText="Logging Activity..."
                 >
                   Log Activity
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -1628,29 +1832,374 @@ export default function Leads() {
               </div>
 
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isSchedulingFollowUp}
                   onClick={() => setPendingFollowUpMove(null)}
-                  className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer text-center"
+                  className="w-full sm:w-auto"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  disabled={isSchedulingFollowUp}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl text-xs font-bold shadow-2xs transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                  variant="primary"
+                  size="sm"
+                  loading={isSchedulingFollowUp}
+                  loadingText="Scheduling..."
+                  className="w-full sm:w-auto"
                 >
-                  {isSchedulingFollowUp ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                      <span>Scheduling...</span>
-                    </>
-                  ) : (
-                    <span>Confirm & Schedule</span>
-                  )}
-                </button>
+                  Confirm & Schedule
+                </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reschedule Follow-up Modal (Unlimited Rescheduling with History preservation) */}
+      {rescheduleModalLead && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-200/90 my-auto max-h-[92vh] overflow-y-auto scrollbar-hide">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center font-bold shrink-0">
+                  <CalendarClock size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-snug">Reschedule Follow-up</h3>
+                  <p className="text-[11px] text-slate-400 font-normal">
+                    Update scheduled date, time & keep past schedule history
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRescheduleModalLead(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Current Schedule Summary */}
+            <div className="p-3 bg-amber-50/70 border border-amber-200/70 rounded-xl text-xs text-slate-700 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900 truncate">
+                  Lead: {rescheduleModalLead.name} {rescheduleModalLead.company ? `(${rescheduleModalLead.company})` : ''}
+                </span>
+                {rescheduleModalLead.rescheduleHistory?.length > 0 && (
+                  <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full shrink-0">
+                    Rescheduled {rescheduleModalLead.rescheduleHistory.length}x
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-amber-900 font-medium">
+                Current Scheduled: <strong>{formatFollowUpBadgeTime(rescheduleModalLead) || (rescheduleModalLead.followUpDate ? `${rescheduleModalLead.followUpDate} ${rescheduleModalLead.followUpTime || ''}` : 'Not scheduled')}</strong>
+              </p>
+            </div>
+
+            <form onSubmit={handleRescheduleSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    New Follow-up Date <span className="text-red-500">*</span>
+                  </label>
+                  <CustomDatePicker
+                    required
+                    selectedDate={rescheduleDateInput}
+                    onChange={(val) => setRescheduleDateInput(val)}
+                    placeholder="Select new date"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    New Follow-up Time <span className="text-red-500">*</span>
+                  </label>
+                  <CustomTimePicker
+                    required
+                    selectedTime={rescheduleTimeInput}
+                    onChange={(val) => setRescheduleTimeInput(val)}
+                    placeholder="Select new time"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Reschedule Reason <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={rescheduleReasonInput}
+                  onChange={(e) => setRescheduleReasonInput(e.target.value)}
+                  placeholder="e.g. Client requested callback at 5 PM, Decision maker busy..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/80 transition"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Add Discussion Note <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={rescheduleNotesInput}
+                  onChange={(e) => setRescheduleNotesInput(e.target.value)}
+                  placeholder="Record client requirements, discussion notes, or next steps..."
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/80 transition"
+                />
+              </div>
+
+              {/* Collapsible Previous Schedule History */}
+              {rescheduleModalLead.rescheduleHistory && rescheduleModalLead.rescheduleHistory.length > 0 && (
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                  <button
+                    type="button"
+                    onClick={() => setShowRescheduleHistory(!showRescheduleHistory)}
+                    className="w-full p-2.5 px-3 flex items-center justify-between text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <History size={14} className="text-slate-500" />
+                      <span>Previous Schedule History ({rescheduleModalLead.rescheduleHistory.length})</span>
+                    </span>
+                    {showRescheduleHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+
+                  {showRescheduleHistory && (
+                    <div className="p-3 pt-1 space-y-2 border-t border-slate-200/80 max-h-40 overflow-y-auto scrollbar-hide">
+                      {rescheduleModalLead.rescheduleHistory.slice().reverse().map((entry, idx) => {
+                        const dateFormatted = entry.previousDueDate
+                          ? formatDateTime(entry.previousDueDate)
+                          : `${entry.previousDate || '-'} ${entry.previousTime || ''}`;
+                        const newDateFormatted = entry.newDueDate
+                          ? formatDateTime(entry.newDueDate)
+                          : `${entry.newDate || '-'} ${entry.newTime || ''}`;
+                        const byUser = entry.rescheduledBy?.name || 'Executive';
+                        const timeAgo = formatLeadTime(entry.rescheduledAt);
+
+                        return (
+                          <div key={idx} className="p-2 bg-white rounded-lg border border-slate-200/70 text-[11px] space-y-0.5">
+                            <div className="flex items-center justify-between font-semibold text-slate-800">
+                              <span className="text-slate-500 line-through truncate max-w-[140px]">{dateFormatted}</span>
+                              <span className="text-amber-700 font-bold">→ {newDateFormatted}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                              <span>By {byUser} • {timeAgo}</span>
+                              {entry.reason && (
+                                <span className="text-slate-600 italic truncate max-w-[150px]">
+                                  "{entry.reason}"
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isSubmittingReschedule}
+                  onClick={() => setRescheduleModalLead(null)}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={isSubmittingReschedule}
+                  loadingText="Rescheduling..."
+                  className="w-full sm:w-auto"
+                >
+                  Save & Reschedule
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Follow-up Notes Modal (View, Add, Edit, Delete Notes with Timestamps) */}
+      {followUpNotesModalLead && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-200/90 my-auto max-h-[92vh] overflow-y-auto scrollbar-hide flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 border border-purple-200/60 flex items-center justify-center font-bold shrink-0">
+                  <FileText size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-snug">Follow-up Notes</h3>
+                  <p className="text-[11px] text-slate-400 font-normal">
+                    Record client responses, discussion notes, requirements & next steps
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFollowUpNotesModalLead(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Lead Header Preview */}
+            <div className="p-3 bg-purple-50/50 border border-purple-200/60 rounded-xl text-xs text-slate-700 flex items-center justify-between">
+              <div>
+                <span className="font-bold text-slate-900">{followUpNotesModalLead.name}</span>
+                <p className="text-[11px] text-slate-500">
+                  {followUpNotesModalLead.company || 'Individual Prospect'} • {followUpNotesModalLead.phone}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md">
+                  {(followUpNotesModalLead.followUpNotesList?.length || (followUpNotesModalLead.followUpNotes ? 1 : 0))} Notes
+                </span>
+              </div>
+            </div>
+
+            {/* Add New Note Form */}
+            <form onSubmit={handleAddFollowUpNoteSubmit} className="space-y-2 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <label className="block text-xs font-bold text-slate-700">
+                Add Discussion / Follow-up Note
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={newFollowUpNoteInput}
+                onChange={(e) => setNewFollowUpNoteInput(e.target.value)}
+                placeholder="Record client response, requirements discussed, concerns, or next steps..."
+                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/60 transition"
+              />
+              <div className="flex justify-end pt-1">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="xs"
+                  loading={isAddingFollowUpNote}
+                  loadingText="Adding Note..."
+                  icon={Plus}
+                >
+                  Save Note
+                </Button>
+              </div>
+            </form>
+
+            {/* Notes List */}
+            <div className="space-y-3 flex-1 overflow-y-auto max-h-64 scrollbar-hide pt-1">
+              <h4 className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                <span>Recorded Notes History</span>
+              </h4>
+
+              {(!followUpNotesModalLead.followUpNotesList || followUpNotesModalLead.followUpNotesList.length === 0) && !followUpNotesModalLead.followUpNotes ? (
+                <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                  No notes recorded yet. Add what was discussed with the client above.
+                </div>
+              ) : (
+                <div className="space-y-2.5 text-xs">
+                  {/* Notes List Stream */}
+                  {followUpNotesModalLead.followUpNotesList && followUpNotesModalLead.followUpNotesList.length > 0 ? (
+                    followUpNotesModalLead.followUpNotesList.slice().reverse().map((note) => {
+                      const author = note.createdBy?.name || user?.name || 'Executive';
+                      const isEditing = editingFollowUpNoteId === note._id;
+
+                      if (isEditing) {
+                        return (
+                          <div key={note._id} className="p-3 bg-purple-50 border border-purple-300 rounded-xl space-y-2">
+                            <textarea
+                              rows={2}
+                              value={editingFollowUpNoteText}
+                              onChange={(e) => setEditingFollowUpNoteText(e.target.value)}
+                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingFollowUpNoteId(null);
+                                  setEditingFollowUpNoteText('');
+                                }}
+                                className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[11px] font-bold cursor-pointer transition"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isUpdatingFollowUpNote}
+                                onClick={() => handleUpdateFollowUpNote(note._id)}
+                                className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[11px] font-bold cursor-pointer transition"
+                              >
+                                {isUpdatingFollowUpNote ? 'Saving...' : 'Save Note'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={note._id} className="p-3 bg-purple-50/40 border border-purple-200/70 rounded-xl space-y-1.5 hover:bg-purple-50/70 transition">
+                          <p className="text-slate-800 leading-relaxed font-medium whitespace-pre-wrap">{note.content}</p>
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-purple-200/50">
+                            <span>{author} • {formatDateTime(note.createdAt)}</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingFollowUpNoteId(note._id);
+                                  setEditingFollowUpNoteText(note.content);
+                                }}
+                                className="text-slate-400 hover:text-purple-600 transition cursor-pointer"
+                                title="Edit Note"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteFollowUpNote(note._id)}
+                                className="text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                                title="Delete Note"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    // Legacy single note display fallback
+                    <div className="p-3 bg-purple-50/40 border border-purple-200/70 rounded-xl space-y-1.5">
+                      <p className="text-slate-800 leading-relaxed font-medium">{followUpNotesModalLead.followUpNotes}</p>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-purple-200/50">
+                        <span>Lead Note</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setFollowUpNotesModalLead(null)}
+              >
+                Done
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -1670,8 +2219,22 @@ export default function Leads() {
   );
 }
 
-// Kanban Lead Card matching exact reference design
-function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, canDelete, onDelete, onEdit, onReassign, onLogActivity, onCancel }) {
+// Kanban Lead Card matching exact reference design with Reschedule & Follow-up Notes
+function KanbanLeadCard({
+  lead,
+  column,
+  provided,
+  snapshot,
+  isManagerOrAdmin,
+  canDelete,
+  onDelete,
+  onEdit,
+  onReschedule,
+  onOpenNotes,
+  onReassign,
+  onLogActivity,
+  onCancel
+}) {
   const notify = useNotification();
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
@@ -1700,6 +2263,7 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
   const isFollowUpStage = lead.status === 'follow_up';
   const isWonStage = lead.status === 'won';
   const followUpStatusInfo = isFollowUpStage ? getFollowUpStatusInfo(lead) : { isUrgent: false, isOverdue: false, label: '' };
+  const notesCount = lead.followUpNotesList?.length || (lead.followUpNotes ? 1 : 0);
 
   return (
     <div
@@ -1771,7 +2335,7 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
 
         {/* Scheduled Follow-up Date & Time Badge */}
         {isFollowUpStage && (
-          <div className={`flex flex-col gap-1 text-xs p-2.5 rounded-xl font-semibold w-full mt-1 transition-all ${
+          <div className={`flex flex-col gap-1.5 text-xs p-2.5 sm:p-3 rounded-xl font-semibold w-full mt-1 transition-all ${
             followUpStatusInfo.isUrgent
               ? 'bg-rose-50 border border-rose-300 text-rose-950 shadow-xs ring-1 ring-rose-400/30'
               : 'bg-amber-50/90 border border-amber-200/90 text-amber-900 shadow-2xs'
@@ -1787,20 +2351,68 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
                 )}
                 <span>{followUpStatusInfo.label}</span>
               </span>
-              <Clock size={11} className={followUpStatusInfo.isUrgent ? 'text-rose-600 shrink-0' : 'text-amber-500 shrink-0'} />
+              {lead.rescheduleHistory?.length > 0 && (
+                <span className="text-[9px] font-bold bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded-md shrink-0">
+                  Rescheduled {lead.rescheduleHistory.length}x
+                </span>
+              )}
             </div>
-            <div className={`text-xs font-bold leading-tight ${
+
+            {/* Latest Scheduled Date and Time */}
+            <div className={`text-xs font-bold leading-tight flex items-center justify-between gap-1.5 ${
               followUpStatusInfo.isUrgent ? 'text-rose-950 font-extrabold' : 'text-amber-950'
             }`}>
-              {formatFollowUpBadgeTime(lead) || (lead.followUpDate ? `${lead.followUpDate} ${lead.followUpTime || ''}` : 'Follow-up Scheduled')}
+              <span className="truncate">
+                {formatFollowUpBadgeTime(lead) || (lead.followUpDate ? `${lead.followUpDate} ${lead.followUpTime || ''}` : 'Follow-up Scheduled')}
+              </span>
+              <Clock size={12} className={followUpStatusInfo.isUrgent ? 'text-rose-600 shrink-0' : 'text-amber-600 shrink-0'} />
             </div>
+
+            {/* Latest Follow-up Note snippet */}
             {lead.followUpNotes && (
-              <p className={`text-[11px] font-normal line-clamp-1 italic pt-1 border-t mt-0.5 ${
-                followUpStatusInfo.isUrgent ? 'text-rose-800 border-rose-200/70' : 'text-slate-600 border-amber-200/60'
-              }`}>
-                "{lead.followUpNotes}"
-              </p>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenNotes && onOpenNotes();
+                }}
+                className={`flex items-start gap-1.5 text-[11px] font-normal pt-1.5 border-t mt-0.5 cursor-pointer hover:underline ${
+                  followUpStatusInfo.isUrgent ? 'text-rose-800 border-rose-200/70' : 'text-slate-700 border-amber-200/60'
+                }`}
+                title="Click to view & edit follow-up notes"
+              >
+                <FileText size={11} className="text-amber-700 shrink-0 mt-0.5" />
+                <p className="line-clamp-2 italic">
+                  "{lead.followUpNotes}"
+                </p>
+              </div>
             )}
+
+            {/* Quick In-Card Actions: Reschedule & Notes */}
+            <div className="flex items-center gap-2 pt-1 border-t border-amber-200/50 mt-0.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReschedule && onReschedule();
+                }}
+                className="flex-1 py-1 px-2 bg-white hover:bg-amber-100/60 text-amber-900 border border-amber-300/80 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+              >
+                <CalendarClock size={11} className="text-amber-700" />
+                <span>Reschedule</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenNotes && onOpenNotes();
+                }}
+                className="flex-1 py-1 px-2 bg-white hover:bg-purple-50 text-purple-900 border border-purple-200 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+              >
+                <MessageSquare size={11} className="text-purple-700" />
+                <span>Notes {notesCount ? `(${notesCount})` : ''}</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -1884,7 +2496,37 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 bottom-full mb-1 w-44 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 text-xs py-1 animate-scale-up">
+              <div className="absolute right-0 bottom-full mb-1 w-48 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 text-xs py-1 animate-scale-up">
+                {/* Reschedule Follow-up Option */}
+                {['follow_up', 'contacted', 'new'].includes(lead.status) && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowMenu(false);
+                      onReschedule && onReschedule();
+                    }}
+                    className="w-full px-3 py-2 text-left text-amber-800 hover:bg-amber-50 flex items-center gap-2 font-medium cursor-pointer"
+                  >
+                    <CalendarClock size={13} className="text-amber-600 shrink-0" />
+                    <span>Reschedule Follow-up</span>
+                  </button>
+                )}
+
+                {/* Follow-up Notes Option */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMenu(false);
+                    onOpenNotes && onOpenNotes();
+                  }}
+                  className="w-full px-3 py-2 text-left text-purple-800 hover:bg-purple-50 flex items-center gap-2 font-medium cursor-pointer"
+                >
+                  <MessageSquare size={13} className="text-purple-600 shrink-0" />
+                  <span>Follow-up Notes {notesCount ? `(${notesCount})` : ''}</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1892,7 +2534,7 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
                     setShowMenu(false);
                     onEdit();
                   }}
-                  className="w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
+                  className="w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium cursor-pointer"
                 >
                   <Pencil size={13} />
                   <span>Edit Details</span>
@@ -1906,7 +2548,7 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
                       setShowMenu(false);
                       onReassign();
                     }}
-                    className="w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
+                    className="w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium cursor-pointer"
                   >
                     <UserCheck size={13} />
                     <span>Assign Executive</span>
@@ -1921,7 +2563,7 @@ function KanbanLeadCard({ lead, column, provided, snapshot, isManagerOrAdmin, ca
                       setShowMenu(false);
                       onCancel();
                     }}
-                    className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
+                    className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium cursor-pointer"
                   >
                     <XCircle size={13} />
                     <span>Mark as Order-Lost</span>

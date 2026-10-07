@@ -17,8 +17,8 @@ const CustomInput = forwardRef(({ value, onClick, onChange, placeholder, require
       required={required}
       disabled={disabled}
       name={name}
-      className={`w-full pl-3.5 pr-9 py-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/80 transition cursor-pointer shadow-2xs ${
-        disabled ? 'opacity-60 cursor-not-allowed' : ''
+      className={`w-full h-[42px] pl-3.5 pr-9 bg-white hover:bg-slate-50 border border-slate-300 hover:border-slate-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none transition cursor-pointer shadow-2xs ${
+        disabled ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''
       }`}
     />
     <button

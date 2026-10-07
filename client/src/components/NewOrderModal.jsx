@@ -5,19 +5,54 @@ import {
   Trash2,
   X,
   ChevronDown,
-  ChevronUp,
-  FileText,
-  CreditCard,
   Ruler,
   Search,
   Check,
   Clock,
-  IndianRupee,
   Info
 } from 'lucide-react';
 import CustomDatePicker from './ui/DatePicker';
+import SelectOrCreate from './ui/SelectOrCreate';
+import Button from './ui/Button';
 import { useNotification } from '../context/NotificationContext';
-import LoadingButton from './ui/LoadingButton';
+
+const PRESET_USAGE_CYCLES = [
+  { value: 15, label: '15 Days (Bi-weekly)' },
+  { value: 25, label: '25 Days (Custom Batch)' },
+  { value: 30, label: '30 Days (Standard)' },
+  { value: 45, label: '45 Days (Extended)' },
+  { value: 60, label: '60 Days (Bimonthly)' },
+  { value: 90, label: '90 Days (Quarterly)' }
+];
+
+/**
+ * Safely adds integer days to a YYYY-MM-DD date string without timezone shifts
+ */
+function addDaysToDate(dateStr, days) {
+  if (!dateStr) return '';
+  const numDays = parseInt(days, 10);
+  if (isNaN(numDays)) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return '';
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  const dt = new Date(y, m, d);
+  if (isNaN(dt.getTime())) return '';
+  dt.setDate(dt.getDate() + numDays);
+  const yyyy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+const getTodayStr = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 /**
  * Searchable Product Dropdown Component for Order Line Items
@@ -152,11 +187,6 @@ function SearchableProductSelect({ products, selectedProductId, onSelectProduct,
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      {p.unitPrice != null && (
-                        <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
-                          ₹{p.unitPrice}
-                        </span>
-                      )}
                       {isSelected && <Check size={14} className="text-red-600" />}
                     </div>
                   </button>
@@ -196,36 +226,54 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
     { productId: '', qty: 1000, price: '' }
   ]);
 
-  // Order Details
-  const [deliveryDate, setDeliveryDate] = useState('');
+  // Order Details & Reorder Settings
+  const [orderDate, setOrderDate] = useState(getTodayStr());
   const [usageCycleDays, setUsageCycleDays] = useState(30);
-  const [expectedReorderDate, setExpectedReorderDate] = useState('');
+  const [customUsageCycles, setCustomUsageCycles] = useState([]);
+  const [expectedReorderDate, setExpectedReorderDate] = useState(() => addDaysToDate(getTodayStr(), 30));
   const [isManualReorderOverride, setIsManualReorderOverride] = useState(false);
-
-  // Auto-calculate expectedReorderDate when deliveryDate or usageCycleDays changes
-  useEffect(() => {
-    if (!isManualReorderOverride && deliveryDate) {
-      const d = new Date(deliveryDate);
-      if (!isNaN(d.getTime())) {
-        const cycle = parseInt(usageCycleDays, 10) || 30;
-        const calcDate = new Date(d.getTime() + cycle * 24 * 60 * 60 * 1000);
-        const yyyy = calcDate.getFullYear();
-        const mm = String(calcDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(calcDate.getDate()).padStart(2, '0');
-        setExpectedReorderDate(`${yyyy}-${mm}-${dd}`);
-      }
-    }
-  }, [deliveryDate, usageCycleDays, isManualReorderOverride]);
-
-  // Collapsible "+ More Details" State
-  const [showMoreDetails, setShowMoreDetails] = useState(false);
-  const [poNumber, setPoNumber] = useState('');
-  const [advanceReceived, setAdvanceReceived] = useState(false);
-  const [advanceAmount, setAdvanceAmount] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [notes, setNotes] = useState('');
-
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Combine Preset and Custom Usage Cycle options
+  const allUsageCycleOptions = useMemo(() => {
+    const list = [...PRESET_USAGE_CYCLES];
+    customUsageCycles.forEach(c => {
+      const val = parseInt(c, 10);
+      if (!isNaN(val) && !list.some(item => item.value === val)) {
+        list.push({ value: val, label: `${val} Days` });
+      }
+    });
+    const currentVal = parseInt(usageCycleDays, 10);
+    if (!isNaN(currentVal) && !list.some(item => item.value === currentVal)) {
+      list.push({ value: currentVal, label: `${currentVal} Days` });
+    }
+    return list.sort((a, b) => a.value - b.value);
+  }, [customUsageCycles, usageCycleDays]);
+
+  // Handle Usage Cycle Change with automatic Expected Reorder Date update
+  const handleUsageCycleChange = (val) => {
+    const num = parseInt(String(val).replace(/\D/g, ''), 10);
+    const validNum = !isNaN(num) && num > 0 ? num : 30;
+    setUsageCycleDays(validNum);
+    if (orderDate) {
+      setExpectedReorderDate(addDaysToDate(orderDate, validNum));
+      setIsManualReorderOverride(false);
+    }
+  };
+
+  const handleCreateCustomCycle = (newVal) => {
+    const num = parseInt(String(newVal).replace(/\D/g, ''), 10);
+    if (!isNaN(num) && num > 0) {
+      setCustomUsageCycles(prev => (prev.includes(num) ? prev : [...prev, num]));
+      handleUsageCycleChange(num);
+    }
+  };
+
+  const handleDeleteCustomCycle = (optVal) => {
+    const num = parseInt(String(optVal).replace(/\D/g, ''), 10);
+    setCustomUsageCycles(prev => prev.filter(c => c !== num));
+  };
 
   // Sync initialLead or initialCustomer props when modal opens
   useEffect(() => {
@@ -299,7 +347,12 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
 
     // Auto-fill Usage Cycle from product default if available
     if (product.defaultUsageCycleDays && index === 0) {
-      setUsageCycleDays(product.defaultUsageCycleDays);
+      const pCycle = parseInt(product.defaultUsageCycleDays, 10) || 30;
+      setUsageCycleDays(pCycle);
+      if (orderDate) {
+        setExpectedReorderDate(addDaysToDate(orderDate, pCycle));
+        setIsManualReorderOverride(false);
+      }
     }
 
     setLineItems(updated);
@@ -400,6 +453,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
         customerId: customerMode === 'existing' ? selectedCustomerId : undefined,
         newCustomer: customerMode === 'new' ? newCustomerForm : undefined,
         leadId: initialLead?._id,
+        orderDate: orderDate || undefined,
         lineItems: lineItems.map(i => ({
           productId: i.productId,
           qty: parseInt(i.qty, 10),
@@ -407,15 +461,10 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
             ? parseFloat(i.price)
             : undefined
         })),
-        deliveryDate: deliveryDate || undefined,
         expectedReorderDate: expectedReorderDate,
         isExpectedReorderDateOverridden: isManualReorderOverride,
         usageCycleDays: parseInt(usageCycleDays, 10) || 30,
-        poNumber: poNumber.trim() || undefined,
-        advanceReceived,
-        advanceAmount: advanceReceived ? (parseFloat(advanceAmount) || 0) : 0,
-        deliveryAddress: deliveryAddress.trim() || undefined,
-        notes: notes.trim() || undefined
+        deliveryAddress: deliveryAddress.trim() || undefined
       };
 
       const res = await api.post('/orders', payload);
@@ -614,121 +663,99 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
                       />
                     </div>
 
-                    {/* Quantity and Optional Unit Price Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-start">
-                      {/* Quantity Input */}
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                          Quantity <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          required
-                          value={item.qty}
-                          onChange={(e) => handleItemFieldChange(index, 'qty', e.target.value)}
-                          placeholder="1000"
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500 font-mono"
-                        />
-                      </div>
-
-                      {/* Optional Unit Price Input */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-[11px] font-semibold text-slate-700">
-                            Unit Price (₹)
-                          </label>
-                          <span className="text-[10px] text-slate-400 font-normal">Optional</span>
-                        </div>
-                        <div className="relative">
-                          <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">₹</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={item.price}
-                            onChange={(e) => handleItemFieldChange(index, 'price', e.target.value)}
-                            placeholder={selectedProd?.unitPrice != null ? `Ref: ₹${selectedProd.unitPrice}` : 'e.g. 1.25'}
-                            className="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500 font-mono"
-                          />
-                        </div>
-                        {selectedProd?.unitPrice != null && (
-                          <p className="text-[10px] text-slate-400 mt-0.5">
-                            Reference price: ₹{selectedProd.unitPrice}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Line Total Display */}
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                          Line Total
-                        </label>
-                        <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 flex items-center justify-between min-h-[38px]">
-                          {itemLineTotal != null ? (
-                            <span className="text-slate-900">₹{itemLineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          ) : (
-                            <span className="text-slate-400 font-normal italic text-[11px]">Not tracked</span>
-                          )}
-                        </div>
-                      </div>
+                    {/* Quantity Input */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Quantity (Labels) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={item.qty}
+                        onChange={(e) => handleItemFieldChange(index, 'qty', e.target.value)}
+                        placeholder="e.g. 1000"
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500 font-mono"
+                      />
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Grand Total Bar / Pricing Status */}
-            {calculatedGrandTotal != null ? (
-              <div className="p-3.5 bg-slate-900 text-white rounded-xl flex items-center justify-between shadow-md">
-                <span className="text-xs font-semibold uppercase tracking-wider">Order Total Amount</span>
-                <span className="text-lg sm:text-xl font-bold text-emerald-400">
-                  ₹{calculatedGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            ) : (
-              <div className="p-3.5 bg-slate-100 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Info size={15} className="text-slate-400 shrink-0" />
-                  <span className="font-medium">Pricing status:</span>
-                </div>
-                <span className="font-semibold text-slate-500 italic">
-                  Pricing not tracked for this order
-                </span>
-              </div>
-            )}
           </div>
 
-          {/* Section 3: Delivery & Reorder Settings */}
-          <div className="space-y-3 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
-            <span className="text-xs font-semibold uppercase text-slate-600 block">3. Delivery & Reorder Settings</span>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Target Delivery Date</label>
-                <CustomDatePicker
-                  selectedDate={deliveryDate}
-                  onChange={(val) => setDeliveryDate(val)}
-                  placeholder="Select target delivery date"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Usage Cycle (Days)</label>
-                <select
-                  value={usageCycleDays}
-                  onChange={(e) => setUsageCycleDays(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-red-500 cursor-pointer"
-                >
-                  <option value={30}>30 Days (Standard Labels)</option>
-                  <option value={45}>45 Days (Extended Batch)</option>
-                  <option value={60}>60 Days (Bimonthly Supply)</option>
-                  <option value={90}>90 Days (Quarterly Supply)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Expected Reorder Date *
+          {/* Section 3: Order Date & Reorder Settings */}
+          <div className="space-y-3.5 p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase text-slate-600 block">
+                3. Order & Reorder Settings
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 items-start">
+              {/* Order Date */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Order Date <span className="text-red-500">*</span>
                 </label>
                 <CustomDatePicker
+                  required
+                  selectedDate={orderDate}
+                  onChange={(val) => {
+                    setOrderDate(val);
+                    if (val && usageCycleDays) {
+                      setExpectedReorderDate(addDaysToDate(val, usageCycleDays));
+                      setIsManualReorderOverride(false);
+                    }
+                  }}
+                  placeholder="Select order date"
+                />
+              </div>
+
+              {/* Usage Cycle (Days) - Select or Create */}
+              <div className="space-y-1.5">
+                <SelectOrCreate
+                  label="Usage Cycle (Days)"
+                  placeholder="Select or enter days..."
+                  value={usageCycleDays}
+                  onChange={handleUsageCycleChange}
+                  options={allUsageCycleOptions}
+                  protectedOptions={PRESET_USAGE_CYCLES.map(u => u.value)}
+                  onCreateOption={handleCreateCustomCycle}
+                  onDeleteOption={handleDeleteCustomCycle}
+                  icon={Clock}
+                  createPrompt="Add custom cycle"
+                  formatSelectedLabel={(val) => {
+                    const num = parseInt(String(val).replace(/\D/g, ''), 10);
+                    return isNaN(num) ? String(val) : `${num} Days`;
+                  }}
+                  formatOptionLabel={(opt) => {
+                    if (typeof opt === 'object' && opt.label) return opt.label;
+                    const num = parseInt(String(opt).replace(/\D/g, ''), 10);
+                    return isNaN(num) ? String(opt) : `${num} Days`;
+                  }}
+                />
+              </div>
+
+              {/* Expected Reorder Date */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Expected Reorder Date <span className="text-red-500">*</span>
+                  </label>
+                  {isManualReorderOverride ? (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                      Manual
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                      Auto
+                    </span>
+                  )}
+                </div>
+                <CustomDatePicker
+                  required
                   selectedDate={expectedReorderDate}
                   onChange={(val) => {
                     setIsManualReorderOverride(true);
@@ -738,136 +765,35 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
                 />
               </div>
             </div>
-            <p className="text-[10px] text-slate-500 font-normal">
-              Auto-calculated from delivery date + usage cycle — you can adjust if needed
-            </p>
-          </div>
 
-          {/* Collapsible "+ More Details" Section */}
-          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-            <button
-              type="button"
-              onClick={() => setShowMoreDetails(!showMoreDetails)}
-              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-bold text-slate-700 transition cursor-pointer"
-            >
-              <span className="flex items-center gap-2">
-                <FileText size={15} className="text-slate-500" />
-                <span>+ More Details (PO, Advance Payment, Address & Notes)</span>
+            <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200/80 rounded-xl px-3 py-2 shadow-2xs">
+              <Info size={14} className="text-red-500 shrink-0 stroke-[2.2]" />
+              <span>
+                Auto-calculated from <strong className="text-slate-900 font-bold">Order Date + {usageCycleDays || 30} Days</strong> — you can manually adjust if needed.
               </span>
-              {showMoreDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-
-            {showMoreDetails && (
-              <div className="p-4 space-y-3.5 border-t border-slate-200 bg-slate-50/50">
-                {/* PO / Reference Number */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    PO / Reference Number
-                  </label>
-                  <input
-                    type="text"
-                    value={poNumber}
-                    onChange={(e) => setPoNumber(e.target.value)}
-                    placeholder="e.g. PO-2026-8890"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
-                  />
-                </div>
-
-                {/* Advance Received Toggle & Amount */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
-                      <CreditCard size={14} className="text-slate-400" />
-                      <span>Advance Received?</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setAdvanceReceived(false)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                          !advanceReceived ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600'
-                        }`}
-                      >
-                        No
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAdvanceReceived(true)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                          advanceReceived ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-600'
-                        }`}
-                      >
-                        Yes
-                      </button>
-                    </div>
-                  </div>
-
-                  {advanceReceived && (
-                    <div className="pt-1">
-                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Advance Amount Received (₹)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={advanceAmount}
-                        onChange={(e) => setAdvanceAmount(e.target.value)}
-                        placeholder="e.g. 5000"
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-red-500"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Delivery Address */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    Delivery / Shipping Address
-                  </label>
-                  <input
-                    type="text"
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="e.g. Plot 12, GIDC Industrial Estate, Vatva, Ahmedabad"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
-                  />
-                </div>
-
-                {/* Internal Notes */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    Internal Notes / Remarks
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Add any specific instructions for production or dispatch..."
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-red-500"
-                  />
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Action Buttons */}
           <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
             >
               Cancel
-            </button>
-            <LoadingButton
+            </Button>
+            <Button
               type="submit"
+              variant="primary"
+              size="sm"
               loading={isSubmitting}
-              className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-red-600/20 transition cursor-pointer"
+              loadingText="Creating Order..."
             >
               Confirm & Create Order
-            </LoadingButton>
+            </Button>
           </div>
 
         </form>

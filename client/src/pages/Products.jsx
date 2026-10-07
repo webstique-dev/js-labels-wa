@@ -10,19 +10,24 @@ import {
   Trash2,
   Edit2,
   X,
-  Filter,
   Layers,
   Calendar,
-  IndianRupee,
   CheckCircle2,
-  XCircle,
   Clock,
-  Sparkles
+  Briefcase,
+  Palette,
+  Tag,
+  Box,
+  Timer,
+  FileSpreadsheet
 } from 'lucide-react';
 import { SkeletonTable } from '../components/ui/Skeleton';
-import LoadingButton from '../components/ui/LoadingButton';
+import Button from '../components/ui/Button';
+import SelectOrCreate from '../components/ui/SelectOrCreate';
+import ProductDetailsModal from '../components/ProductDetailsModal';
+import { exportProductToExcel } from '../utils/exportUtils';
 
-const CATEGORY_OPTIONS = [
+const PRESET_CATEGORIES = [
   'BOPP',
   'Barcode',
   'Thermal Paper',
@@ -31,7 +36,60 @@ const CATEGORY_OPTIONS = [
   'Security Film',
   'Matte Paper',
   'Glossy Paper',
-  'Polyester Film'
+  'Polyester Film',
+  'Pharma',
+  'FMCG',
+  'Cosmetics',
+  'Logistics',
+  'Food & Beverage',
+  'Industrial',
+  'General'
+];
+
+const PRESET_JOB_NAMES = [
+  'Standard Barcode',
+  'Direct Thermal Shipping',
+  'Glossy Product Label',
+  'Pharma Vial Label',
+  'Food Grade Packaging',
+  'Asset Tracking Tag',
+  'Jewellery Tag',
+  'Garment Tag',
+  'Retail Price Tag'
+];
+
+const PRESET_MATERIALS = [
+  'Chromo Paper',
+  'Direct Thermal (DT)',
+  'Thermal Transfer (TT)',
+  'Polypropylene (PP)',
+  'Polyester (PET)',
+  'Vinyl',
+  'Foil Paper',
+  'Clear Transparent',
+  'Silver Metallic'
+];
+
+const PRESET_COLOURS = [
+  'White',
+  'Natural / Clear',
+  'Yellow',
+  'Red',
+  'Blue',
+  'Green',
+  'Silver',
+  'Gold',
+  'Multi-color',
+  'Fluorescent Orange',
+  'Black'
+];
+
+const PRESET_USAGE_CYCLES = [
+  { value: 15, label: '15 Days (Rapid)' },
+  { value: 30, label: '30 Days (Standard)' },
+  { value: 45, label: '45 Days (Extended)' },
+  { value: 60, label: '60 Days (Bi-monthly)' },
+  { value: 90, label: '90 Days (Quarterly)' }
 ];
 
 export default function Products() {
@@ -52,6 +110,29 @@ export default function Products() {
   const [totalPages, setTotalPages] = useState(1);
   const limit = 20;
 
+  // Custom added options state (in-session persistence so newly created items persist in dropdowns)
+  const [customJobNames, setCustomJobNames] = useState([]);
+  const [customCategories, setCustomCategories] = useState([]);
+  const [customMaterials, setCustomMaterials] = useState([]);
+  const [customColours, setCustomColours] = useState([]);
+  const [customUsageCycles, setCustomUsageCycles] = useState([]);
+
+  // Soft-deleted custom options tracking (persisted in localStorage so deleted custom options stay removed from future product selections)
+  const [deletedCustomOptions, setDeletedCustomOptions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jslabels_deleted_custom_product_options');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const isOptionDeleted = (val) => {
+    if (!val) return true;
+    const str = String(val).trim().toLowerCase();
+    return deletedCustomOptions.some((d) => String(d).trim().toLowerCase() === str);
+  };
+
   // Filters state
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -64,17 +145,147 @@ export default function Products() {
   const [editingId, setEditingId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Job Time / Product Details Modal State
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedProductForDetails, setSelectedProductForDetails] = useState(null);
+  const [exportingProductId, setExportingProductId] = useState(null);
+
   // Form State
   const [formData, setFormData] = useState({
     name: '',
     widthMm: '',
     heightMm: '',
+    jobName: '',
     category: '',
-    customCategory: '',
+    material: '',
+    colour: '',
     defaultUsageCycleDays: 30,
-    unitPrice: '',
     status: 'active'
   });
+
+  // Dynamic deduplicated options lists
+  const jobNameOptions = useMemo(() => {
+    const map = new Map();
+    PRESET_JOB_NAMES.forEach((j) => map.set(j.toLowerCase(), j));
+    customJobNames.forEach((j) => {
+      if (!isOptionDeleted(j)) map.set(j.toLowerCase(), j);
+    });
+    products.forEach((p) => {
+      if (p.jobName && p.jobName.trim() && !isOptionDeleted(p.jobName)) {
+        map.set(p.jobName.trim().toLowerCase(), p.jobName.trim());
+      }
+    });
+    return Array.from(map.values());
+  }, [products, customJobNames, deletedCustomOptions]);
+
+  const categoryOptions = useMemo(() => {
+    const map = new Map();
+    PRESET_CATEGORIES.forEach((c) => map.set(c.toLowerCase(), c));
+    customCategories.forEach((c) => {
+      if (!isOptionDeleted(c)) map.set(c.toLowerCase(), c);
+    });
+    products.forEach((p) => {
+      if (p.category && p.category.trim() && !isOptionDeleted(p.category)) {
+        map.set(p.category.trim().toLowerCase(), p.category.trim());
+      }
+    });
+    return Array.from(map.values());
+  }, [products, customCategories, deletedCustomOptions]);
+
+  const materialOptions = useMemo(() => {
+    const map = new Map();
+    PRESET_MATERIALS.forEach((m) => map.set(m.toLowerCase(), m));
+    customMaterials.forEach((m) => {
+      if (!isOptionDeleted(m)) map.set(m.toLowerCase(), m);
+    });
+    products.forEach((p) => {
+      if (p.material && p.material.trim() && !isOptionDeleted(p.material)) {
+        map.set(p.material.trim().toLowerCase(), p.material.trim());
+      }
+    });
+    return Array.from(map.values());
+  }, [products, customMaterials, deletedCustomOptions]);
+
+  const colourOptions = useMemo(() => {
+    const map = new Map();
+    PRESET_COLOURS.forEach((c) => map.set(c.toLowerCase(), c));
+    customColours.forEach((c) => {
+      if (!isOptionDeleted(c)) map.set(c.toLowerCase(), c);
+    });
+    products.forEach((p) => {
+      if (p.colour && p.colour.trim() && !isOptionDeleted(p.colour)) {
+        map.set(p.colour.trim().toLowerCase(), p.colour.trim());
+      }
+    });
+    return Array.from(map.values());
+  }, [products, customColours, deletedCustomOptions]);
+
+  const usageCycleOptions = useMemo(() => {
+    const map = new Map();
+    PRESET_USAGE_CYCLES.forEach((u) => map.set(u.value, u));
+    customUsageCycles.forEach((u) => {
+      const val = typeof u === 'object' ? u.value : Number(u);
+      if (!isNaN(val) && val > 0 && !isOptionDeleted(val)) {
+        const lbl = typeof u === 'object' ? u.label : `${val} Days`;
+        map.set(val, { value: val, label: lbl });
+      }
+    });
+    products.forEach((p) => {
+      if (
+        p.defaultUsageCycleDays &&
+        !map.has(p.defaultUsageCycleDays) &&
+        !isOptionDeleted(p.defaultUsageCycleDays)
+      ) {
+        map.set(p.defaultUsageCycleDays, {
+          value: p.defaultUsageCycleDays,
+          label: `${p.defaultUsageCycleDays} Days`
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.value - b.value);
+  }, [products, customUsageCycles, deletedCustomOptions]);
+
+  // Handle deleting a custom option with confirmation dialog
+  const handleDeleteOption = async (fieldKey, optionValue) => {
+    const isConfirmed = await confirm({
+      title: 'Delete this option?',
+      message: 'This will remove the option from future product selections. Existing products using this value will not be modified.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      variant: 'danger'
+    });
+
+    if (!isConfirmed) return;
+
+    setDeletedCustomOptions((prev) => {
+      const updated = Array.from(new Set([...prev, String(optionValue)]));
+      try {
+        localStorage.setItem('jslabels_deleted_custom_product_options', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Error saving deleted option to storage:', e);
+      }
+      return updated;
+    });
+
+    if (fieldKey === 'jobName') {
+      setCustomJobNames((prev) => prev.filter((j) => String(j).toLowerCase() !== String(optionValue).toLowerCase()));
+    } else if (fieldKey === 'category') {
+      setCustomCategories((prev) => prev.filter((c) => String(c).toLowerCase() !== String(optionValue).toLowerCase()));
+    } else if (fieldKey === 'material') {
+      setCustomMaterials((prev) => prev.filter((m) => String(m).toLowerCase() !== String(optionValue).toLowerCase()));
+    } else if (fieldKey === 'colour') {
+      setCustomColours((prev) => prev.filter((c) => String(c).toLowerCase() !== String(optionValue).toLowerCase()));
+    } else if (fieldKey === 'usageCycle') {
+      setCustomUsageCycles((prev) =>
+        prev.filter((u) => {
+          const val = typeof u === 'object' ? u.value : u;
+          return String(val) !== String(optionValue);
+        })
+      );
+    }
+
+    notify.success(`Option "${optionValue}" removed from future selections`);
+  };
 
   // Fetch products
   const fetchProducts = async () => {
@@ -131,7 +342,7 @@ export default function Products() {
   // Client-side cycle filter if needed (or backend query)
   const displayedProducts = useMemo(() => {
     if (!cycleFilter) return products;
-    return products.filter(p => p.defaultUsageCycleDays === Number(cycleFilter));
+    return products.filter((p) => p.defaultUsageCycleDays === Number(cycleFilter));
   }, [products, cycleFilter]);
 
   // Modal open handlers
@@ -142,10 +353,11 @@ export default function Products() {
       name: '',
       widthMm: '',
       heightMm: '',
+      jobName: '',
       category: '',
-      customCategory: '',
+      material: '',
+      colour: '',
       defaultUsageCycleDays: 30,
-      unitPrice: '',
       status: 'active'
     });
     setShowModal(true);
@@ -155,19 +367,65 @@ export default function Products() {
     setIsEditing(true);
     setEditingId(product._id);
 
-    const isCustomCat = product.category && !CATEGORY_OPTIONS.includes(product.category);
-
     setFormData({
       name: product.name || '',
       widthMm: product.widthMm != null ? String(product.widthMm) : '',
       heightMm: product.heightMm != null ? String(product.heightMm) : '',
-      category: isCustomCat ? 'Custom' : (product.category || ''),
-      customCategory: isCustomCat ? product.category : '',
+      jobName: product.jobName || '',
+      category: product.category || '',
+      material: product.material || '',
+      colour: product.colour || '',
       defaultUsageCycleDays: product.defaultUsageCycleDays || 30,
-      unitPrice: product.unitPrice != null ? String(product.unitPrice) : '',
       status: product.status || 'active'
     });
     setShowModal(true);
+  };
+
+  // Open Product Details & Job Time Management Modal
+  const handleOpenDetails = (product) => {
+    setSelectedProductForDetails(product);
+    setShowDetailsModal(true);
+  };
+
+  // Handle live update of product after job times modification
+  const handleProductUpdated = (updatedProduct) => {
+    if (!updatedProduct || !updatedProduct._id) return;
+    setProducts((prev) =>
+      prev.map((p) => (p._id === updatedProduct._id ? { ...p, ...updatedProduct } : p))
+    );
+    if (selectedProductForDetails?._id === updatedProduct._id) {
+      setSelectedProductForDetails(updatedProduct);
+    }
+  };
+
+  // Handle Export Single Product Details to Excel
+  const handleExportProduct = async (product) => {
+    if (!product || !product._id) return;
+    if (exportingProductId === product._id) return;
+
+    try {
+      setExportingProductId(product._id);
+      await exportProductToExcel(product._id, product.name || 'Product', notify);
+    } catch (err) {
+      // notification handled inside exportProductToExcel
+    } finally {
+      setExportingProductId(null);
+    }
+  };
+
+  // Handle custom cycle creation helper
+  const handleCustomUsageCycleCreate = (rawInput) => {
+    const parsedNumber = parseInt(String(rawInput).replace(/\D/g, ''), 10);
+    if (!isNaN(parsedNumber) && parsedNumber > 0) {
+      const newOption = {
+        value: parsedNumber,
+        label: `${parsedNumber} Days`
+      };
+      setCustomUsageCycles((prev) => [...prev, newOption]);
+      setFormData((prev) => ({ ...prev, defaultUsageCycleDays: parsedNumber }));
+    } else {
+      notify.error('Please enter a valid numeric number of days');
+    }
   };
 
   // Form submit handler
@@ -175,7 +433,7 @@ export default function Products() {
     e.preventDefault();
 
     if (!formData.name.trim()) {
-      notify.error('Product name is required');
+      notify.error('Product Friendly Name is required');
       return;
     }
 
@@ -191,27 +449,31 @@ export default function Products() {
       return;
     }
 
-    let finalCategory = formData.category;
-    if (formData.category === 'Custom') {
-      finalCategory = formData.customCategory.trim();
+    if (!formData.jobName || !formData.jobName.trim()) {
+      notify.error('Job Name is required');
+      return;
     }
 
-    let finalPrice = null;
-    if (formData.unitPrice !== '' && formData.unitPrice !== null && formData.unitPrice !== undefined) {
-      const p = parseFloat(formData.unitPrice);
-      if (!isNaN(p) && p >= 0) {
-        finalPrice = p;
-      }
+    if (!formData.material || !formData.material.trim()) {
+      notify.error('Material is required');
+      return;
+    }
+
+    if (!formData.colour || !formData.colour.trim()) {
+      notify.error('Colour is required');
+      return;
     }
 
     const payload = {
       name: formData.name.trim(),
       widthMm: width,
       heightMm: height,
-      category: finalCategory || undefined,
+      jobName: formData.jobName.trim(),
+      category: formData.category ? formData.category.trim() : undefined,
+      material: formData.material.trim(),
+      colour: formData.colour.trim(),
       defaultUsageCycleDays: Number(formData.defaultUsageCycleDays) || 30,
-      unitPrice: finalPrice,
-      status: formData.status
+      status: formData.status || 'active'
     };
 
     try {
@@ -223,6 +485,21 @@ export default function Products() {
         await api.post('/products', payload);
         notify.success('Product added successfully');
       }
+
+      // Add custom values into session lists if they don't already exist
+      if (payload.jobName && !customJobNames.includes(payload.jobName)) {
+        setCustomJobNames((prev) => [...prev, payload.jobName]);
+      }
+      if (payload.category && !customCategories.includes(payload.category)) {
+        setCustomCategories((prev) => [...prev, payload.category]);
+      }
+      if (payload.material && !customMaterials.includes(payload.material)) {
+        setCustomMaterials((prev) => [...prev, payload.material]);
+      }
+      if (payload.colour && !customColours.includes(payload.colour)) {
+        setCustomColours((prev) => [...prev, payload.colour]);
+      }
+
       setShowModal(false);
       fetchProducts();
     } catch (err) {
@@ -237,7 +514,9 @@ export default function Products() {
   const handleDelete = async (product) => {
     const isConfirmed = await confirm({
       title: 'Move Product to Trash',
-      message: `Are you sure you want to delete "${product.name}" (${product.dimensionKey || `${product.widthMm}x${product.heightMm}`})? It will be soft-deleted to System Trash.`,
+      message: `Are you sure you want to delete "${product.name}" (${
+        product.dimensionKey || `${product.widthMm}x${product.heightMm}`
+      })? It will be soft-deleted to System Trash.`,
       confirmLabel: 'Move to Trash',
       cancelLabel: 'Cancel',
       variant: 'danger'
@@ -257,10 +536,12 @@ export default function Products() {
 
   // Quick stats calculation
   const stats = useMemo(() => {
-    const activeCount = products.filter(p => p.status === 'active').length;
-    const cycle30Count = products.filter(p => p.defaultUsageCycleDays === 30).length;
-    const cycle45Count = products.filter(p => p.defaultUsageCycleDays === 45).length;
-    const uniqueDims = new Set(products.map(p => p.dimensionKey || `${p.widthMm}x${p.heightMm}`)).size;
+    const activeCount = products.filter((p) => p.status === 'active').length;
+    const cycle30Count = products.filter((p) => p.defaultUsageCycleDays === 30).length;
+    const cycle45Count = products.filter((p) => p.defaultUsageCycleDays === 45).length;
+    const uniqueDims = new Set(
+      products.map((p) => p.dimensionKey || `${p.widthMm}x${p.heightMm}`)
+    ).size;
     return { activeCount, cycle30Count, cycle45Count, uniqueDims };
   }, [products]);
 
@@ -284,21 +565,26 @@ export default function Products() {
               <Ruler size={22} className="stroke-[2.2]" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Products Catalog</h1>
-              <p className="text-slate-500 text-xs sm:text-sm">Dimension-based label catalog with auto-computed dimension keys and usage cycles</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                Products Catalog
+              </h1>
+              <p className="text-slate-500 text-xs sm:text-sm">
+                Dimension-based label catalog with auto-computed dimension keys, job specifications, and usage cycles
+              </p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           {canManage && (
-            <button
+            <Button
+              variant="primary"
+              size="md"
+              icon={Plus}
               onClick={handleOpenAdd}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-sm shadow-red-600/20 transition cursor-pointer"
             >
-              <Plus size={16} className="stroke-[2.5]" />
-              <span>Add Product</span>
-            </button>
+              Add Product
+            </Button>
           )}
         </div>
       </div>
@@ -307,7 +593,9 @@ export default function Products() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total Listed</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Total Listed
+            </p>
             <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-0.5">{totalCount}</p>
           </div>
           <div className="p-2.5 rounded-xl bg-slate-100 text-slate-700">
@@ -317,8 +605,12 @@ export default function Products() {
 
         <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Active Status</p>
-            <p className="text-xl sm:text-2xl font-bold text-emerald-600 mt-0.5">{stats.activeCount}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Active Status
+            </p>
+            <p className="text-xl sm:text-2xl font-bold text-emerald-600 mt-0.5">
+              {stats.activeCount}
+            </p>
           </div>
           <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
             <CheckCircle2 size={18} />
@@ -327,8 +619,12 @@ export default function Products() {
 
         <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">30-Day Cycles</p>
-            <p className="text-xl sm:text-2xl font-bold text-indigo-600 mt-0.5">{stats.cycle30Count}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              30-Day Cycles
+            </p>
+            <p className="text-xl sm:text-2xl font-bold text-indigo-600 mt-0.5">
+              {stats.cycle30Count}
+            </p>
           </div>
           <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
             <Clock size={18} />
@@ -337,8 +633,12 @@ export default function Products() {
 
         <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">45-Day Cycles</p>
-            <p className="text-xl sm:text-2xl font-bold text-amber-600 mt-0.5">{stats.cycle45Count}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              45-Day Cycles
+            </p>
+            <p className="text-xl sm:text-2xl font-bold text-amber-600 mt-0.5">
+              {stats.cycle45Count}
+            </p>
           </div>
           <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
             <Calendar size={18} />
@@ -356,16 +656,19 @@ export default function Products() {
               type="text"
               value={search}
               onChange={(e) => handleFilterChange(setSearch, e.target.value)}
-              placeholder="Search by product name, dimension (e.g. 4x45, 10x15), or category..."
+              placeholder="Search by product name, job, dimension (e.g. 4x45), material, or colour..."
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 font-medium focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500 transition"
             />
             {search && (
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => handleFilterChange(setSearch, '')}
-                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
               >
                 <X size={16} />
-              </button>
+              </Button>
             )}
           </div>
 
@@ -378,8 +681,10 @@ export default function Products() {
               className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
             >
               <option value="">All Categories</option>
-              {CATEGORY_OPTIONS.map(c => (
-                <option key={c} value={c}>{c}</option>
+              {categoryOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
             </select>
 
@@ -401,12 +706,19 @@ export default function Products() {
               className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
             >
               <option value="">All Cycles</option>
+              <option value="15">15 Days Cycle</option>
               <option value="30">30 Days Cycle</option>
               <option value="45">45 Days Cycle</option>
+              <option value="60">60 Days Cycle</option>
+              <option value="90">90 Days Cycle</option>
             </select>
 
             {(search || categoryFilter || statusFilter || cycleFilter) && (
-              <button
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                icon={X}
                 onClick={() => {
                   setSearch('');
                   setCategoryFilter('');
@@ -414,10 +726,10 @@ export default function Products() {
                   setCycleFilter('');
                   setPage(1);
                 }}
-                className="px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-xl border border-red-200 transition cursor-pointer flex items-center gap-1"
+                className="text-red-600 hover:bg-red-50 border-red-200"
               >
-                <X size={14} /> Clear Filters
-              </button>
+                Clear Filters
+              </Button>
             )}
           </div>
         </div>
@@ -440,12 +752,14 @@ export default function Products() {
             </p>
           </div>
           {canManage && (
-            <button
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Plus}
               onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-xs transition cursor-pointer"
             >
-              <Plus size={15} /> Add First Product
-            </button>
+              Add First Product
+            </Button>
           )}
         </div>
       ) : (
@@ -453,124 +767,209 @@ export default function Products() {
           {/* Desktop Table View */}
           <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto scrollbar-hide">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+              <table className="w-full text-left border-collapse min-w-[1050px]">
                 <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    <th className="py-3.5 px-5">Dimension (W × H)</th>
-                    <th className="py-3.5 px-5">Product Name</th>
-                    <th className="py-3.5 px-5">Category</th>
-                    <th className="py-3.5 px-5">Usage Cycle</th>
-                    <th className="py-3.5 px-5">Unit Price</th>
-                    <th className="py-3.5 px-5">Status</th>
-                    {canManage && <th className="py-3.5 px-5 text-right">Actions</th>}
+                  <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">
+                    <th className="py-3.5 px-4.5">Dimension</th>
+                    <th className="py-3.5 px-4.5">Product Name</th>
+                    <th className="py-3.5 px-4">Job Name</th>
+                    <th className="py-3.5 px-4">Material & Colour</th>
+                    <th className="py-3.5 px-4">Job Time</th>
+                    <th className="py-3.5 px-4">Category</th>
+                    <th className="py-3.5 px-4">Usage Cycle</th>
+                    <th className="py-3.5 px-4 text-center">Status</th>
+                    <th className="py-3.5 px-4.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
-                  {displayedProducts.map((p) => (
-                    <tr key={p._id} className="hover:bg-slate-50/70 transition">
-                      {/* Dimension: Main prominent identifier */}
-                      <td className="py-4 px-5">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 text-white font-mono font-bold text-xs rounded-lg shadow-2xs border border-slate-800">
+                  {displayedProducts.map((p) => {
+                    const latestJobTime = p.jobTimes && p.jobTimes.length > 0
+                      ? [...p.jobTimes].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                      : null;
+
+                    return (
+                      <tr key={p._id} className="hover:bg-slate-50/80 transition-colors">
+                        {/* Dimension Badge */}
+                        <td className="py-3.5 px-4.5 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDetails(p)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 text-white font-mono font-bold text-xs rounded-lg shadow-2xs border border-slate-800 hover:bg-slate-800 transition cursor-pointer"
+                            title="Click to view specifications & job time history"
+                          >
                             <Ruler size={13} className="text-red-400 stroke-[2.5]" />
-                            {p.widthMm} × {p.heightMm} mm
-                          </span>
-                          <span className="text-[11px] font-mono text-slate-400 font-medium">
-                            ({p.dimensionKey || `${p.widthMm}x${p.heightMm}`})
-                          </span>
-                        </div>
-                      </td>
+                            <span>{p.widthMm} × {p.heightMm} mm</span>
+                          </button>
+                        </td>
 
-                      {/* Friendly Name */}
-                      <td className="py-4 px-5">
-                        <span className="font-semibold text-slate-900 text-xs sm:text-sm">
-                          {p.name}
-                        </span>
-                      </td>
+                        {/* Product Friendly Name */}
+                        <td className="py-3.5 px-4.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDetails(p)}
+                            className="font-semibold text-slate-900 text-xs sm:text-sm hover:text-red-600 transition text-left cursor-pointer truncate max-w-[220px] block"
+                            title={p.name}
+                          >
+                            {p.name}
+                          </button>
+                        </td>
 
-                      {/* Category */}
-                      <td className="py-4 px-5">
-                        {p.category ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/60">
-                            {p.category}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs italic">General</span>
-                        )}
-                      </td>
+                        {/* Job Name */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {p.jobName ? (
+                            <div className="flex items-center gap-1.5 text-slate-800 font-medium max-w-[160px] truncate" title={p.jobName}>
+                              <Briefcase size={13} className="text-slate-400 shrink-0" />
+                              <span className="truncate">{p.jobName}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 font-normal">—</span>
+                          )}
+                        </td>
 
-                      {/* Default Usage Cycle */}
-                      <td className="py-4 px-5">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                            p.defaultUsageCycleDays === 45
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
-                          }`}
-                        >
-                          <Clock size={13} />
-                          {p.defaultUsageCycleDays || 30} Days
-                        </span>
-                      </td>
-
-                      {/* Unit Price */}
-                      <td className="py-4 px-5">
-                        {p.unitPrice != null && p.unitPrice !== '' ? (
-                          <span className="font-semibold text-slate-900 text-xs sm:text-sm">
-                            ₹{Number(p.unitPrice).toFixed(2)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs italic font-normal">
-                            Not set
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Status Badge */}
-                      <td className="py-4 px-5">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            p.status === 'active'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                              : 'bg-slate-100 text-slate-600 border border-slate-200/60'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              p.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
-                            }`}
-                          />
-                          {p.status === 'active' ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-
-                      {/* Actions for Super Admin */}
-                      {canManage && (
-                        <td className="py-4 px-5 text-right">
-                          <div className="inline-flex items-center gap-1.5">
-                            {canEdit && (
-                              <button
-                                onClick={() => handleOpenEdit(p)}
-                                title="Edit Product"
-                                className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                              >
-                                <Edit2 size={15} />
-                              </button>
+                        {/* Material & Colour */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="space-y-0.5">
+                            {p.material && (
+                              <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                                <Box size={12} className="text-slate-400 shrink-0" />
+                                <span>{p.material}</span>
+                              </div>
                             )}
-                            {canDelete && (
-                              <button
-                                onClick={() => handleDelete(p)}
-                                title="Delete Product"
-                                className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                            {p.colour && (
+                              <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                                <Palette size={12} className="text-red-400 shrink-0" />
+                                <span>{p.colour}</span>
+                              </div>
+                            )}
+                            {!p.material && !p.colour && (
+                              <span className="text-slate-300 font-normal">—</span>
                             )}
                           </div>
                         </td>
-                      )}
-                    </tr>
-                  ))}
+
+                        {/* Job Time (Latest recorded completion time) */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {latestJobTime ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDetails(p)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-50 text-red-700 hover:bg-red-100 border border-red-200/80 transition cursor-pointer font-mono group"
+                              title={`Latest: ${latestJobTime.timeSpent} on ${latestJobTime.date}. Click to view all ${p.jobTimes.length} entries.`}
+                            >
+                              <Clock size={12} className="text-red-500 stroke-[2.2] group-hover:scale-110 transition-transform" />
+                              <span>{latestJobTime.timeSpent}</span>
+                              <span className="text-[10px] text-red-500/80 font-sans font-semibold">
+                                ({p.jobTimes.length})
+                              </span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDetails(p)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                              title="Log job time entry"
+                            >
+                              <Plus size={11} />
+                              <span>Log Time</span>
+                            </button>
+                          )}
+                        </td>
+
+                        {/* Category */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {p.category ? (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/70">
+                              {p.category}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-normal">—</span>
+                          )}
+                        </td>
+
+                        {/* Default Usage Cycle */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap ${
+                              p.defaultUsageCycleDays === 45
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                : p.defaultUsageCycleDays === 15
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                            }`}
+                          >
+                            <Clock size={12} className="shrink-0" />
+                            <span>{p.defaultUsageCycleDays || 30} Days</span>
+                          </span>
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
+                              p.status === 'active'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200/60'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                p.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
+                              }`}
+                            />
+                            <span>{p.status === 'active' ? 'Active' : 'Inactive'}</span>
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3.5 px-4.5 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Export Product Details to Excel (.xlsx)"
+                              loading={exportingProductId === p._id}
+                              disabled={exportingProductId !== null}
+                              onClick={() => handleExportProduct(p)}
+                              className="text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                            >
+                              <FileSpreadsheet size={15} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Job Time Management"
+                              onClick={() => handleOpenDetails(p)}
+                              className="text-slate-500 hover:text-red-600 hover:bg-red-50"
+                            >
+                              <Timer size={15} />
+                            </Button>
+                            {canEdit && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Edit Product"
+                                onClick={() => handleOpenEdit(p)}
+                                className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                              >
+                                <Edit2 size={15} />
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Delete Product"
+                                onClick={() => handleDelete(p)}
+                                className="text-slate-500 hover:text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 size={15} />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -578,83 +977,169 @@ export default function Products() {
 
           {/* Mobile Card List View */}
           <div className="md:hidden space-y-3">
-            {displayedProducts.map((p) => (
-              <div
-                key={p._id}
-                className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3"
-              >
-                {/* Card Header: Dimension & Status */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 text-white font-mono font-bold text-xs rounded-lg shadow-2xs">
-                      <Ruler size={13} className="text-red-400 stroke-[2.5]" />
-                      {p.widthMm} × {p.heightMm} mm
-                    </span>
-                    <span className="text-[11px] font-mono text-slate-400">
-                      ({p.dimensionKey || `${p.widthMm}x${p.heightMm}`})
-                    </span>
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                      p.status === 'active'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                        : 'bg-slate-100 text-slate-600 border border-slate-200/60'
-                    }`}
-                  >
+            {displayedProducts.map((p) => {
+              const latestJobTime = p.jobTimes && p.jobTimes.length > 0
+                ? [...p.jobTimes].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                : null;
+
+              return (
+                <div
+                  key={p._id}
+                  className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3"
+                >
+                  {/* Card Header: Dimension & Status */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDetails(p)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 text-white font-mono font-bold text-xs rounded-lg shadow-2xs"
+                      >
+                        <Ruler size={13} className="text-red-400 stroke-[2.5]" />
+                        {p.widthMm} × {p.heightMm} mm
+                      </button>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        ({p.dimensionKey || `${p.widthMm}x${p.heightMm}`})
+                      </span>
+                    </div>
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        p.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                        p.status === 'active'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200/60'
                       }`}
-                    />
-                    {p.status === 'active' ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-
-                {/* Product Name & Category */}
-                <div>
-                  <h3 className="font-semibold text-slate-900 text-sm">{p.name}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Category: <span className="font-medium text-slate-700">{p.category || 'General'}</span>
-                  </p>
-                </div>
-
-                {/* Details Footer */}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] uppercase font-semibold text-slate-400">Usage Cycle</span>
-                    <p className="font-semibold text-slate-800">{p.defaultUsageCycleDays || 30} Days</p>
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          p.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
+                        }`}
+                      />
+                      {p.status === 'active' ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
 
-                  <div className="space-y-0.5 text-right">
-                    <span className="text-[10px] uppercase font-semibold text-slate-400">Unit Price</span>
-                    <p className="font-semibold text-slate-900">
-                      {p.unitPrice != null && p.unitPrice !== '' ? `₹${Number(p.unitPrice).toFixed(2)}` : 'Not set'}
-                    </p>
+                  {/* Product Name & Job Name */}
+                  <div className="space-y-1">
+                    <h3
+                      onClick={() => handleOpenDetails(p)}
+                      className="font-semibold text-slate-900 text-sm hover:text-red-600 transition cursor-pointer"
+                    >
+                      {p.name}
+                    </h3>
+                    {p.jobName && (
+                      <p className="text-xs text-slate-600 flex items-center gap-1">
+                        <Briefcase size={12} className="text-slate-400" />
+                        <span>{p.jobName}</span>
+                      </p>
+                    )}
                   </div>
 
-                  {canManage && (
+                  {/* Badges: Material, Colour, Category */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {p.material && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700">
+                        <Box size={11} className="text-slate-400" />
+                        {p.material}
+                      </span>
+                    )}
+                    {p.colour && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-red-50 text-red-700">
+                        <Palette size={11} className="text-red-500" />
+                        {p.colour}
+                      </span>
+                    )}
+                    {p.category && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600">
+                        {p.category}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Latest Job Time Row on Mobile */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-[10px] uppercase font-semibold text-slate-400 flex items-center gap-1">
+                      <Timer size={11} /> Latest Job Time
+                    </span>
+                    {latestJobTime ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDetails(p)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold bg-red-50 text-red-700 border border-red-200/80 font-mono"
+                      >
+                        <Clock size={11} className="text-red-500" />
+                        <span>{latestJobTime.timeSpent}</span>
+                        <span className="text-[10px] text-slate-400 font-sans font-normal">
+                          ({p.jobTimes.length})
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDetails(p)}
+                        className="text-[11px] text-red-600 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Plus size={11} /> Log Time
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Details Footer */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-semibold text-slate-400">
+                        Usage Cycle
+                      </span>
+                      <p className="font-semibold text-slate-800">
+                        {p.defaultUsageCycleDays || 30} Days
+                      </p>
+                    </div>
+
                     <div className="flex items-center gap-1 pl-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Export to Excel (.xlsx)"
+                        loading={exportingProductId === p._id}
+                        disabled={exportingProductId !== null}
+                        onClick={() => handleExportProduct(p)}
+                        className="text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                      >
+                        <FileSpreadsheet size={15} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Job Time Management"
+                        onClick={() => handleOpenDetails(p)}
+                        className="text-slate-500 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Timer size={15} />
+                      </Button>
                       {canEdit && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleOpenEdit(p)}
-                          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                          className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
                         >
                           <Edit2 size={15} />
-                        </button>
+                        </Button>
                       )}
                       {canDelete && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleDelete(p)}
-                          className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                          className="text-slate-500 hover:text-red-600 hover:bg-red-50"
                         >
                           <Trash2 size={15} />
-                        </button>
+                        </Button>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Pagination */}
@@ -664,20 +1149,22 @@ export default function Products() {
                 Page {page} of {totalPages} ({totalCount} total)
               </span>
               <div className="flex items-center gap-1.5">
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={page <= 1}
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg border border-slate-200 font-medium transition cursor-pointer"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
                   Previous
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={page >= totalPages}
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg border border-slate-200 font-medium transition cursor-pointer"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 >
                   Next
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -687,9 +1174,9 @@ export default function Products() {
       {/* Add / Edit Product Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-scale-up">
+          <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 animate-scale-up my-8 relative">
             {/* Modal Header */}
-            <div className="px-6 py-4.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <div className="px-6 py-4.5 bg-slate-50 border-b border-slate-200 rounded-t-2xl flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-red-50 text-red-600 rounded-xl">
                   <Ruler size={18} className="stroke-[2.5]" />
@@ -699,22 +1186,26 @@ export default function Products() {
                     {isEditing ? 'Edit Product' : 'Add New Product'}
                   </h2>
                   <p className="text-xs text-slate-500">
-                    {isEditing ? 'Update label dimensions, details or pricing' : 'Create a dimension-based label specification'}
+                    {isEditing
+                      ? 'Update label dimensions, material, and job specifications'
+                      : 'Create a dimension-based label specification'}
                   </p>
                 </div>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setShowModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 hover:bg-slate-100"
               >
                 <X size={18} />
-              </button>
+              </Button>
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-4.5">
-              {/* Product Friendly Name */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-4 rounded-b-2xl">
+              {/* Row 1: Product Friendly Name */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-slate-700">
                   Product Friendly Name <span className="text-red-500">*</span>
@@ -729,8 +1220,8 @@ export default function Products() {
                 />
               </div>
 
-              {/* Dimensions Input (Width & Height mm) */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Row 2: Width (mm) & Height (mm) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-slate-700">
                     Width (mm) <span className="text-red-500">*</span>
@@ -777,51 +1268,99 @@ export default function Products() {
                 </div>
               )}
 
-              {/* Category Dropdown / Free text */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Category <span className="text-slate-400 font-normal">(Optional)</span>
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
-                  >
-                    <option value="">Select Category...</option>
-                    {CATEGORY_OPTIONS.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                    <option value="Custom">Custom / Other...</option>
-                  </select>
+              {/* Row 3: Job Name & Category */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <SelectOrCreate
+                  label="Job Name"
+                  required
+                  placeholder="Select Job Name..."
+                  value={formData.jobName}
+                  onChange={(val) => setFormData({ ...formData, jobName: val })}
+                  options={jobNameOptions}
+                  protectedOptions={PRESET_JOB_NAMES}
+                  onCreateOption={(newJob) =>
+                    setCustomJobNames((prev) => (prev.includes(newJob) ? prev : [...prev, newJob]))
+                  }
+                  onDeleteOption={(optVal) => handleDeleteOption('jobName', optVal)}
+                  icon={Briefcase}
+                  createPrompt="Add"
+                />
 
-                  {formData.category === 'Custom' && (
-                    <input
-                      type="text"
-                      placeholder="Enter custom category"
-                      value={formData.customCategory}
-                      onChange={(e) => setFormData({ ...formData, customCategory: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 transition"
-                    />
-                  )}
-                </div>
+                <SelectOrCreate
+                  label="Category"
+                  placeholder="Select Category..."
+                  value={formData.category}
+                  onChange={(val) => setFormData({ ...formData, category: val })}
+                  options={categoryOptions}
+                  protectedOptions={PRESET_CATEGORIES}
+                  onCreateOption={(newCat) =>
+                    setCustomCategories((prev) => (prev.includes(newCat) ? prev : [...prev, newCat]))
+                  }
+                  onDeleteOption={(optVal) => handleDeleteOption('category', optVal)}
+                  icon={Tag}
+                  createPrompt="Add"
+                />
               </div>
 
-              {/* Usage Cycle Dropdown & Status */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Default Usage Cycle
-                  </label>
-                  <select
-                    value={formData.defaultUsageCycleDays}
-                    onChange={(e) => setFormData({ ...formData, defaultUsageCycleDays: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
-                  >
-                    <option value={30}>30 Days (Standard)</option>
-                    <option value={45}>45 Days (Extended)</option>
-                  </select>
-                </div>
+              {/* Row 4: Material & Colour */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <SelectOrCreate
+                  label="Material"
+                  required
+                  placeholder="Select Material..."
+                  value={formData.material}
+                  onChange={(val) => setFormData({ ...formData, material: val })}
+                  options={materialOptions}
+                  protectedOptions={PRESET_MATERIALS}
+                  onCreateOption={(newMat) =>
+                    setCustomMaterials((prev) => (prev.includes(newMat) ? prev : [...prev, newMat]))
+                  }
+                  onDeleteOption={(optVal) => handleDeleteOption('material', optVal)}
+                  icon={Box}
+                  createPrompt="Add"
+                />
+
+                <SelectOrCreate
+                  label="Colour"
+                  required
+                  placeholder="Select Colour..."
+                  value={formData.colour}
+                  onChange={(val) => setFormData({ ...formData, colour: val })}
+                  options={colourOptions}
+                  protectedOptions={PRESET_COLOURS}
+                  onCreateOption={(newCol) =>
+                    setCustomColours((prev) => (prev.includes(newCol) ? prev : [...prev, newCol]))
+                  }
+                  onDeleteOption={(optVal) => handleDeleteOption('colour', optVal)}
+                  icon={Palette}
+                  createPrompt="Add"
+                />
+              </div>
+
+              {/* Row 5: Default Usage Cycle & Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <SelectOrCreate
+                  label="Default Usage Cycle"
+                  placeholder="Select Usage Cycle..."
+                  value={formData.defaultUsageCycleDays}
+                  onChange={(val) => {
+                    const numVal = parseInt(String(val).replace(/\D/g, ''), 10);
+                    setFormData({
+                      ...formData,
+                      defaultUsageCycleDays: !isNaN(numVal) && numVal > 0 ? numVal : val
+                    });
+                  }}
+                  options={usageCycleOptions}
+                  protectedOptions={PRESET_USAGE_CYCLES.map((u) => u.value)}
+                  onCreateOption={handleCustomUsageCycleCreate}
+                  onDeleteOption={(optVal) => handleDeleteOption('usageCycle', optVal)}
+                  icon={Clock}
+                  createPrompt="Add custom cycle"
+                  formatOptionLabel={(opt) => {
+                    if (typeof opt === 'object' && opt.label) return opt.label;
+                    return `${opt} Days`;
+                  }}
+                />
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-slate-700">
@@ -830,7 +1369,7 @@ export default function Products() {
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
+                    className="w-full min-h-[42px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -838,50 +1377,43 @@ export default function Products() {
                 </div>
               </div>
 
-              {/* Unit Price (Optional) */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Unit Price (₹)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-2.5 text-slate-400 font-medium text-xs">₹</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="e.g. 1.25"
-                    value={formData.unitPrice}
-                    onChange={(e) => setFormData({ ...formData, unitPrice: e.target.value })}
-                    className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500 transition"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-400 italic">
-                  Optional — leave blank if not tracking pricing
-                </p>
-              </div>
-
               {/* Modal Actions */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                <button
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="md"
                   onClick={() => setShowModal(false)}
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                  className="text-slate-600 hover:bg-slate-100"
                 >
                   Cancel
-                </button>
-                <LoadingButton
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="md"
                   loading={isSubmitting}
-                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-sm shadow-red-600/20 transition cursor-pointer"
                 >
                   {isEditing ? 'Save Changes' : 'Create Product'}
-                </LoadingButton>
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Product Details & Job Time Management Modal */}
+      <ProductDetailsModal
+        isOpen={showDetailsModal}
+        onClose={() => {
+          setShowDetailsModal(false);
+          setSelectedProductForDetails(null);
+        }}
+        product={selectedProductForDetails}
+        onUpdateProduct={handleProductUpdated}
+      />
     </div>
   );
 }
+

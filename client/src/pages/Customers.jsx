@@ -4,11 +4,13 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X, ShoppingBag, Eye } from 'lucide-react';
+import { Users, Search, Trash2, ArrowRight, Phone, Mail, Building, Plus, X, ShoppingBag, Eye, FileSpreadsheet, Download } from 'lucide-react';
 import { SkeletonCustomerDirectory } from '../components/ui/Skeleton';
 import NewOrderModal from '../components/NewOrderModal';
+import Button from '../components/ui/Button';
 import LoadingButton from '../components/ui/LoadingButton';
 import AccordionCard from '../components/ui/AccordionCard';
+import { exportCustomerToExcel } from '../utils/exportUtils';
 import {
   getLiveReorderProbability,
   getProbabilityColorClass,
@@ -25,6 +27,7 @@ export default function Customers() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [exportingCustomerId, setExportingCustomerId] = useState(null);
 
   // Add Customer Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -116,6 +119,19 @@ export default function Customers() {
   };
 
 
+
+  const handleExportCustomerExcel = async (e, cust) => {
+    e.stopPropagation();
+    if (!cust?._id || exportingCustomerId) return;
+    try {
+      setExportingCustomerId(cust._id);
+      await exportCustomerToExcel(cust._id, cust.name || 'Customer', notify);
+    } catch (err) {
+      // Error notifications handled by exportCustomerToExcel
+    } finally {
+      setExportingCustomerId(null);
+    }
+  };
 
   const handleDeleteCustomer = async (id, name) => {
     const isConfirmed = await confirm({
@@ -302,6 +318,19 @@ export default function Customers() {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
+                          title={`Export Excel Report for ${c.name}`}
+                          disabled={exportingCustomerId === c._id}
+                          onClick={(e) => handleExportCustomerExcel(e, c)}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition cursor-pointer disabled:opacity-50"
+                        >
+                          {exportingCustomerId === c._id ? (
+                            <span className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin inline-block" />
+                          ) : (
+                            <FileSpreadsheet size={15} />
+                          )}
+                        </button>
+                        <button
+                          type="button"
                           title={`Delete ${c.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -388,6 +417,18 @@ export default function Customers() {
                   </div>
 
                   <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      icon={FileSpreadsheet}
+                      loading={exportingCustomerId === c._id}
+                      loadingText="Exporting..."
+                      onClick={(e) => handleExportCustomerExcel(e, c)}
+                      className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-200 shrink-0"
+                    >
+                      Excel
+                    </Button>
                     <button
                       type="button"
                       onClick={(e) => {

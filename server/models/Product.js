@@ -1,14 +1,27 @@
 const mongoose = require('mongoose');
 const softDeletePlugin = require('../utils/softDelete');
 
+const jobTimeEntrySchema = new mongoose.Schema({
+  date: { type: String, required: true, trim: true }, // e.g. "2026-10-07"
+  timeSpent: { type: String, required: true, trim: true }, // e.g. "1 hour", "1 hr 30 min", "2 hours"
+  notes: { type: String, trim: true, default: '' },
+  recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+}, {
+  timestamps: true
+});
+
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   widthMm: { type: Number, required: true },
   heightMm: { type: Number, required: true },
   dimensionKey: { type: String, trim: true, index: true },
+  jobName: { type: String, trim: true, default: '' },
+  material: { type: String, trim: true, default: '' },
+  colour: { type: String, trim: true, default: '' },
   category: { type: String, trim: true },
-  defaultUsageCycleDays: { type: Number, enum: [30, 45], default: 30 },
+  defaultUsageCycleDays: { type: Number, default: 30 },
   unitPrice: { type: Number, required: false, default: null },
+  jobTimes: [jobTimeEntrySchema],
   status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true }
 }, {
   timestamps: true

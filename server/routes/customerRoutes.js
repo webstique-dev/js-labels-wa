@@ -8,7 +8,8 @@ const {
   getCustomerOrders,
   getCustomerTimeline,
   updateCustomer,
-  deleteCustomer
+  deleteCustomer,
+  exportCustomerExcel
 } = require('../controllers/customerController');
 const { getTrash, restoreRecord } = require('../controllers/trashController');
 const { protect } = require('../middleware/auth');
@@ -18,6 +19,7 @@ const { applyOwnershipScope } = require('../middleware/scope');
 router.get('/', protect, applyOwnershipScope('salesExecutive'), getCustomers);
 router.post('/', protect, createCustomer);
 router.get('/trash', protect, allowRoles('super_admin'), (req, res, next) => { req.params.resource = 'customers'; next(); }, getTrash);
+router.get('/:id/export-excel', protect, exportCustomerExcel);
 router.get('/:id', protect, getCustomerById);
 router.get('/:id/summary', protect, getCustomerSummary);
 router.get('/:id/orders', protect, getCustomerOrders);

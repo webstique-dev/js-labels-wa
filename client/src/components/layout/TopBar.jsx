@@ -381,7 +381,7 @@ export default function TopBar() {
                       >
                         <div>
                           <span className="font-semibold text-slate-900 block">{o.orderNo}</span>
-                          <span className="text-slate-400 text-[11px] font-normal">₹{(o.amount || 0).toLocaleString('en-IN')}</span>
+                          <span className="text-slate-400 text-[11px] font-normal">{o.customerId?.name || o.customerName || 'Order'}</span>
                         </div>
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-medium rounded uppercase">
                           {o.status}

@@ -259,14 +259,6 @@ export default function Dashboard() {
 
   const isFilterActive = period !== 'this_month' || assignedTo !== 'all' || source !== 'all';
 
-  // Format currency for Reorder Forecast
-  const formatReorderAmount = (amount) => {
-    if (!amount) return '₹ 0';
-    if (amount >= 100000) {
-      return `₹ ${(amount / 100000).toFixed(1)} Lakhs`;
-    }
-    return `₹ ${amount.toLocaleString('en-IN')}`;
-  };
 
   // Sample or API Activity Icons helper
   const getActivityIcon = (act, index) => {

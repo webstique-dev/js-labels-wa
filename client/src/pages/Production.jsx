@@ -21,7 +21,6 @@ import {
   Info,
   Calendar,
   PackageCheck,
-  IndianRupee,
   ShoppingCart,
   CheckCircle2,
   Tag,
@@ -203,9 +202,9 @@ export default function Production() {
           <Skeleton className="h-10 w-52 rounded-xl" />
         </div>
 
-        {/* 4 Summary KPI Cards Skeleton */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 min-[1200px]:grid-cols-4 gap-4 2xl:gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
+        {/* 3 Summary KPI Cards Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 2xl:gap-6">
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <Skeleton className="h-4 w-28 rounded" />
@@ -293,7 +292,7 @@ export default function Production() {
       </div>
 
       {/* Row 1: Summary Header KPI Cards (Shop-Floor & Commercial At-a-Glance) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 min-[1200px]:grid-cols-4 gap-3.5 sm:gap-4 2xl:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 2xl:gap-6">
         
         {/* Card 1: Total Forecasted Volume */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 transition duration-200 hover:shadow-md hover:border-slate-300 min-w-0">
@@ -331,25 +330,7 @@ export default function Production() {
           </div>
         </div>
 
-        {/* Card 3: Current Month Total Revenue */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 transition duration-200 hover:shadow-md hover:border-slate-300 min-w-0">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-xs font-semibold text-slate-500 truncate">{currentMonthTitle} Sales Value</span>
-            <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
-              <IndianRupee size={18} />
-            </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight truncate">
-            ₹{summaryMetrics.currentMonthRevenue.toLocaleString('en-IN')}
-            <span className="text-xs sm:text-sm font-bold text-slate-400 ml-1.5 font-sans">Total</span>
-          </div>
-          <div className="text-xs font-semibold text-violet-700 flex items-center gap-1.5 truncate">
-            <Tag size={13} className="shrink-0" />
-            <span className="truncate">{summaryMetrics.currentMonthDistinctProducts} distinct products ordered</span>
-          </div>
-        </div>
-
-        {/* Card 4: Machine Setup Batching Opportunity */}
+        {/* Card 3: Machine Setup Batching Opportunity */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 transition duration-200 hover:shadow-md hover:border-slate-300 min-w-0">
           <div className="flex items-center justify-between gap-1">
             <span className="text-xs font-semibold text-slate-500 truncate">Setup Batching Efficiency</span>
@@ -530,7 +511,7 @@ export default function Production() {
                         </div>
                       )}
 
-                      {/* Categories & Pricing Badge */}
+                      {/* Categories Badge */}
                       {d.categories && d.categories.length > 0 && (
                         <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                           {(!isAll && activeData.category ? [activeData.category] : d.categories).map((cat, ci) => (
@@ -538,11 +519,6 @@ export default function Production() {
                               {cat}
                             </span>
                           ))}
-                          {!isAll && activeData.unitPrice != null && (
-                            <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-semibold rounded-md shrink-0">
-                              ₹{activeData.unitPrice}/label
-                            </span>
-                          )}
                         </div>
                       )}
                     </div>
@@ -612,7 +588,7 @@ export default function Production() {
                       </div>
 
                       <div className="flex items-center justify-between text-xs font-semibold text-emerald-900 pt-0.5 border-t border-emerald-100/80">
-                        <span>Revenue: ₹{(activeData.currentMonthRevenue || 0).toLocaleString('en-IN')}</span>
+                        <span>Orders Confirmed</span>
                         <span>{activeData.currentMonthOrderCount || 0} Orders</span>
                       </div>
 
@@ -804,8 +780,6 @@ export default function Production() {
 
               <div className="flex items-center gap-3 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-xs font-bold text-emerald-800 shrink-0">
                 <span>Total: {summaryMetrics.currentMonthSoldQty.toLocaleString('en-IN')} units</span>
-                <span>•</span>
-                <span>₹{summaryMetrics.currentMonthRevenue.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
@@ -818,7 +792,6 @@ export default function Production() {
                       <th className="py-3 px-4">Product Name & Category</th>
                       <th className="py-3 px-4">Dimension</th>
                       <th className="py-3 px-4 text-right">Volume Sold</th>
-                      <th className="py-3 px-4 text-right">Total Revenue (₹)</th>
                       <th className="py-3 px-4 text-center">Orders</th>
                       <th className="py-3 px-4">Key Buying Customers</th>
                     </tr>
@@ -868,15 +841,6 @@ export default function Production() {
                             <span className="text-[10px] text-slate-400 font-semibold">{pctOfTotal}% of month volume</span>
                           </td>
 
-                          {/* Revenue */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="font-extrabold text-emerald-800 text-sm">
-                              ₹{prod.totalRevenue.toLocaleString('en-IN')}
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-medium">
-                              Exact line calculated
-                            </div>
-                          </td>
 
                           {/* Order count */}
                           <td className="py-3.5 px-4 text-center whitespace-nowrap">

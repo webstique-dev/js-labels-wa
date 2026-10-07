@@ -35,13 +35,17 @@ import {
   Package,
   Eye,
   Pencil,
-  Trash2
+  Trash2,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 import { SkeletonCustomer360 } from '../components/ui/Skeleton';
 import AccordionCard from '../components/ui/AccordionCard';
 import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
 import NewOrderModal from '../components/NewOrderModal';
+import Button from '../components/ui/Button';
 import LoadingButton from '../components/ui/LoadingButton';
+import { exportCustomerToExcel } from '../utils/exportUtils';
 import {
   getLiveReorderProbability,
   getProbabilityColorClass,
@@ -67,6 +71,7 @@ export default function CustomerDetails() {
   // Star / Favorite toggle state
   const [isStarred, setIsStarred] = useState(false);
   const [showActionsDropdown, setShowActionsDropdown] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   // New Order Popup Modal State
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
@@ -88,8 +93,8 @@ export default function CustomerDetails() {
     state: '',
     pincode: '',
     customerType: '',
-    paymentTerms: '',
-    creditLimit: ''
+    source: 'website',
+    expectedReorderDate: ''
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -301,9 +306,6 @@ export default function CustomerDetails() {
   const customerGst = customer.gstNo || '';
   const customerAddress = customer.address || '';
   const customerType = customer.customerType || '';
-  const paymentTerms = customer.paymentTerms || '';
-  const creditLimitStr = customer.creditLimit !== undefined && customer.creditLimit !== null ? `₹ ${customer.creditLimit.toLocaleString('en-IN')}` : null;
-  const currentBalanceStr = customer.currentBalance !== undefined && customer.currentBalance !== null ? `₹ ${customer.currentBalance.toLocaleString('en-IN')}` : null;
   const reorderProb = getLiveReorderProbability(customer);
   const salesExecName = customer.salesExecutive?.name || null;
   const salesExecInitials = customer.salesExecutive?.name ? getInitials(customer.salesExecutive.name) : null;
@@ -401,6 +403,18 @@ export default function CustomerDetails() {
     });
   };
 
+  const handleExportExcel = async () => {
+    if (!customer || isExportingExcel) return;
+    try {
+      setIsExportingExcel(true);
+      await exportCustomerToExcel(customer._id, customer.name || 'Customer', notify);
+    } catch (err) {
+      // Error notifications handled by exportCustomerToExcel
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   const handleWhatsAppClick = () => {
     if (!customerPhone) return;
     openWhatsApp(customerPhone, customerName, null, notify, reorderProb, customer?.expectedReorderDate, {
@@ -432,21 +446,37 @@ export default function CustomerDetails() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            icon={FileSpreadsheet}
+            loading={isExportingExcel}
+            loadingText="Exporting Excel..."
+            onClick={handleExportExcel}
+            className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50/60 border-emerald-300 shadow-2xs font-semibold"
+          >
+            Export Excel
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            icon={Edit2}
             onClick={() => setIsEditing(true)}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
           >
-            <Edit2 size={14} />
-            <span>Edit Profile</span>
-          </button>
-          <button
+            Edit Profile
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={ShoppingBag}
             onClick={() => setShowNewOrderModal(true)}
-            className="px-3.5 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
           >
-            <ShoppingBag size={14} />
-            <span>+ New Order</span>
-          </button>
+            + New Order
+          </Button>
         </div>
       </div>
 
@@ -500,19 +530,27 @@ export default function CustomerDetails() {
           </button>
 
           {showActionsDropdown && (
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden z-30 p-1 space-y-0.5 text-xs">
+            <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden z-30 p-1 space-y-0.5 text-xs">
+              <button
+                onClick={() => { setShowActionsDropdown(false); handleExportExcel(); }}
+                disabled={isExportingExcel}
+                className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
+                <span>{isExportingExcel ? 'Exporting Excel...' : 'Export Excel Report'}</span>
+              </button>
               <button
                 onClick={() => { setShowActionsDropdown(false); setIsEditing(true); }}
                 className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2 cursor-pointer"
               >
-                <Edit2 size={14} className="text-slate-400" />
+                <Edit2 size={14} className="text-slate-400 shrink-0" />
                 <span>Edit Profile</span>
               </button>
               <button
                 onClick={() => { setShowActionsDropdown(false); setShowNewOrderModal(true); }}
                 className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-100 rounded-xl font-medium flex items-center gap-2 cursor-pointer"
               >
-                <ShoppingBag size={14} className="text-slate-400" />
+                <ShoppingBag size={14} className="text-slate-400 shrink-0" />
                 <span>Create New Order</span>
               </button>
             </div>
@@ -652,29 +690,6 @@ export default function CustomerDetails() {
                 </div>
               )}
 
-              {/* Payment Terms */}
-              {paymentTerms && (
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Payment Terms</span>
-                  <span className="text-slate-900 font-semibold">{paymentTerms}</span>
-                </div>
-              )}
-
-              {/* Credit Limit */}
-              {creditLimitStr && (
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Credit Limit</span>
-                  <span className="text-slate-900 font-semibold">{creditLimitStr}</span>
-                </div>
-              )}
-
-              {/* Current Balance */}
-              {currentBalanceStr && (
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Current Balance</span>
-                  <span className="text-emerald-600 font-bold">{currentBalanceStr}</span>
-                </div>
-              )}
 
               {/* Reorder Probability Progress Bar */}
               <div className="pt-2 space-y-1.5">
@@ -777,27 +792,7 @@ export default function CustomerDetails() {
                   <div className="text-lg font-bold text-slate-900 pl-1">{totalOrdersCount}</div>
                 </div>
 
-                {/* 2. Total Spent */}
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                      <Wallet size={14} />
-                    </div>
-                    <span className="text-[10px] font-medium text-slate-500 uppercase">Total Spent</span>
-                  </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">
-                    {totalSpentAmt != null ? (
-                      `₹ ${Number(totalSpentAmt).toLocaleString('en-IN')}`
-                    ) : (
-                      <span className="text-slate-400 text-xs font-semibold italic">Not tracked</span>
-                    )}
-                  </div>
-                  {summary?.pricingCoverage && summary.pricingCoverage.pricedCount < summary.pricingCoverage.totalCount && summary.pricingCoverage.pricedCount > 0 && (
-                    <p className="text-[9px] text-slate-400 pl-1">Based on {summary.pricingCoverage.pricedCount} of {summary.pricingCoverage.totalCount} orders</p>
-                  )}
-                </div>
-
-                {/* 3. Last Order */}
+                {/* 2. Last Order */}
                 <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
@@ -808,24 +803,7 @@ export default function CustomerDetails() {
                   <div className="text-xs font-bold text-slate-900 pl-1 pt-1">{lastOrderDateStr}</div>
                 </div>
 
-                {/* 4. Avg Order Value */}
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-                      <TrendingUp size={14} />
-                    </div>
-                    <span className="text-[10px] font-medium text-slate-500 uppercase">Avg. Order Value</span>
-                  </div>
-                  <div className="text-lg font-bold text-slate-900 pl-1">
-                    {avgOrderVal != null ? (
-                      `₹ ${Number(avgOrderVal).toLocaleString('en-IN')}`
-                    ) : (
-                      <span className="text-slate-400 text-xs font-semibold italic">Not tracked</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* 5. Repeat Orders */}
+                {/* 3. Repeat Orders */}
                 <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
@@ -970,9 +948,6 @@ export default function CustomerDetails() {
                         </p>
                         <p className="text-[10px] text-slate-400 font-normal">{prod.totalQty?.toLocaleString('en-IN')} units purchased</p>
                       </div>
-                      <span className="font-bold text-slate-800 shrink-0">
-                        {prod.totalAmount > 0 ? `₹ ${prod.totalAmount.toLocaleString('en-IN')}` : '—'}
-                      </span>
                     </div>
                   ))}
                 </div>
@@ -1064,7 +1039,6 @@ export default function CustomerDetails() {
                       <th className="p-4">Order No</th>
                       <th className="p-4">Order Date</th>
                       <th className="p-4">Line Items</th>
-                      <th className="p-4">Total Amount</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-right">Actions</th>
                     </tr>
@@ -1089,13 +1063,6 @@ export default function CustomerDetails() {
                             </div>
                           ) : (
                             <span className="text-slate-400 italic">No line items specified</span>
-                          )}
-                        </td>
-                        <td className="p-4 font-bold text-slate-900">
-                          {ord.amount != null ? (
-                            `₹ ${Number(ord.amount).toLocaleString('en-IN')}`
-                          ) : (
-                            <span className="text-slate-400 font-normal italic">Not set</span>
                           )}
                         </td>
                         <td className="p-4">
@@ -1149,14 +1116,6 @@ export default function CustomerDetails() {
                     }
                   >
                     <div className="grid grid-cols-2 gap-3 text-xs pt-1">
-                      <div>
-                        <span className="text-slate-400 font-medium text-[11px] block">Order Amount</span>
-                        <span className="font-bold text-slate-900 text-sm">
-                          {ord.amount != null ? `₹ ${Number(ord.amount).toLocaleString('en-IN')}` : (
-                            <span className="text-slate-400 font-normal italic">Not set</span>
-                          )}
-                        </span>
-                      </div>
                       <div>
                         <span className="text-slate-400 font-medium text-[11px] block">Order Date</span>
                         <span className="font-semibold text-slate-800">
@@ -1270,12 +1229,6 @@ export default function CustomerDetails() {
                 </div>
               )}
 
-              {viewingOrder.advanceReceived && viewingOrder.advanceAmount > 0 && (
-                <div className="flex items-center justify-between p-2.5 bg-emerald-50/60 border border-emerald-100 rounded-xl">
-                  <span className="font-medium text-emerald-800">Advance Received:</span>
-                  <span className="font-bold text-emerald-700">₹ {viewingOrder.advanceAmount.toLocaleString('en-IN')}</span>
-                </div>
-              )}
 
               {/* Line Items */}
               {viewingOrder.lineItems && viewingOrder.lineItems.length > 0 && (
@@ -1287,7 +1240,6 @@ export default function CustomerDetails() {
                         <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-[10px] uppercase">
                           <th className="p-2.5">Product & Dimension</th>
                           <th className="p-2.5 text-right">Qty</th>
-                          <th className="p-2.5 text-right">Amount</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1305,13 +1257,6 @@ export default function CustomerDetails() {
                                 )}
                               </td>
                               <td className="p-2.5 text-right text-slate-600">{item.qty?.toLocaleString('en-IN')}</td>
-                              <td className="p-2.5 text-right font-bold text-slate-900">
-                                {lineAmt != null ? (
-                                  `₹ ${Number(lineAmt).toLocaleString('en-IN')}`
-                                ) : (
-                                  <span className="text-slate-400 font-normal italic">Not set</span>
-                                )}
-                              </td>
                             </tr>
                           );
                         })}
@@ -1321,14 +1266,6 @@ export default function CustomerDetails() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 font-bold text-sm text-slate-900">
-                <span>Total Order Value</span>
-                {viewingOrder.amount != null ? (
-                  <span className="text-red-600">₹ {Number(viewingOrder.amount).toLocaleString('en-IN')}</span>
-                ) : (
-                  <span className="text-slate-400 font-normal italic text-xs">Pricing not tracked for this order</span>
-                )}
-              </div>
 
               {viewingOrder.deliveryAddress && (
                 <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600">
