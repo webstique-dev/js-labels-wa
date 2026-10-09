@@ -6,7 +6,9 @@ const {
   createOrder,
   updateOrder,
   updateOrderStatus,
-  deleteOrder
+  deleteOrder,
+  exportAllOrdersExcel,
+  exportSingleOrderExcel
 } = require('../controllers/orderController');
 const { getTrash, restoreRecord } = require('../controllers/trashController');
 const { protect } = require('../middleware/auth');
@@ -14,8 +16,10 @@ const { allowRoles } = require('../middleware/roles');
 const { applyOwnershipScope } = require('../middleware/scope');
 
 router.get('/', protect, applyOwnershipScope('salesExecutive'), getOrders);
+router.get('/export-all', protect, applyOwnershipScope('salesExecutive'), exportAllOrdersExcel);
 router.get('/trash', protect, allowRoles('super_admin'), (req, res, next) => { req.params.resource = 'orders'; next(); }, getTrash);
 router.get('/summary', protect, applyOwnershipScope('salesExecutive'), getOrdersSummary);
+router.get('/:id/export-excel', protect, exportSingleOrderExcel);
 router.post('/', protect, createOrder);
 router.patch('/:id', protect, updateOrder);
 router.patch('/:id/status', protect, updateOrderStatus);

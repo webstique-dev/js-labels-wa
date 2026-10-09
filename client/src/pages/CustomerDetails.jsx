@@ -1037,7 +1037,7 @@ export default function CustomerDetails() {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-semibold text-[11px]">
                       <th className="p-4">Order No</th>
-                      <th className="p-4">Order Date</th>
+                      <th className="p-4">PO Date</th>
                       <th className="p-4">Line Items</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-right">Actions</th>
@@ -1117,7 +1117,7 @@ export default function CustomerDetails() {
                   >
                     <div className="grid grid-cols-2 gap-3 text-xs pt-1">
                       <div>
-                        <span className="text-slate-400 font-medium text-[11px] block">Order Date</span>
+                        <span className="text-slate-400 font-medium text-[11px] block">PO Date</span>
                         <span className="font-semibold text-slate-800">
                           {new Date(ord.orderDate || ord.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </span>
@@ -1197,7 +1197,7 @@ export default function CustomerDetails() {
                   </span>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-slate-400 font-medium">Order Date</p>
+                  <p className="text-[10px] text-slate-400 font-medium">PO Date</p>
                   <p className="font-semibold text-slate-800">
                     {new Date(viewingOrder.orderDate || viewingOrder.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>

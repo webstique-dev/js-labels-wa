@@ -110,14 +110,44 @@ export default function Products() {
   const [totalPages, setTotalPages] = useState(1);
   const limit = 20;
 
-  // Custom added options state (in-session persistence so newly created items persist in dropdowns)
-  const [customJobNames, setCustomJobNames] = useState([]);
-  const [customCategories, setCustomCategories] = useState([]);
-  const [customMaterials, setCustomMaterials] = useState([]);
-  const [customColours, setCustomColours] = useState([]);
-  const [customUsageCycles, setCustomUsageCycles] = useState([]);
+  // Custom added options state (persisted in localStorage across sessions)
+  const [customJobNames, setCustomJobNames] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jslabels_custom_job_names');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
-  // Soft-deleted custom options tracking (persisted in localStorage so deleted custom options stay removed from future product selections)
+  const [customCategories, setCustomCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jslabels_custom_categories');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [customMaterials, setCustomMaterials] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jslabels_custom_materials');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [customColours, setCustomColours] = useState(() => {
+    try {
+      const saved = localStorage.getItem('jslabels_custom_colours');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  // Soft-deleted options tracking (persisted in localStorage so deleted options stay removed from future dropdown selections)
   const [deletedCustomOptions, setDeletedCustomOptions] = useState(() => {
     try {
       const saved = localStorage.getItem('jslabels_deleted_custom_product_options');
@@ -137,7 +167,6 @@ export default function Products() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [cycleFilter, setCycleFilter] = useState('');
 
   // Add / Edit Modal State
   const [showModal, setShowModal] = useState(false);
@@ -150,7 +179,7 @@ export default function Products() {
   const [selectedProductForDetails, setSelectedProductForDetails] = useState(null);
   const [exportingProductId, setExportingProductId] = useState(null);
 
-  // Form State
+  // Form State (defaultUsageCycleDays remains 30 behind the scenes)
   const [formData, setFormData] = useState({
     name: '',
     widthMm: '',
@@ -163,10 +192,12 @@ export default function Products() {
     status: 'active'
   });
 
-  // Dynamic deduplicated options lists
+  // Dynamic deduplicated options lists (all options fully editable and deletable)
   const jobNameOptions = useMemo(() => {
     const map = new Map();
-    PRESET_JOB_NAMES.forEach((j) => map.set(j.toLowerCase(), j));
+    PRESET_JOB_NAMES.forEach((j) => {
+      if (!isOptionDeleted(j)) map.set(j.toLowerCase(), j);
+    });
     customJobNames.forEach((j) => {
       if (!isOptionDeleted(j)) map.set(j.toLowerCase(), j);
     });
@@ -180,7 +211,9 @@ export default function Products() {
 
   const categoryOptions = useMemo(() => {
     const map = new Map();
-    PRESET_CATEGORIES.forEach((c) => map.set(c.toLowerCase(), c));
+    PRESET_CATEGORIES.forEach((c) => {
+      if (!isOptionDeleted(c)) map.set(c.toLowerCase(), c);
+    });
     customCategories.forEach((c) => {
       if (!isOptionDeleted(c)) map.set(c.toLowerCase(), c);
     });
@@ -194,7 +227,9 @@ export default function Products() {
 
   const materialOptions = useMemo(() => {
     const map = new Map();
-    PRESET_MATERIALS.forEach((m) => map.set(m.toLowerCase(), m));
+    PRESET_MATERIALS.forEach((m) => {
+      if (!isOptionDeleted(m)) map.set(m.toLowerCase(), m);
+    });
     customMaterials.forEach((m) => {
       if (!isOptionDeleted(m)) map.set(m.toLowerCase(), m);
     });
@@ -208,7 +243,9 @@ export default function Products() {
 
   const colourOptions = useMemo(() => {
     const map = new Map();
-    PRESET_COLOURS.forEach((c) => map.set(c.toLowerCase(), c));
+    PRESET_COLOURS.forEach((c) => {
+      if (!isOptionDeleted(c)) map.set(c.toLowerCase(), c);
+    });
     customColours.forEach((c) => {
       if (!isOptionDeleted(c)) map.set(c.toLowerCase(), c);
     });
@@ -220,36 +257,106 @@ export default function Products() {
     return Array.from(map.values());
   }, [products, customColours, deletedCustomOptions]);
 
-  const usageCycleOptions = useMemo(() => {
-    const map = new Map();
-    PRESET_USAGE_CYCLES.forEach((u) => map.set(u.value, u));
-    customUsageCycles.forEach((u) => {
-      const val = typeof u === 'object' ? u.value : Number(u);
-      if (!isNaN(val) && val > 0 && !isOptionDeleted(val)) {
-        const lbl = typeof u === 'object' ? u.label : `${val} Days`;
-        map.set(val, { value: val, label: lbl });
-      }
-    });
-    products.forEach((p) => {
-      if (
-        p.defaultUsageCycleDays &&
-        !map.has(p.defaultUsageCycleDays) &&
-        !isOptionDeleted(p.defaultUsageCycleDays)
-      ) {
-        map.set(p.defaultUsageCycleDays, {
-          value: p.defaultUsageCycleDays,
-          label: `${p.defaultUsageCycleDays} Days`
-        });
-      }
-    });
-    return Array.from(map.values()).sort((a, b) => a.value - b.value);
-  }, [products, customUsageCycles, deletedCustomOptions]);
+  // Handle creating a new option in any dropdown
+  const handleCreateOption = (fieldKey, newOption) => {
+    const clean = String(newOption).trim();
+    if (!clean) return;
 
-  // Handle deleting a custom option with confirmation dialog
+    // Un-delete if it was previously marked as deleted
+    setDeletedCustomOptions((prev) => {
+      const updated = prev.filter((d) => String(d).toLowerCase() !== clean.toLowerCase());
+      try {
+        localStorage.setItem('jslabels_deleted_custom_product_options', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    const addCustom = (setter, storageKey) => {
+      setter((prev) => {
+        if (prev.some((x) => String(x).toLowerCase() === clean.toLowerCase())) return prev;
+        const updated = [...prev, clean];
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+    };
+
+    if (fieldKey === 'jobName') addCustom(setCustomJobNames, 'jslabels_custom_job_names');
+    else if (fieldKey === 'category') addCustom(setCustomCategories, 'jslabels_custom_categories');
+    else if (fieldKey === 'material') addCustom(setCustomMaterials, 'jslabels_custom_materials');
+    else if (fieldKey === 'colour') addCustom(setCustomColours, 'jslabels_custom_colours');
+  };
+
+  // Handle editing/renaming an existing option in any dropdown
+  const handleEditOption = (fieldKey, oldValue, newValue) => {
+    if (!newValue || !newValue.trim() || oldValue === newValue) return;
+    const cleanOld = String(oldValue).trim();
+    const cleanNew = String(newValue).trim();
+
+    // 1. Mark oldValue as deleted so it no longer appears in dropdowns
+    setDeletedCustomOptions((prev) => {
+      const updated = Array.from(new Set([...prev, cleanOld]));
+      try {
+        localStorage.setItem('jslabels_deleted_custom_product_options', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    // 2. Un-delete cleanNew if it was deleted
+    setDeletedCustomOptions((prev) => {
+      const updated = prev.filter((d) => String(d).toLowerCase() !== cleanNew.toLowerCase());
+      try {
+        localStorage.setItem('jslabels_deleted_custom_product_options', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    // 3. Update the custom list in state & localStorage
+    const updateCustomList = (setter, storageKey) => {
+      setter((prev) => {
+        const filtered = prev.filter((item) => String(item).toLowerCase() !== cleanOld.toLowerCase());
+        if (!filtered.some((item) => String(item).toLowerCase() === cleanNew.toLowerCase())) {
+          filtered.push(cleanNew);
+        }
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(filtered));
+        } catch (e) {}
+        return filtered;
+      });
+    };
+
+    if (fieldKey === 'jobName') {
+      updateCustomList(setCustomJobNames, 'jslabels_custom_job_names');
+      if (String(formData.jobName).toLowerCase() === cleanOld.toLowerCase()) {
+        setFormData((prev) => ({ ...prev, jobName: cleanNew }));
+      }
+    } else if (fieldKey === 'category') {
+      updateCustomList(setCustomCategories, 'jslabels_custom_categories');
+      if (String(formData.category).toLowerCase() === cleanOld.toLowerCase()) {
+        setFormData((prev) => ({ ...prev, category: cleanNew }));
+      }
+    } else if (fieldKey === 'material') {
+      updateCustomList(setCustomMaterials, 'jslabels_custom_materials');
+      if (String(formData.material).toLowerCase() === cleanOld.toLowerCase()) {
+        setFormData((prev) => ({ ...prev, material: cleanNew }));
+      }
+    } else if (fieldKey === 'colour') {
+      updateCustomList(setCustomColours, 'jslabels_custom_colours');
+      if (String(formData.colour).toLowerCase() === cleanOld.toLowerCase()) {
+        setFormData((prev) => ({ ...prev, colour: cleanNew }));
+      }
+    }
+
+    notify.success(`Option updated to "${cleanNew}"`);
+  };
+
+  // Handle deleting an option with confirmation dialog
   const handleDeleteOption = async (fieldKey, optionValue) => {
+    const cleanVal = String(optionValue).trim();
     const isConfirmed = await confirm({
       title: 'Delete this option?',
-      message: 'This will remove the option from future product selections. Existing products using this value will not be modified.',
+      message: `Are you sure you want to remove "${cleanVal}" from future selections?`,
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
       variant: 'danger'
@@ -258,7 +365,7 @@ export default function Products() {
     if (!isConfirmed) return;
 
     setDeletedCustomOptions((prev) => {
-      const updated = Array.from(new Set([...prev, String(optionValue)]));
+      const updated = Array.from(new Set([...prev, cleanVal]));
       try {
         localStorage.setItem('jslabels_deleted_custom_product_options', JSON.stringify(updated));
       } catch (e) {
@@ -267,24 +374,39 @@ export default function Products() {
       return updated;
     });
 
+    const removeCustom = (setter, storageKey) => {
+      setter((prev) => {
+        const filtered = prev.filter((item) => String(item).toLowerCase() !== cleanVal.toLowerCase());
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(filtered));
+        } catch (e) {}
+        return filtered;
+      });
+    };
+
     if (fieldKey === 'jobName') {
-      setCustomJobNames((prev) => prev.filter((j) => String(j).toLowerCase() !== String(optionValue).toLowerCase()));
+      removeCustom(setCustomJobNames, 'jslabels_custom_job_names');
+      if (String(formData.jobName).toLowerCase() === cleanVal.toLowerCase()) {
+        setFormData((prev) => ({ ...prev, jobName: '' }));
+      }
     } else if (fieldKey === 'category') {
-      setCustomCategories((prev) => prev.filter((c) => String(c).toLowerCase() !== String(optionValue).toLowerCase()));
+      removeCustom(setCustomCategories, 'jslabels_custom_categories');
+      if (String(formData.category).toLowerCase() === cleanVal.toLowerCase()) {
+        setFormData((prev) => ({ ...prev, category: '' }));
+      }
     } else if (fieldKey === 'material') {
-      setCustomMaterials((prev) => prev.filter((m) => String(m).toLowerCase() !== String(optionValue).toLowerCase()));
+      removeCustom(setCustomMaterials, 'jslabels_custom_materials');
+      if (String(formData.material).toLowerCase() === cleanVal.toLowerCase()) {
+        setFormData((prev) => ({ ...prev, material: '' }));
+      }
     } else if (fieldKey === 'colour') {
-      setCustomColours((prev) => prev.filter((c) => String(c).toLowerCase() !== String(optionValue).toLowerCase()));
-    } else if (fieldKey === 'usageCycle') {
-      setCustomUsageCycles((prev) =>
-        prev.filter((u) => {
-          const val = typeof u === 'object' ? u.value : u;
-          return String(val) !== String(optionValue);
-        })
-      );
+      removeCustom(setCustomColours, 'jslabels_custom_colours');
+      if (String(formData.colour).toLowerCase() === cleanVal.toLowerCase()) {
+        setFormData((prev) => ({ ...prev, colour: '' }));
+      }
     }
 
-    notify.success(`Option "${optionValue}" removed from future selections`);
+    notify.success(`Option "${cleanVal}" removed from future selections`);
   };
 
   // Fetch products
@@ -339,11 +461,8 @@ export default function Products() {
     setPage(1);
   };
 
-  // Client-side cycle filter if needed (or backend query)
-  const displayedProducts = useMemo(() => {
-    if (!cycleFilter) return products;
-    return products.filter((p) => p.defaultUsageCycleDays === Number(cycleFilter));
-  }, [products, cycleFilter]);
+  // Displayed products list
+  const displayedProducts = products;
 
   // Modal open handlers
   const handleOpenAdd = () => {
@@ -620,28 +739,28 @@ export default function Products() {
         <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              30-Day Cycles
+              Unique Dimensions
             </p>
             <p className="text-xl sm:text-2xl font-bold text-indigo-600 mt-0.5">
-              {stats.cycle30Count}
+              {stats.uniqueDims}
             </p>
           </div>
           <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
-            <Clock size={18} />
+            <Ruler size={18} />
           </div>
         </div>
 
         <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              45-Day Cycles
+              Categories
             </p>
             <p className="text-xl sm:text-2xl font-bold text-amber-600 mt-0.5">
-              {stats.cycle45Count}
+              {categoryOptions.length}
             </p>
           </div>
           <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
-            <Calendar size={18} />
+            <Tag size={18} />
           </div>
         </div>
       </div>
@@ -699,21 +818,7 @@ export default function Products() {
               <option value="inactive">Inactive</option>
             </select>
 
-            {/* Cycle Filter */}
-            <select
-              value={cycleFilter}
-              onChange={(e) => handleFilterChange(setCycleFilter, e.target.value)}
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
-            >
-              <option value="">All Cycles</option>
-              <option value="15">15 Days Cycle</option>
-              <option value="30">30 Days Cycle</option>
-              <option value="45">45 Days Cycle</option>
-              <option value="60">60 Days Cycle</option>
-              <option value="90">90 Days Cycle</option>
-            </select>
-
-            {(search || categoryFilter || statusFilter || cycleFilter) && (
+            {(search || categoryFilter || statusFilter) && (
               <Button
                 type="button"
                 variant="outline"
@@ -723,7 +828,6 @@ export default function Products() {
                   setSearch('');
                   setCategoryFilter('');
                   setStatusFilter('');
-                  setCycleFilter('');
                   setPage(1);
                 }}
                 className="text-red-600 hover:bg-red-50 border-red-200"
@@ -746,7 +850,7 @@ export default function Products() {
           <div className="max-w-md mx-auto space-y-1">
             <h3 className="text-base font-bold text-slate-900">No Products Found</h3>
             <p className="text-xs text-slate-500 font-normal">
-              {search || categoryFilter || statusFilter || cycleFilter
+              {search || categoryFilter || statusFilter
                 ? 'Try adjusting your search criteria or clearing active filters.'
                 : 'No label products have been added yet.'}
             </p>
@@ -767,7 +871,7 @@ export default function Products() {
           {/* Desktop Table View */}
           <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto scrollbar-hide">
-              <table className="w-full text-left border-collapse min-w-[1050px]">
+              <table className="w-full text-left border-collapse min-w-[1000px]">
                 <thead>
                   <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">
                     <th className="py-3.5 px-4.5">Dimension</th>
@@ -776,7 +880,6 @@ export default function Products() {
                     <th className="py-3.5 px-4">Material & Colour</th>
                     <th className="py-3.5 px-4">Job Time</th>
                     <th className="py-3.5 px-4">Category</th>
-                    <th className="py-3.5 px-4">Usage Cycle</th>
                     <th className="py-3.5 px-4 text-center">Status</th>
                     <th className="py-3.5 px-4.5 text-right">Actions</th>
                   </tr>
@@ -884,22 +987,6 @@ export default function Products() {
                           ) : (
                             <span className="text-slate-300 font-normal">—</span>
                           )}
-                        </td>
-
-                        {/* Default Usage Cycle */}
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap ${
-                              p.defaultUsageCycleDays === 45
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                                : p.defaultUsageCycleDays === 15
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
-                            }`}
-                          >
-                            <Clock size={12} className="shrink-0" />
-                            <span>{p.defaultUsageCycleDays || 30} Days</span>
-                          </span>
                         </td>
 
                         {/* Status Badge */}
@@ -1084,17 +1171,8 @@ export default function Products() {
                   </div>
 
                   {/* Details Footer */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <div className="space-y-0.5">
-                      <span className="text-[10px] uppercase font-semibold text-slate-400">
-                        Usage Cycle
-                      </span>
-                      <p className="font-semibold text-slate-800">
-                        {p.defaultUsageCycleDays || 30} Days
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1 pl-2">
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-end text-xs">
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1277,10 +1355,8 @@ export default function Products() {
                   value={formData.jobName}
                   onChange={(val) => setFormData({ ...formData, jobName: val })}
                   options={jobNameOptions}
-                  protectedOptions={PRESET_JOB_NAMES}
-                  onCreateOption={(newJob) =>
-                    setCustomJobNames((prev) => (prev.includes(newJob) ? prev : [...prev, newJob]))
-                  }
+                  onCreateOption={(newJob) => handleCreateOption('jobName', newJob)}
+                  onEditOption={(oldVal, newVal) => handleEditOption('jobName', oldVal, newVal)}
                   onDeleteOption={(optVal) => handleDeleteOption('jobName', optVal)}
                   icon={Briefcase}
                   createPrompt="Add"
@@ -1292,10 +1368,8 @@ export default function Products() {
                   value={formData.category}
                   onChange={(val) => setFormData({ ...formData, category: val })}
                   options={categoryOptions}
-                  protectedOptions={PRESET_CATEGORIES}
-                  onCreateOption={(newCat) =>
-                    setCustomCategories((prev) => (prev.includes(newCat) ? prev : [...prev, newCat]))
-                  }
+                  onCreateOption={(newCat) => handleCreateOption('category', newCat)}
+                  onEditOption={(oldVal, newVal) => handleEditOption('category', oldVal, newVal)}
                   onDeleteOption={(optVal) => handleDeleteOption('category', optVal)}
                   icon={Tag}
                   createPrompt="Add"
@@ -1311,10 +1385,8 @@ export default function Products() {
                   value={formData.material}
                   onChange={(val) => setFormData({ ...formData, material: val })}
                   options={materialOptions}
-                  protectedOptions={PRESET_MATERIALS}
-                  onCreateOption={(newMat) =>
-                    setCustomMaterials((prev) => (prev.includes(newMat) ? prev : [...prev, newMat]))
-                  }
+                  onCreateOption={(newMat) => handleCreateOption('material', newMat)}
+                  onEditOption={(oldVal, newVal) => handleEditOption('material', oldVal, newVal)}
                   onDeleteOption={(optVal) => handleDeleteOption('material', optVal)}
                   icon={Box}
                   createPrompt="Add"
@@ -1327,54 +1399,27 @@ export default function Products() {
                   value={formData.colour}
                   onChange={(val) => setFormData({ ...formData, colour: val })}
                   options={colourOptions}
-                  protectedOptions={PRESET_COLOURS}
-                  onCreateOption={(newCol) =>
-                    setCustomColours((prev) => (prev.includes(newCol) ? prev : [...prev, newCol]))
-                  }
+                  onCreateOption={(newCol) => handleCreateOption('colour', newCol)}
+                  onEditOption={(oldVal, newVal) => handleEditOption('colour', oldVal, newVal)}
                   onDeleteOption={(optVal) => handleDeleteOption('colour', optVal)}
                   icon={Palette}
                   createPrompt="Add"
                 />
               </div>
 
-              {/* Row 5: Default Usage Cycle & Status */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <SelectOrCreate
-                  label="Default Usage Cycle"
-                  placeholder="Select Usage Cycle..."
-                  value={formData.defaultUsageCycleDays}
-                  onChange={(val) => {
-                    const numVal = parseInt(String(val).replace(/\D/g, ''), 10);
-                    setFormData({
-                      ...formData,
-                      defaultUsageCycleDays: !isNaN(numVal) && numVal > 0 ? numVal : val
-                    });
-                  }}
-                  options={usageCycleOptions}
-                  protectedOptions={PRESET_USAGE_CYCLES.map((u) => u.value)}
-                  onCreateOption={handleCustomUsageCycleCreate}
-                  onDeleteOption={(optVal) => handleDeleteOption('usageCycle', optVal)}
-                  icon={Clock}
-                  createPrompt="Add custom cycle"
-                  formatOptionLabel={(opt) => {
-                    if (typeof opt === 'object' && opt.label) return opt.label;
-                    return `${opt} Days`;
-                  }}
-                />
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Status
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full min-h-[42px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
+              {/* Row 5: Status (Default Usage Cycle hidden as requested) */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Status
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full min-h-[42px] px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </div>
 
               {/* Modal Actions */}

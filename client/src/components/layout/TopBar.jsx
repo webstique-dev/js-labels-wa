@@ -203,7 +203,11 @@ export default function TopBar() {
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   // Notification Click Handlers
@@ -428,7 +432,7 @@ export default function TopBar() {
 
           {/* Messages & Reminders Dropdown */}
           <div
-            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${isMessageOpen
+            className={`fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-14 sm:top-full sm:mt-2 max-w-sm sm:max-w-none sm:w-80 mx-auto sm:mx-0 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top sm:origin-top-right ${isMessageOpen
               ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
               : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
               }`}
@@ -515,7 +519,7 @@ export default function TopBar() {
 
           {/* Notifications Dropdown */}
           <div
-            className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${isNotifOpen
+            className={`fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-14 sm:top-full sm:mt-2 max-w-sm sm:max-w-none sm:w-80 mx-auto sm:mx-0 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top sm:origin-top-right ${isNotifOpen
               ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
               : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
               }`}
@@ -611,7 +615,7 @@ export default function TopBar() {
 
           {/* Profile Dropdown Menu with Smooth Transition */}
           <div
-            className={`absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${isProfileOpen
+            className={`fixed sm:absolute right-3 sm:right-0 top-14 sm:top-full sm:mt-2 w-64 max-w-[calc(100vw-1.5rem)] bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden z-50 transition-all duration-200 ease-out origin-top-right ${isProfileOpen
               ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
               : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
               }`}

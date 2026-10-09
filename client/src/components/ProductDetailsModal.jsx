@@ -275,10 +275,10 @@ export default function ProductDetailsModal({
             </div>
             <div className="space-y-0.5">
               <span className="text-[10px] uppercase font-semibold text-slate-400 flex items-center gap-1">
-                <Clock size={11} /> Usage Cycle
+                <Tag size={11} /> Category
               </span>
               <p className="font-semibold text-slate-900 truncate">
-                {product.defaultUsageCycleDays || 30} Days
+                {product.category || '—'}
               </p>
             </div>
           </div>

@@ -694,10 +694,10 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 items-start">
-              {/* Order Date */}
+              {/* PO Date */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-slate-700">
-                  Order Date <span className="text-red-500">*</span>
+                  PO Date <span className="text-red-500">*</span>
                 </label>
                 <CustomDatePicker
                   required
@@ -709,7 +709,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
                       setIsManualReorderOverride(false);
                     }
                   }}
-                  placeholder="Select order date"
+                  placeholder="Select PO date"
                 />
               </div>
 
@@ -769,7 +769,7 @@ export default function NewOrderModal({ isOpen, onClose, onSuccess, initialLead,
             <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200/80 rounded-xl px-3 py-2 shadow-2xs">
               <Info size={14} className="text-red-500 shrink-0 stroke-[2.2]" />
               <span>
-                Auto-calculated from <strong className="text-slate-900 font-bold">Order Date + {usageCycleDays || 30} Days</strong> — you can manually adjust if needed.
+                Auto-calculated from <strong className="text-slate-900 font-bold">PO Date + {usageCycleDays || 30} Days</strong> — you can manually adjust if needed.
               </span>
             </div>
           </div>

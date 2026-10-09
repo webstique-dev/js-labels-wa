@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const ExcelJS = require('exceljs');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
@@ -1446,10 +1447,740 @@ const getCurrentMonthProductsSold = async (req, res) => {
   }
 };
 
+// GET /api/production/export-all?trailingMonths=2
+const exportAllProductionExcel = async (req, res) => {
+  try {
+    const { trailingMonths = 2 } = req.query;
+    const N = Math.max(1, Math.min(parseInt(trailingMonths, 10) || 2, 12));
+
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const forecastForMonth = formatYearMonth(`${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`);
+    const currentMonthFormatted = formatYearMonth(currentYearMonth);
+
+    // 1. Fetch all distinct dimension keys
+    const distinctDimensions = await Order.distinct("lineItems.dimensionKey", {
+      isDeleted: { $ne: true },
+      status: { $ne: 'cancelled' }
+    });
+    const cleanDims = distinctDimensions.filter(d => d && typeof d === 'string' && d.trim().length > 0);
+
+    // 2. Compute forecast for every dimension concurrently
+    const forecasts = await Promise.all(
+      cleanDims.map(dimKey => computeDimensionForecast(dimKey, N))
+    );
+
+    // 3. Current month catalog summary
+    const currentMonthAllAgg = await Order.aggregate([
+      {
+        $match: {
+          isDeleted: { $ne: true },
+          status: { $ne: 'cancelled' }
+        }
+      },
+      {
+        $addFields: {
+          orderYearMonth: {
+            $dateToString: {
+              format: "%Y-%m",
+              date: { $ifNull: ["$orderDate", "$createdAt"] }
+            }
+          }
+        }
+      },
+      {
+        $match: {
+          orderYearMonth: currentYearMonth
+        }
+      },
+      { $unwind: "$lineItems" },
+      {
+        $group: {
+          _id: {
+            name: "$lineItems.name",
+            dimensionKey: "$lineItems.dimensionKey"
+          },
+          productId: { $first: "$lineItems.productId" },
+          productName: { $first: "$lineItems.name" },
+          dimensionKey: { $first: "$lineItems.dimensionKey" },
+          totalQty: { $sum: "$lineItems.qty" },
+          totalRevenue: {
+            $sum: {
+              $ifNull: [
+                "$lineItems.lineTotal",
+                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
+              ]
+            }
+          },
+          distinctOrders: { $addToSet: "$_id" },
+          distinctCustomers: { $addToSet: "$customerId" }
+        }
+      },
+      { $sort: { totalQty: -1 } }
+    ]);
+
+    // Catalog products for enrichment
+    const catalogProducts = await Product.find({ isDeleted: { $ne: true } });
+    const productCatalogMap = {};
+    catalogProducts.forEach(p => {
+      if (p.name) productCatalogMap[p.name] = p;
+    });
+
+    const allCustIds = Array.from(new Set(currentMonthAllAgg.flatMap(i => i.distinctCustomers || [])));
+    const custDocs = await Customer.find({ _id: { $in: allCustIds } }, { name: 1, company: 1 });
+    const customerLookup = {};
+    custDocs.forEach(c => {
+      customerLookup[c._id.toString()] = c.name || c.company || 'Customer';
+    });
+
+    // Flatten all products across dimensions and current month
+    const productMap = new Map();
+
+    forecasts.forEach(d => {
+      if (d.productBreakdowns && Object.keys(d.productBreakdowns).length > 0) {
+        Object.values(d.productBreakdowns).forEach(pb => {
+          const key = `${pb.productName}_${d.dimensionKey}`;
+          productMap.set(key, {
+            productName: pb.productName,
+            category: pb.category || 'Label',
+            dimensionKey: d.dimensionKey,
+            unitPrice: pb.unitPrice ?? productCatalogMap[pb.productName]?.unitPrice ?? null,
+            forecastRangeLow: pb.forecastRangeLow,
+            forecastRangeHigh: pb.forecastRangeHigh,
+            averagePerMonth: pb.averagePerMonth,
+            sumTrailing: pb.sumTrailing,
+            trailingPeriodLabel: pb.trailingPeriodLabel,
+            lowConfidence: pb.lowConfidence,
+            insufficientData: pb.forecastRangeHigh == null,
+            currentMonthSoldQty: pb.currentMonthSoldQty || 0,
+            currentMonthRevenue: pb.currentMonthRevenue || 0,
+            currentMonthOrderCount: pb.currentMonthOrderCount || 0,
+            topContributingCustomers: (pb.topContributingCustomers || []).map(c => `${c.customerName} (${c.percentage}%)`).join(', '),
+            currentMonthCustomers: (pb.currentMonthCustomers || []).map(c => `${c.customerName} (${c.percentage}%)`).join(', ')
+          });
+        });
+      } else if (d.productNames && d.productNames.length > 0) {
+        d.productNames.forEach(pName => {
+          const key = `${pName}_${d.dimensionKey}`;
+          if (!productMap.has(key)) {
+            productMap.set(key, {
+              productName: pName,
+              category: (d.categories && d.categories[0]) || 'Label',
+              dimensionKey: d.dimensionKey,
+              unitPrice: productCatalogMap[pName]?.unitPrice ?? null,
+              forecastRangeLow: d.forecastRangeLow,
+              forecastRangeHigh: d.forecastRangeHigh,
+              averagePerMonth: d.averagePerMonth,
+              sumTrailing: d.sumTrailing,
+              trailingPeriodLabel: d.trailingPeriodLabel,
+              lowConfidence: d.lowConfidence,
+              insufficientData: d.forecastRangeHigh == null,
+              currentMonthSoldQty: d.currentMonthSoldQty || 0,
+              currentMonthRevenue: d.currentMonthRevenue || 0,
+              currentMonthOrderCount: d.currentMonthOrderCount || 0,
+              topContributingCustomers: (d.topContributingCustomers || []).map(c => `${c.customerName} (${c.percentage}%)`).join(', '),
+              currentMonthCustomers: (d.currentMonthCustomers || []).map(c => `${c.customerName} (${c.percentage}%)`).join(', ')
+            });
+          }
+        });
+      }
+    });
+
+    currentMonthAllAgg.forEach(item => {
+      const pName = item.productName || item._id.name;
+      const dimKey = item.dimensionKey || item._id.dimensionKey || 'Standard';
+      const key = `${pName}_${dimKey}`;
+      if (!productMap.has(key)) {
+        const catInfo = productCatalogMap[pName] || {};
+        const buyers = (item.distinctCustomers || []).map(cid => customerLookup[cid?.toString()]).filter(Boolean);
+        productMap.set(key, {
+          productName: pName,
+          category: catInfo.category || 'Label',
+          dimensionKey: dimKey,
+          unitPrice: catInfo.unitPrice ?? null,
+          forecastRangeLow: null,
+          forecastRangeHigh: null,
+          averagePerMonth: null,
+          sumTrailing: 0,
+          trailingPeriodLabel: 'No prior completed records',
+          lowConfidence: true,
+          insufficientData: true,
+          currentMonthSoldQty: item.totalQty || 0,
+          currentMonthRevenue: Math.round((item.totalRevenue || 0) * 100) / 100,
+          currentMonthOrderCount: (item.distinctOrders || []).length,
+          topContributingCustomers: '—',
+          currentMonthCustomers: buyers.join(', ') || '—'
+        });
+      }
+    });
+
+    const productsList = Array.from(productMap.values()).sort((a, b) => {
+      const fA = a.forecastRangeHigh ?? 0;
+      const fB = b.forecastRangeHigh ?? 0;
+      if (fB !== fA) return fB - fA;
+      return (b.currentMonthSoldQty || 0) - (a.currentMonthSoldQty || 0);
+    });
+
+    // Create Excel Workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'JS Labels Production Engine';
+    workbook.created = new Date();
+
+    const titleFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } }; // Slate 900
+    const subtitleFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } }; // Slate 800
+    const navyHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }; // Sapphire Navy
+    const thinBorder = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+    };
+    const titleFont = { name: 'Segoe UI', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+    const headerFont = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+
+    const formatDim = (dim) => {
+      if (!dim || !dim.includes('x')) return dim || '—';
+      const [w, h] = dim.split('x');
+      return `${w}mm × ${h}mm`;
+    };
+
+    // SHEET 1: Products Forecast & Sales
+    const ws1 = workbook.addWorksheet('Products Forecast & Sales', {
+      views: [{ state: 'frozen', xSplit: 0, ySplit: 4, showGridLines: true }]
+    });
+
+    ws1.mergeCells('A1:N1');
+    const t1 = ws1.getCell('A1');
+    t1.value = 'JS LABELS — COMPLETE PRODUCT PRODUCTION & DEMAND FORECAST REPORT';
+    t1.font = titleFont;
+    t1.fill = titleFill;
+    t1.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws1.getRow(1).height = 32;
+
+    ws1.mergeCells('A2:N2');
+    const s1 = ws1.getCell('A2');
+    s1.value = `Planning Horizon: Trailing ${N} Months  |  Upcoming Forecast Period: ${forecastForMonth}  |  Live Sales Month: ${currentMonthFormatted}  |  Total Products: ${productsList.length}  |  Exported: ${now.toLocaleString('en-IN')}`;
+    s1.font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FFCBD5E1' } };
+    s1.fill = subtitleFill;
+    s1.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws1.getRow(2).height = 22;
+
+    ws1.getRow(3).height = 8;
+
+    const headers1 = [
+      { name: '#', width: 6, align: 'center' },
+      { name: 'Product Name', width: 28, align: 'left' },
+      { name: 'Category', width: 16, align: 'left' },
+      { name: 'Dimension Key', width: 14, align: 'center' },
+      { name: 'Dimensions (mm)', width: 18, align: 'left' },
+      { name: `Forecast Expected (${forecastForMonth})`, width: 24, align: 'right' },
+      { name: 'Forecast Range Low', width: 18, align: 'right' },
+      { name: 'Forecast Range High', width: 18, align: 'right' },
+      { name: 'Forecast Confidence', width: 18, align: 'center' },
+      { name: `Sold Qty (${currentMonthFormatted})`, width: 20, align: 'right' },
+      { name: `Confirmed Orders (${currentMonthFormatted})`, width: 18, align: 'center' },
+      { name: `Trailing Avg/Mo`, width: 18, align: 'right' },
+      { name: `Trailing Total Qty`, width: 18, align: 'right' },
+      { name: 'Top Customer Demand Drivers', width: 35, align: 'left' }
+    ];
+
+    const hRow1 = ws1.getRow(4);
+    hRow1.height = 28;
+    headers1.forEach((h, idx) => {
+      const cell = hRow1.getCell(idx + 1);
+      cell.value = h.name;
+      cell.font = headerFont;
+      cell.fill = navyHeaderFill;
+      cell.alignment = { vertical: 'middle', horizontal: h.align };
+      cell.border = thinBorder;
+    });
+
+    let totalForecastSum = 0;
+    let totalCurSoldSum = 0;
+    let totalCurOrdersSum = 0;
+
+    productsList.forEach((p, idx) => {
+      const rNum = idx + 5;
+      const row = ws1.getRow(rNum);
+      row.height = 22;
+      const isEven = idx % 2 === 0;
+      const rowFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFFFFFFF' : 'FFF8FAFC' } };
+
+      const expectedVal = p.forecastRangeHigh != null ? p.forecastRangeHigh : (p.insufficientData ? 'Insufficient Data' : '—');
+      const confLabel = p.insufficientData ? 'Insufficient History' : (p.lowConfidence ? 'Moderate (1 Mo)' : 'High Confidence');
+
+      if (typeof p.forecastRangeHigh === 'number') totalForecastSum += p.forecastRangeHigh;
+      totalCurSoldSum += (p.currentMonthSoldQty || 0);
+      totalCurOrdersSum += (p.currentMonthOrderCount || 0);
+
+      const rowValues = [
+        idx + 1,
+        p.productName,
+        p.category,
+        p.dimensionKey,
+        formatDim(p.dimensionKey),
+        expectedVal,
+        p.forecastRangeLow != null ? p.forecastRangeLow : '—',
+        p.forecastRangeHigh != null ? p.forecastRangeHigh : '—',
+        confLabel,
+        p.currentMonthSoldQty || 0,
+        p.currentMonthOrderCount || 0,
+        p.averagePerMonth != null ? p.averagePerMonth : '—',
+        p.sumTrailing || 0,
+        p.topContributingCustomers || '—'
+      ];
+
+      rowValues.forEach((val, cIdx) => {
+        const cell = row.getCell(cIdx + 1);
+        cell.value = val;
+        cell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FF1E293B' } };
+        cell.fill = rowFill;
+        cell.border = thinBorder;
+        cell.alignment = { vertical: 'middle', horizontal: headers1[cIdx].align };
+
+        if (typeof val === 'number') {
+          cell.numFmt = '#,##0';
+        }
+      });
+    });
+
+    // Summary Totals Row on Sheet 1
+    const sumRowNum1 = productsList.length + 5;
+    const sumRow1 = ws1.getRow(sumRowNum1);
+    sumRow1.height = 26;
+    for (let c = 1; c <= headers1.length; c++) {
+      const cell = sumRow1.getCell(c);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF0F172A' } },
+        bottom: { style: 'double', color: { argb: 'FF0F172A' } }
+      };
+      cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    }
+    sumRow1.getCell(2).value = 'TOTALS / AGGREGATE';
+    sumRow1.getCell(6).value = totalForecastSum;
+    sumRow1.getCell(6).numFmt = '#,##0';
+    sumRow1.getCell(10).value = totalCurSoldSum;
+    sumRow1.getCell(10).numFmt = '#,##0';
+    sumRow1.getCell(11).value = totalCurOrdersSum;
+    sumRow1.getCell(11).numFmt = '#,##0';
+
+    ws1.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: 4, column: headers1.length }
+    };
+    headers1.forEach((h, i) => {
+      ws1.getColumn(i + 1).width = h.width;
+    });
+
+    // SHEET 2: Machine Setup & Die Batching
+    const ws2 = workbook.addWorksheet('Machine Dies & Batching', {
+      views: [{ state: 'frozen', xSplit: 0, ySplit: 4, showGridLines: true }]
+    });
+
+    ws2.mergeCells('A1:K1');
+    const t2 = ws2.getCell('A1');
+    t2.value = 'JS LABELS — MACHINE SETUP & CYLINDER BATCHING FORECAST';
+    t2.font = titleFont;
+    t2.fill = titleFill;
+    t2.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws2.getRow(1).height = 32;
+
+    ws2.mergeCells('A2:K2');
+    const s2 = ws2.getCell('A2');
+    s2.value = `Shop-Floor Machine Setup Reference  |  Total Dimensions: ${forecasts.length}  |  Planning Month: ${forecastForMonth}`;
+    s2.font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FFCBD5E1' } };
+    s2.fill = subtitleFill;
+    s2.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws2.getRow(2).height = 22;
+
+    ws2.getRow(3).height = 8;
+
+    const headers2 = [
+      { name: '#', width: 6, align: 'center' },
+      { name: 'Dimension Key', width: 14, align: 'center' },
+      { name: 'Dimensions (Size mm)', width: 20, align: 'left' },
+      { name: 'Associated Products', width: 30, align: 'left' },
+      { name: 'Categories', width: 18, align: 'left' },
+      { name: `Upcoming Demand Forecast (${forecastForMonth})`, width: 24, align: 'right' },
+      { name: `Current Month Sold (${currentMonthFormatted})`, width: 20, align: 'right' },
+      { name: 'Confirmed Orders', width: 16, align: 'center' },
+      { name: 'Trailing Avg/Mo', width: 16, align: 'right' },
+      { name: 'Setup Batch Hours Saved', width: 18, align: 'center' },
+      { name: 'Top Customer Demand Drivers', width: 35, align: 'left' }
+    ];
+
+    const hRow2 = ws2.getRow(4);
+    hRow2.height = 28;
+    headers2.forEach((h, idx) => {
+      const cell = hRow2.getCell(idx + 1);
+      cell.value = h.name;
+      cell.font = headerFont;
+      cell.fill = navyHeaderFill;
+      cell.alignment = { vertical: 'middle', horizontal: h.align };
+      cell.border = thinBorder;
+    });
+
+    forecasts.forEach((d, idx) => {
+      const rNum = idx + 5;
+      const row = ws2.getRow(rNum);
+      row.height = 22;
+      const isEven = idx % 2 === 0;
+      const rowFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFFFFFFF' : 'FFF8FAFC' } };
+
+      const recentMonth = d.trailingMonths?.[d.trailingMonths.length - 1];
+      const recentOrders = recentMonth?.orderCount || 0;
+      const batchHours = recentOrders > 1 ? (recentOrders - 1) * 12 : 0;
+
+      const topCusts = (d.topContributingCustomers || []).map(c => `${c.customerName} (${c.percentage}%)`).join(', ');
+
+      const rowValues = [
+        idx + 1,
+        d.dimensionKey,
+        formatDim(d.dimensionKey),
+        (d.productNames || []).join(', ') || '—',
+        (d.categories || []).join(', ') || '—',
+        d.forecastRangeHigh != null ? d.forecastRangeHigh : 'Insufficient Data',
+        d.currentMonthSoldQty || 0,
+        d.currentMonthOrderCount || 0,
+        d.averagePerMonth != null ? d.averagePerMonth : '—',
+        batchHours > 0 ? `${batchHours} hrs` : 'Standard',
+        topCusts || '—'
+      ];
+
+      rowValues.forEach((val, cIdx) => {
+        const cell = row.getCell(cIdx + 1);
+        cell.value = val;
+        cell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FF1E293B' } };
+        cell.fill = rowFill;
+        cell.border = thinBorder;
+        cell.alignment = { vertical: 'middle', horizontal: headers2[cIdx].align };
+
+        if (typeof val === 'number') {
+          cell.numFmt = '#,##0';
+        }
+      });
+    });
+
+    ws2.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: 4, column: headers2.length }
+    };
+    headers2.forEach((h, i) => {
+      ws2.getColumn(i + 1).width = h.width;
+    });
+
+    // Response headers and stream
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="JS_Labels_Production_Forecast_All_${Date.now()}.xlsx"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Error generating production all Excel report:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error generating production all Excel report' });
+    }
+  }
+};
+
+// GET /api/production/export-product?productName=&dimensionKey=&trailingMonths=2
+const exportProductProductionExcel = async (req, res) => {
+  try {
+    const { productName, trailingMonths = 2 } = req.query;
+    let { dimensionKey } = req.query;
+
+    if (!productName || !productName.trim()) {
+      return res.status(400).json({ message: 'productName is required for product export' });
+    }
+
+    const cleanProdName = productName.trim();
+    const N = Math.max(1, Math.min(parseInt(trailingMonths, 10) || 2, 12));
+
+    // Find product catalog entry if dimensionKey not provided
+    const prodDoc = await Product.findOne({ name: cleanProdName, isDeleted: { $ne: true } });
+    if (!dimensionKey && prodDoc) {
+      dimensionKey = prodDoc.dimensionKey || `${prodDoc.widthMm}x${prodDoc.heightMm}`;
+    }
+
+    // If still no dimensionKey, search lineItems
+    if (!dimensionKey) {
+      const orderSample = await Order.findOne({ "lineItems.name": cleanProdName }, { "lineItems.$": 1 });
+      if (orderSample?.lineItems?.[0]?.dimensionKey) {
+        dimensionKey = orderSample.lineItems[0].dimensionKey;
+      }
+    }
+
+    const cleanDimKey = (dimensionKey || 'Standard').trim();
+    const dimForecast = await computeDimensionForecast(cleanDimKey, N);
+
+    const productBreakdown = dimForecast?.productBreakdowns?.[cleanProdName] || {
+      productName: cleanProdName,
+      category: prodDoc?.category || 'Label',
+      unitPrice: prodDoc?.unitPrice ?? null,
+      forecastRangeLow: dimForecast?.forecastRangeLow,
+      forecastRangeHigh: dimForecast?.forecastRangeHigh,
+      lowConfidence: dimForecast?.lowConfidence,
+      sumTrailing: dimForecast?.sumTrailing,
+      averagePerMonth: dimForecast?.averagePerMonth,
+      trailingMonths: dimForecast?.trailingMonths,
+      trailingPeriodLabel: dimForecast?.trailingPeriodLabel,
+      currentMonthSoldQty: dimForecast?.currentMonthSoldQty || 0,
+      currentMonthRevenue: dimForecast?.currentMonthRevenue || 0,
+      currentMonthOrderCount: dimForecast?.currentMonthOrderCount || 0,
+      currentMonthCustomers: dimForecast?.currentMonthCustomers || [],
+      monthlyDrivers: dimForecast?.monthlyDrivers || {},
+      topContributingCustomers: dimForecast?.topContributingCustomers || []
+    };
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'JS Labels Production Engine';
+    workbook.created = new Date();
+
+    const titleFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    const subtitleFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    const navyHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+    const sectionFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    const thinBorder = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+    };
+
+    const ws = workbook.addWorksheet('Production & Demand Dossier', {
+      views: [{ showGridLines: true }]
+    });
+
+    const formatDim = (dim) => {
+      if (!dim || !dim.includes('x')) return dim || '—';
+      const [w, h] = dim.split('x');
+      return `${w}mm × ${h}mm`;
+    };
+
+    // 1. Title Banner
+    ws.mergeCells('A1:E1');
+    const tCell = ws.getCell('A1');
+    tCell.value = `JS LABELS — ${cleanProdName.toUpperCase()} PRODUCTION DOSSIER`;
+    tCell.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    tCell.fill = titleFill;
+    tCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws.getRow(1).height = 32;
+
+    ws.mergeCells('A2:E2');
+    const subCell = ws.getCell('A2');
+    subCell.value = `Planning Horizon: Trailing ${N} Months  |  Dimension: [${cleanDimKey}] ${formatDim(cleanDimKey)}  |  Exported: ${new Date().toLocaleString('en-IN')}`;
+    subCell.font = { name: 'Segoe UI', size: 9.5, italic: true, color: { argb: 'FFCBD5E1' } };
+    subCell.fill = subtitleFill;
+    subCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws.getRow(2).height = 22;
+
+    ws.getRow(3).height = 10;
+
+    // 2. Product Specifications Block (No unit price / money)
+    const specRows = [
+      ['Product Friendly Name', cleanProdName, 'Category', productBreakdown.category || 'Label'],
+      ['Dimension Key', `[${cleanDimKey}]`, 'Dimension Size (mm)', formatDim(cleanDimKey)],
+      ['Planning Horizon', `Trailing ${N} Completed Months`, 'Upcoming Planning Month', dimForecast.forecastForMonth || 'Upcoming Month'],
+      ['Upcoming Demand Forecast', productBreakdown.forecastRangeHigh != null ? `~${productBreakdown.forecastRangeHigh.toLocaleString('en-IN')} Labels` : 'Insufficient History', 'Live Month Progress', `${dimForecast.currentMonth || 'Current Month'} (${(productBreakdown.currentMonthSoldQty || 0).toLocaleString('en-IN')} Sold)`]
+    ];
+
+    let curRowIdx = 4;
+    specRows.forEach(sr => {
+      const row = ws.getRow(curRowIdx);
+      row.values = [sr[0], sr[1], sr[2], sr[3]];
+      row.height = 24;
+
+      ['A', 'C'].forEach(col => {
+        const cell = row.getCell(col);
+        cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF475569' } };
+        cell.fill = sectionFill;
+        cell.border = thinBorder;
+        cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      });
+      ['B', 'D'].forEach(col => {
+        const cell = row.getCell(col);
+        cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        cell.border = thinBorder;
+        cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      });
+      curRowIdx++;
+    });
+
+    curRowIdx++;
+
+    // 3. Trailing Completed Months History (No money columns)
+    ws.mergeCells(`A${curRowIdx}:E${curRowIdx}`);
+    const sec1 = ws.getCell(`A${curRowIdx}`);
+    sec1.value = `TRAILING COMPLETED MONTHS PERFORMANCE RECORD (${productBreakdown.trailingPeriodLabel || `Past ${N} Months`})`;
+    sec1.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+    sec1.fill = navyHeaderFill;
+    sec1.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws.getRow(curRowIdx).height = 24;
+    curRowIdx++;
+
+    const histHeaders = ['#', 'Completed Calendar Month', 'Produced / Sold Qty', 'Confirmed Orders', 'vs Trailing Avg'];
+    const hRowHist = ws.getRow(curRowIdx);
+    hRowHist.height = 24;
+    histHeaders.forEach((h, idx) => {
+      const cell = hRowHist.getCell(idx + 1);
+      cell.value = h;
+      cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF0F172A' } };
+      cell.fill = sectionFill;
+      cell.border = thinBorder;
+      cell.alignment = { vertical: 'middle', horizontal: idx >= 2 ? 'right' : 'left' };
+    });
+    curRowIdx++;
+
+    const tMonths = productBreakdown.trailingMonths || [];
+    if (tMonths.length > 0) {
+      tMonths.forEach((m, idx) => {
+        const row = ws.getRow(curRowIdx);
+        row.height = 22;
+        const diff = productBreakdown.averagePerMonth ? Math.round(((m.totalQty - productBreakdown.averagePerMonth) / productBreakdown.averagePerMonth) * 100) : 0;
+        const diffStr = diff > 0 ? `+${diff}%` : `${diff}%`;
+
+        const vals = [
+          idx + 1,
+          m.month,
+          m.totalQty || 0,
+          m.orderCount || 0,
+          diffStr
+        ];
+
+        vals.forEach((v, cIdx) => {
+          const cell = row.getCell(cIdx + 1);
+          cell.value = v;
+          cell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FF1E293B' } };
+          cell.border = thinBorder;
+          cell.alignment = { vertical: 'middle', horizontal: cIdx >= 2 ? 'right' : 'left' };
+          if (cIdx === 2 || cIdx === 3) cell.numFmt = '#,##0';
+        });
+        curRowIdx++;
+      });
+    } else {
+      const row = ws.getRow(curRowIdx);
+      ws.mergeCells(`A${curRowIdx}:E${curRowIdx}`);
+      row.getCell('A').value = 'No prior completed calendar month records found for this product.';
+      row.getCell('A').font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FF64748B' } };
+      row.height = 20;
+      curRowIdx++;
+    }
+
+    curRowIdx++;
+
+    // 4. Current Month Sales Performance (No money)
+    ws.mergeCells(`A${curRowIdx}:E${curRowIdx}`);
+    const sec2 = ws.getCell(`A${curRowIdx}`);
+    sec2.value = `CURRENT LIVE MONTH DEMAND (${dimForecast.currentMonth || 'Current Month'})`;
+    sec2.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+    sec2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF065F46' } }; // Emerald 800
+    sec2.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws.getRow(curRowIdx).height = 24;
+    curRowIdx++;
+
+    const curKpis = [
+      ['Current Month Sold Units', `${(productBreakdown.currentMonthSoldQty || 0).toLocaleString('en-IN')} Labels`],
+      ['Confirmed Orders Received', `${productBreakdown.currentMonthOrderCount || 0} Orders`],
+      ['Production Ledger Status', 'Active Tracking In Progress']
+    ];
+    curKpis.forEach(k => {
+      const row = ws.getRow(curRowIdx);
+      row.values = [k[0], k[1]];
+      row.height = 22;
+      row.getCell(1).font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF475569' } };
+      row.getCell(1).fill = sectionFill;
+      row.getCell(1).border = thinBorder;
+      row.getCell(2).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF065F46' } };
+      row.getCell(2).border = thinBorder;
+      curRowIdx++;
+    });
+
+    curRowIdx++;
+
+    // 5. Top Customer Demand Drivers
+    ws.mergeCells(`A${curRowIdx}:E${curRowIdx}`);
+    const sec3 = ws.getCell(`A${curRowIdx}`);
+    sec3.value = 'TOP CUSTOMER DEMAND DRIVERS';
+    sec3.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+    sec3.fill = navyHeaderFill;
+    sec3.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws.getRow(curRowIdx).height = 24;
+    curRowIdx++;
+
+    const custHeaders = ['#', 'Customer Name', 'Company', 'Volume Ordered', 'Orders', 'Demand Share %'];
+    const hRowCust = ws.getRow(curRowIdx);
+    hRowCust.height = 24;
+    custHeaders.forEach((h, idx) => {
+      const cell = hRowCust.getCell(idx + 1);
+      cell.value = h;
+      cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF0F172A' } };
+      cell.fill = sectionFill;
+      cell.border = thinBorder;
+      cell.alignment = { vertical: 'middle', horizontal: idx >= 3 ? 'right' : 'left' };
+    });
+    curRowIdx++;
+
+    const topDrivers = productBreakdown.topContributingCustomers || [];
+    if (topDrivers.length > 0) {
+      topDrivers.slice(0, 10).forEach((c, idx) => {
+        const row = ws.getRow(curRowIdx);
+        row.height = 22;
+        const vals = [
+          idx + 1,
+          c.customerName || 'Customer',
+          c.company && c.company !== '—' ? c.company : '—',
+          c.qty || 0,
+          c.orderCount || 1,
+          `${c.percentage || 0}%`
+        ];
+        vals.forEach((v, cIdx) => {
+          const cell = row.getCell(cIdx + 1);
+          cell.value = v;
+          cell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FF1E293B' } };
+          cell.border = thinBorder;
+          cell.alignment = { vertical: 'middle', horizontal: cIdx >= 3 ? 'right' : 'left' };
+          if (cIdx === 3) cell.numFmt = '#,##0';
+        });
+        curRowIdx++;
+      });
+    } else {
+      const row = ws.getRow(curRowIdx);
+      ws.mergeCells(`A${curRowIdx}:E${curRowIdx}`);
+      row.getCell('A').value = 'No customer breakdown recorded for this period.';
+      row.getCell('A').font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FF64748B' } };
+      row.height = 20;
+      curRowIdx++;
+    }
+
+    // Set column widths
+    ws.getColumn(1).width = 8;
+    ws.getColumn(2).width = 30;
+    ws.getColumn(3).width = 24;
+    ws.getColumn(4).width = 20;
+    ws.getColumn(5).width = 18;
+
+    const safeName = cleanProdName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}_Production_Dossier.xlsx"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Error generating product production Excel dossier:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error generating product production Excel dossier' });
+    }
+  }
+};
+
 module.exports = {
   getDimensionForecast,
   getAllDimensionsForecast,
   getDimensionHistory,
   getDimensionsList,
-  getCurrentMonthProductsSold
+  getCurrentMonthProductsSold,
+  exportAllProductionExcel,
+  exportProductProductionExcel
 };

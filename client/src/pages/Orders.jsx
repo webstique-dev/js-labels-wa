@@ -26,6 +26,7 @@ import {
   Search
 } from 'lucide-react';
 import { SkeletonTable } from '../components/ui/Skeleton';
+import { exportAllOrdersToExcel, exportSingleOrderToExcel } from '../utils/exportUtils';
 
 export default function Orders() {
   const navigate = useNavigate();
@@ -40,8 +41,37 @@ export default function Orders() {
   const [viewingOrder, setViewingOrder] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [exportingAll, setExportingAll] = useState(false);
+  const [exportingOrderId, setExportingOrderId] = useState(null);
 
   const canDelete = role === 'super_admin';
+
+  const handleExportAllOrders = async () => {
+    try {
+      setExportingAll(true);
+      await exportAllOrdersToExcel({
+        status: statusFilter,
+        notify
+      });
+    } catch (err) {
+      console.error('Export all orders error:', err);
+    } finally {
+      setExportingAll(false);
+    }
+  };
+
+  const handleExportSingleOrder = async (ord) => {
+    if (!ord?._id) return;
+    try {
+      setExportingOrderId(ord._id);
+      const safeNo = ord.orderNo || `ORD-${ord._id.slice(-6)}`;
+      await exportSingleOrderToExcel(ord._id, safeNo, notify);
+    } catch (err) {
+      console.error('Export single order error:', err);
+    } finally {
+      setExportingOrderId(null);
+    }
+  };
 
   const fetchOrders = async () => {
     try {
@@ -150,14 +180,16 @@ export default function Orders() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
-          {/* Export Button */}
-          {/* <button
-            onClick={() => notify.success('Orders report exported successfully')}
-            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-2xs transition cursor-pointer"
+          {/* Export All Orders Button */}
+          <button
+            onClick={handleExportAllOrders}
+            disabled={exportingAll}
+            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-2xs transition cursor-pointer disabled:opacity-50"
+            title="Download complete orders register in Excel format (.xlsx)"
           >
-            <Download size={14} className="text-slate-400" />
-            <span>Export CSV</span>
-          </button> */}
+            <Download size={14} className={`text-slate-400 ${exportingAll ? 'animate-bounce' : ''}`} />
+            <span>{exportingAll ? 'Exporting...' : 'Export All (.xlsx)'}</span>
+          </button>
 
           {/* New Order Button */}
           <button
@@ -364,7 +396,7 @@ export default function Orders() {
                           <th className="p-4 py-3.5">Customer</th>
                           <th className="p-4 py-3.5">
                             <div className="flex items-center gap-1.5">
-                              <span>Order Date</span>
+                              <span>PO Date</span>
                               <ArrowUpDown size={12} className="text-slate-400" />
                             </div>
                           </th>
@@ -427,13 +459,24 @@ export default function Orders() {
                                 </div>
                               </td>
                               <td className="p-4 text-center">
-                                <div className="flex items-center justify-center">
+                                <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     onClick={() => setViewingOrder(ord)}
                                     className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
                                     title="View Order Details"
                                   >
                                     <Eye size={15} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExportSingleOrder(ord);
+                                    }}
+                                    disabled={exportingOrderId === ord._id}
+                                    className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200 transition cursor-pointer disabled:opacity-50"
+                                    title="Export Order Dossier to Excel (.xlsx)"
+                                  >
+                                    <Download size={14} className={exportingOrderId === ord._id ? 'animate-bounce' : ''} />
                                   </button>
                                 </div>
                               </td>
@@ -478,7 +521,7 @@ export default function Orders() {
                       >
                         <div className="grid grid-cols-2 gap-3 text-xs pt-1">
                           <div>
-                            <span className="text-slate-400 font-medium text-[11px] block">Order Date</span>
+                            <span className="text-slate-400 font-medium text-[11px] block">PO Date</span>
                             <span className="font-semibold text-slate-800">{orderDateStr}</span>
                           </div>
                           <div>
@@ -524,7 +567,20 @@ export default function Orders() {
                             className="flex-1 py-2 px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition text-center cursor-pointer flex items-center justify-center gap-1.5"
                           >
                             <Eye size={14} />
-                            <span>View Full Details</span>
+                            <span>Details</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleExportSingleOrder(ord);
+                            }}
+                            disabled={exportingOrderId === ord._id}
+                            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                            title="Export Order Dossier to Excel (.xlsx)"
+                          >
+                            <Download size={13} className={exportingOrderId === ord._id ? 'animate-bounce' : ''} />
+                            <span>Export</span>
                           </button>
                           {ord.customerId?._id && (
                             <button
@@ -596,7 +652,7 @@ export default function Orders() {
                   {renderStatusBadge(viewingOrder.status)}
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-slate-400 font-medium">Order Date</p>
+                  <p className="text-[10px] text-slate-400 font-medium">PO Date</p>
                   <p className="font-semibold text-slate-800">
                     {new Date(viewingOrder.orderDate || viewingOrder.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>
@@ -687,7 +743,17 @@ export default function Orders() {
               )}
             </div>
 
-            <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => handleExportSingleOrder(viewingOrder)}
+                disabled={exportingOrderId === viewingOrder._id}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs transition disabled:opacity-50"
+                title="Export Order Dossier to Excel (.xlsx)"
+              >
+                <Download size={14} className={exportingOrderId === viewingOrder._id ? 'animate-bounce' : ''} />
+                <span>{exportingOrderId === viewingOrder._id ? 'Exporting...' : 'Export Order (.xlsx)'}</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setViewingOrder(null)}

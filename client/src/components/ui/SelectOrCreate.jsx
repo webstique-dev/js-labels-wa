@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { ChevronDown, Search, Plus, Check, X, Trash2 } from 'lucide-react';
+import { ChevronDown, Search, Plus, Check, X, Trash2, Pencil } from 'lucide-react';
 
 /**
  * Reusable Select-or-Create searchable combobox dropdown.
@@ -9,8 +9,8 @@ import { ChevronDown, Search, Plus, Check, X, Trash2 } from 'lucide-react';
  * - Constrained maximum height to prevent viewport clipping
  * - 100% hidden scrollbars across all browsers while retaining full wheel/touch/keyboard scrolling
  * - Clean "+ Add 'New Value'" displayed prominently at the top
+ * - Inline edit option capability with rename support
  * - Soft-delete trash icon for custom options with confirmation callback
- * - Protected system options (cannot be deleted)
  * - Mobile & touch friendly
  * - Full keyboard navigation (ArrowUp/Down, Enter, Escape, PageUp/Down)
  * - Click-outside dismiss
@@ -26,9 +26,12 @@ export default function SelectOrCreate({
   disabled = false,
   allowCustom = true,
   allowDelete = true,
+  allowEdit = true,
   onCreateOption,
   onDeleteOption,
+  onEditOption,
   isOptionRemovable,
+  isOptionEditable,
   className = '',
   id,
   name,
@@ -44,8 +47,13 @@ export default function SelectOrCreate({
   const [dropdownPlacement, setDropdownPlacement] = useState('down'); // 'down' | 'up'
   const [maxListHeight, setMaxListHeight] = useState(200);
 
+  // Inline edit state
+  const [editingOptionKey, setEditingOptionKey] = useState(null);
+  const [editingText, setEditingText] = useState('');
+
   const containerRef = useRef(null);
   const searchInputRef = useRef(null);
+  const editInputRef = useRef(null);
   const listRef = useRef(null);
 
   // Normalize protected options map for fast case-insensitive lookup
@@ -79,14 +87,67 @@ export default function SelectOrCreate({
       const isRemovable = isOptionRemovable
         ? isOptionRemovable(optValue)
         : allowDelete && !isProtected;
+      const isEditable = isOptionEditable
+        ? isOptionEditable(optValue)
+        : allowEdit && !isProtected;
 
       return {
         value: optValue,
         label: optLabel,
-        isRemovable
+        isRemovable,
+        isEditable
       };
     });
-  }, [options, formatOptionLabel, protectedSet, isOptionRemovable, allowDelete]);
+  }, [options, formatOptionLabel, protectedSet, isOptionRemovable, isOptionEditable, allowDelete, allowEdit]);
+
+  // Focus edit input automatically when inline edit opens
+  useEffect(() => {
+    if (editingOptionKey !== null && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingOptionKey]);
+
+  // Start editing an option
+  const handleStartEdit = (e, opt) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingOptionKey(opt.value);
+    setEditingText(opt.label !== undefined ? String(opt.label) : String(opt.value));
+  };
+
+  // Cancel editing
+  const handleCancelEdit = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setEditingOptionKey(null);
+    setEditingText('');
+  };
+
+  // Save edited option
+  const handleSubmitEdit = (e, oldValue) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const trimmed = editingText.trim();
+    if (!trimmed) {
+      handleCancelEdit();
+      return;
+    }
+    if (String(trimmed).toLowerCase() !== String(oldValue).toLowerCase() || trimmed !== String(oldValue)) {
+      if (onEditOption) {
+        onEditOption(oldValue, trimmed);
+      }
+      if (String(value).toLowerCase() === String(oldValue).toLowerCase()) {
+        onChange(trimmed);
+      }
+    }
+    setEditingOptionKey(null);
+    setEditingText('');
+  };
 
   // Find currently selected item label
   const selectedLabel = useMemo(() => {
@@ -439,6 +500,70 @@ export default function SelectOrCreate({
                 String(opt.value).toLowerCase() === String(value).toLowerCase();
               const isHighlighted = itemVisualIndex === highlightedIndex;
 
+              const isEditingThis =
+                editingOptionKey !== null &&
+                String(editingOptionKey).toLowerCase() === String(opt.value).toLowerCase();
+
+              if (isEditingThis) {
+                return (
+                  <div
+                    key={`edit-${opt.value}-${idx}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-300 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <input
+                      ref={editInputRef}
+                      type="text"
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSubmitEdit(e, opt.value);
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          handleCancelEdit(e);
+                        }
+                      }}
+                      className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 min-w-0"
+                      placeholder="Rename option..."
+                    />
+                    <button
+                      type="button"
+                      title="Save change"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => handleSubmitEdit(e, opt.value)}
+                      className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition cursor-pointer shrink-0"
+                    >
+                      <Check size={13} className="stroke-[2.5]" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Cancel"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={handleCancelEdit}
+                      className="p-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition cursor-pointer shrink-0"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={`${opt.value}-${idx}`}
@@ -460,12 +585,28 @@ export default function SelectOrCreate({
                 >
                   <span className="truncate flex-1 text-left">{opt.label}</span>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Delete button for custom/removable options */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Edit button */}
+                    {opt.isEditable && (
+                      <button
+                        type="button"
+                        title="Edit option"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => handleStartEdit(e, opt)}
+                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition opacity-80 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 cursor-pointer"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    )}
+
+                    {/* Delete button */}
                     {opt.isRemovable && (
                       <button
                         type="button"
-                        title="Delete custom option"
+                        title="Delete option"
                         onMouseDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -473,13 +614,13 @@ export default function SelectOrCreate({
                         onClick={(e) => handleDelete(e, opt.value)}
                         className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition opacity-80 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 cursor-pointer"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={12} />
                       </button>
                     )}
 
                     {/* Checkmark for selected item */}
                     {isSelected && (
-                      <Check size={14} className="text-red-600 shrink-0 stroke-[2.5]" />
+                      <Check size={14} className="text-red-600 shrink-0 stroke-[2.5] ml-0.5" />
                     )}
                   </div>
                 </div>

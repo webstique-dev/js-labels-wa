@@ -31,15 +31,18 @@ import {
   X,
   ArrowUp,
   Search,
-  Activity as ActivityIcon
+  Activity as ActivityIcon,
+  ShoppingBag,
+  Download
 } from 'lucide-react';
 import AccordionCard from '../components/ui/AccordionCard';
 import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
 import NewOrderModal from '../components/NewOrderModal';
 import { Skeleton } from '../components/ui/Skeleton';
+import { exportAllOrdersToExcel, exportSingleOrderToExcel } from '../utils/exportUtils';
 
 /**
- * Responsive Skeleton Loader for Dashboard matching exact 3-row layout
+ * Responsive Skeleton Loader for Dashboard matching exact modern layout
  */
 function DashboardSkeleton({ isManagerOrAdmin = true }) {
   return (
@@ -56,36 +59,34 @@ function DashboardSkeleton({ isManagerOrAdmin = true }) {
         </div>
       </div>
 
-      {isManagerOrAdmin && (
-        <>
-          {/* Row 1: Top 4 KPI Stat Cards Skeleton */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <div key={idx} className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="w-10 h-10 rounded-full shrink-0" />
-                  <Skeleton className="h-4 w-28" />
-                </div>
-                <Skeleton className="h-8 w-24 mt-2" />
-                <Skeleton className="h-4 w-36" />
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Row 2: KPI Action Cards Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        {Array.from({ length: 4 }).map((_, idx) => (
+      {/* KPI Stat Cards Skeleton */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isManagerOrAdmin ? 'lg:grid-cols-3 xl:grid-cols-5' : 'xl:grid-cols-4'} gap-4 2xl:gap-5`}>
+        {Array.from({ length: isManagerOrAdmin ? 5 : 4 }).map((_, idx) => (
           <div key={idx} className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
             <div className="space-y-2">
-              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-28" />
               <Skeleton className="h-8 w-20" />
               <Skeleton className="h-3.5 w-24" />
             </div>
             <Skeleton className="w-12 h-12 rounded-full shrink-0" />
           </div>
         ))}
+      </div>
+
+      {/* Recent Orders Skeleton */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-36" />
+            <Skeleton className="h-3.5 w-56" />
+          </div>
+          <Skeleton className="h-8 w-28 rounded-xl" />
+        </div>
+        <div className="space-y-3 pt-2">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <Skeleton key={idx} className="h-12 w-full rounded-xl" />
+          ))}
+        </div>
       </div>
 
       {isManagerOrAdmin && (
@@ -160,7 +161,10 @@ export default function Dashboard() {
   const [trendData, setTrendData] = useState([]);
   const [activities, setActivities] = useState([]);
   const [alerts, setAlerts] = useState(null);
+  const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exportingOrders, setExportingOrders] = useState(false);
+  const [exportingOrderId, setExportingOrderId] = useState(null);
 
   // Dashboard Filters State
   const [period, setPeriod] = useState('this_month');
@@ -176,6 +180,30 @@ export default function Dashboard() {
   const [modalTypeFilter, setModalTypeFilter] = useState('all');
 
   const isManagerOrAdmin = role === 'super_admin' || role === 'manager';
+
+  const handleExportAllOrders = async () => {
+    try {
+      setExportingOrders(true);
+      await exportAllOrdersToExcel({ notify });
+    } catch (err) {
+      console.error('Export all orders error:', err);
+    } finally {
+      setExportingOrders(false);
+    }
+  };
+
+  const handleExportSingleOrder = async (ord) => {
+    if (!ord?._id) return;
+    try {
+      setExportingOrderId(ord._id);
+      const safeNo = ord.orderNo || `ORD-${ord._id.slice(-6)}`;
+      await exportSingleOrderToExcel(ord._id, safeNo, notify);
+    } catch (err) {
+      console.error('Export order error:', err);
+    } finally {
+      setExportingOrderId(null);
+    }
+  };
 
   const handleOpenActivitiesModal = async () => {
     setShowActivitiesModal(true);
@@ -225,12 +253,16 @@ export default function Dashboard() {
 
       const queryString = params.toString() ? `?${params.toString()}` : '';
 
-      const [sumRes, funRes, trendRes, actRes, altRes] = await Promise.all([
+      const [sumRes, funRes, trendRes, actRes, altRes, ordRes] = await Promise.all([
         api.get(`/dashboard/summary${queryString}`),
         api.get(`/dashboard/funnel${queryString}`),
         api.get(`/dashboard/conversion-trend${queryString}`),
         api.get(`/dashboard/activity-feed${queryString ? queryString + '&limit=5' : '?limit=5'}`),
-        api.get(`/dashboard/alerts${queryString}`)
+        api.get(`/dashboard/alerts${queryString}`),
+        api.get('/orders?limit=6').catch((err) => {
+          console.warn('Non-fatal: Failed to load recent orders for dashboard:', err);
+          return { data: { orders: [] } };
+        })
       ]);
 
       setSummary(sumRes.data);
@@ -238,6 +270,7 @@ export default function Dashboard() {
       setTrendData(trendRes.data || []);
       setActivities(actRes.data || []);
       setAlerts(altRes.data);
+      setRecentOrders(ordRes.data?.orders || []);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
       notify.error(err.response?.data?.message || 'Error loading dashboard metrics');
@@ -283,6 +316,70 @@ export default function Dashboard() {
       'bg-purple-50 text-purple-600 border-purple-100'
     ];
     return { icon: <Users size={16} />, bg: colors[index % colors.length] };
+  };
+
+  // Order Status Badge styling helper
+  const renderOrderStatusBadge = (statusStr) => {
+    const s = (statusStr || '').toLowerCase();
+    switch (s) {
+      case 'delivered':
+        return (
+          <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            Delivered
+          </span>
+        );
+      case 'confirmed':
+        return (
+          <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            Confirmed
+          </span>
+        );
+      case 'production':
+      case 'in_production':
+        return (
+          <span className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-100 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            In Production
+          </span>
+        );
+      case 'quality_check':
+        return (
+          <span className="px-2.5 py-1 bg-cyan-50 text-cyan-700 border border-cyan-100 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+            Quality Check
+          </span>
+        );
+      case 'dispatched':
+        return (
+          <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Dispatched
+          </span>
+        );
+      case 'pending':
+        return (
+          <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+            Pending
+          </span>
+        );
+      case 'cancelled':
+        return (
+          <span className="px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-100 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+            Cancelled
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2.5 py-1 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap capitalize">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+            {statusStr || 'Pending'}
+          </span>
+        );
+    }
   };
 
   if (loading && !summary) {
@@ -335,10 +432,8 @@ export default function Dashboard() {
       </div>
 
       {isManagerOrAdmin && (
-        <>
-          {/* Interactive Filters Toolbar Bar wrapped in CollapsibleFilterCard */}
-          <CollapsibleFilterCard
-            title="Dashboard Filters"
+        <CollapsibleFilterCard
+          title="Dashboard Filters"
             activeCount={isFilterActive ? 1 : 0}
             onClear={handleResetFilters}
           >
@@ -410,109 +505,39 @@ export default function Dashboard() {
               )}
             </div>
           </CollapsibleFilterCard>
-
-          {/* ROW 1: Top 4 KPI Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 2xl:gap-6">
-            
-            {/* 1. Total Leads */}
-            <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 hover:shadow-md transition duration-200">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                  <Users size={20} />
-                </div>
-                <span className="text-slate-500 font-semibold text-xs 2xl:text-sm tracking-tight">Total Leads</span>
-              </div>
-              <div>
-                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">
-                  {(summary?.totalLeads?.count ?? 0).toLocaleString('en-IN')}
-                </div>
-                <div className="flex items-center gap-1.5 mt-1.5 text-xs 2xl:text-sm">
-                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                    <ArrowUp size={13} strokeWidth={2.5} />
-                    <span>{summary?.totalLeads?.change ?? 0}%</span>
-                  </span>
-                  <span className="text-slate-400 font-normal">vs last month</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Converted Customers */}
-            <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 hover:shadow-md transition duration-200">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                  <UserCheck size={20} />
-                </div>
-                <span className="text-slate-500 font-semibold text-xs 2xl:text-sm tracking-tight">Converted Customers</span>
-              </div>
-              <div>
-                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">
-                  {(summary?.convertedCustomers?.count ?? 0).toLocaleString('en-IN')}
-                </div>
-                <div className="flex items-center gap-1.5 mt-1.5 text-xs 2xl:text-sm">
-                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                    <ArrowUp size={13} strokeWidth={2.5} />
-                    <span>{summary?.convertedCustomers?.change ?? 0}%</span>
-                  </span>
-                  <span className="text-slate-400 font-normal">vs last month</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Orders Delivered */}
-            <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 hover:shadow-md transition duration-200">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
-                  <Package size={20} />
-                </div>
-                <span className="text-slate-500 font-semibold text-xs 2xl:text-sm tracking-tight">Orders Delivered</span>
-              </div>
-              <div>
-                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">
-                  {(summary?.ordersDelivered?.count ?? 0).toLocaleString('en-IN')}
-                </div>
-                <div className="flex items-center gap-1.5 mt-1.5 text-xs 2xl:text-sm">
-                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                    <ArrowUp size={13} strokeWidth={2.5} />
-                    <span>{summary?.ordersDelivered?.change ?? 0}%</span>
-                  </span>
-                  <span className="text-slate-400 font-normal">vs last month</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Repeat Orders */}
-            <div className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 hover:border-slate-300 hover:shadow-md transition duration-200">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                  <RefreshCw size={20} />
-                </div>
-                <span className="text-slate-500 font-semibold text-xs 2xl:text-sm tracking-tight">Repeat Orders</span>
-              </div>
-              <div>
-                <div className="text-3xl 2xl:text-4xl font-bold text-slate-900 tracking-tight">
-                  {(summary?.repeatOrders?.count ?? 0).toLocaleString('en-IN')}
-                </div>
-                <div className="flex items-center gap-1.5 mt-1.5 text-xs 2xl:text-sm">
-                  <span className="font-semibold text-emerald-600 flex items-center gap-0.5">
-                    <ArrowUp size={13} strokeWidth={2.5} />
-                    <span>{summary?.repeatOrders?.change ?? 0}%</span>
-                  </span>
-                  <span className="text-slate-400 font-normal">vs last month</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </>
       )}
 
-      {/* KPI Action Cards Row (Overdue Follow-ups, Due Today, Reminders, Forecast) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        
-        {/* 1. Overdue Follow-ups */}
+      {/* Unified KPI Stat Cards Row (Clean, Simple, Relevant Metrics) */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isManagerOrAdmin ? 'lg:grid-cols-3 xl:grid-cols-5' : 'xl:grid-cols-4'} gap-4 2xl:gap-5`}>
+        {/* 1. Total Leads (for Manager/Admin) */}
+        {isManagerOrAdmin && (
+          <Link
+            to="/leads"
+            className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-indigo-300 hover:shadow-sm transition group"
+          >
+            <div>
+              <span className="text-slate-600 font-semibold text-xs">Total Leads</span>
+              <div className="text-3xl font-bold text-slate-900 tracking-tight mt-2">
+                {(summary?.totalLeads?.count ?? 0).toLocaleString('en-IN')}
+              </div>
+              <div className="flex items-center gap-1 mt-1 text-xs">
+                <span className="font-semibold text-emerald-600 flex items-center">
+                  <ArrowUp size={12} strokeWidth={2.5} />
+                  <span>{summary?.totalLeads?.change ?? 0}%</span>
+                </span>
+                <span className="text-slate-400 font-normal">vs last month</span>
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <Users size={22} />
+            </div>
+          </Link>
+        )}
+
+        {/* 2. Overdue Follow-ups */}
         <Link
           to="/followups?status=overdue"
-          className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-rose-300 transition group"
+          className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-rose-300 hover:shadow-sm transition group"
         >
           <div>
             <span className="text-slate-600 font-semibold text-xs">Overdue Follow-ups</span>
@@ -526,10 +551,10 @@ export default function Dashboard() {
           </div>
         </Link>
 
-        {/* 2. Due Today */}
+        {/* 3. Due Today */}
         <Link
           to="/followups?status=open"
-          className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-blue-300 transition group"
+          className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-blue-300 hover:shadow-sm transition group"
         >
           <div>
             <span className="text-slate-600 font-semibold text-xs">Due Today</span>
@@ -543,10 +568,10 @@ export default function Dashboard() {
           </div>
         </Link>
 
-        {/* 3. Upcoming Reminders */}
+        {/* 4. Upcoming Reminders */}
         <Link
           to="/reminders"
-          className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-indigo-300 transition group"
+          className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-indigo-300 hover:shadow-sm transition group"
         >
           <div>
             <span className="text-slate-600 font-semibold text-xs">Upcoming Reminders</span>
@@ -560,10 +585,10 @@ export default function Dashboard() {
           </div>
         </Link>
 
-        {/* 4. Reorder Forecast */}
+        {/* 5. Reorder Forecast */}
         <Link
           to="/customers"
-          className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-emerald-300 transition group"
+          className="p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between hover:border-emerald-300 hover:shadow-sm transition group"
         >
           <div className="min-w-0 pr-2">
             <div className="flex items-center gap-1.5">
@@ -577,7 +602,7 @@ export default function Dashboard() {
 
             <div className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mt-2 truncate">
               {alerts?.reorderForecast > 0
-                ? formatReorderAmount(alerts.reorderForecast)
+                ? `₹${Number(alerts.reorderForecast).toLocaleString('en-IN')}`
                 : (alerts?.reorderForecastQty > 0
                     ? `~${alerts.reorderForecastQty.toLocaleString('en-IN')} Labels`
                     : '—')}
@@ -587,7 +612,7 @@ export default function Dashboard() {
               {alerts?.reorderForecast > 0 ? (
                 alerts?.pricingCoverage && alerts.pricingCoverage.pricedCount < alerts.pricingCoverage.totalCount ? (
                   <span className="text-blue-600 font-semibold">
-                    Next 30D ({alerts.pricingCoverage.pricedCount}/{alerts.pricingCoverage.totalCount} customers priced)
+                    Next 30D ({alerts.pricingCoverage.pricedCount}/{alerts.pricingCoverage.totalCount} priced)
                   </span>
                 ) : (
                   <span className="text-blue-600 font-semibold">Next 30 Days Expected</span>
@@ -603,7 +628,235 @@ export default function Dashboard() {
             <TrendingUp size={22} />
           </div>
         </Link>
+      </div>
 
+      {/* Recent Orders Section */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        {/* Section Header */}
+        <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100/80">
+              <ShoppingBag size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-slate-900 text-base sm:text-lg tracking-tight">Recent Orders</h2>
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
+                  {recentOrders.length}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">
+                Latest customer orders recorded with client and production details
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportAllOrders}
+              disabled={exportingOrders}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl transition cursor-pointer shadow-2xs disabled:opacity-50"
+              title="Download all orders register in Excel format (.xlsx)"
+            >
+              <Download size={13} className={`text-slate-400 ${exportingOrders ? 'animate-bounce' : ''}`} />
+              <span>{exportingOrders ? 'Exporting...' : 'Export All'}</span>
+            </button>
+            <Link
+              to="/orders"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/70 border border-blue-100 px-3.5 py-1.5 rounded-xl transition self-start sm:self-auto cursor-pointer"
+            >
+              <span>View All Orders</span>
+              <ArrowRight size={13} />
+            </Link>
+          </div>
+        </div>
+
+        {/* Orders Content */}
+        {recentOrders && recentOrders.length > 0 ? (
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-500 font-semibold text-[11px] bg-slate-50/60 uppercase tracking-wider">
+                    <th className="p-4 py-3.5 pl-6">Order Number</th>
+                    <th className="p-4 py-3.5">Customer</th>
+                    <th className="p-4 py-3.5">PO Date</th>
+                    <th className="p-4 py-3.5">Product</th>
+                    <th className="p-4 py-3.5 text-right">Quantity</th>
+                    <th className="p-4 py-3.5 text-center">Order Status</th>
+                    <th className="p-4 py-3.5 pr-6 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recentOrders.map((ord) => {
+                    const custName = ord.customerId?.name || ord.customerName || 'N/A';
+                    const company = ord.customerId?.company || ord.company || '';
+                    const formattedOrderNo = ord.orderNo || `ORD-${ord._id?.slice(-6)}`;
+                    const orderDateStr = ord.orderDate
+                      ? new Date(ord.orderDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : 'N/A';
+                    const firstItem = ord.lineItems?.[0];
+                    const prodName = firstItem?.name || firstItem?.productId?.name || firstItem?.dimensionKey || 'Custom Labels';
+                    const additionalCount = (ord.lineItems?.length || 1) - 1;
+                    const totalQty = ord.lineItems?.reduce((sum, it) => sum + (it.qty || 0), 0) || ord.qty || 0;
+
+                    return (
+                      <tr key={ord._id} className="hover:bg-slate-50/70 transition group">
+                        <td className="p-4 pl-6">
+                          <Link
+                            to="/orders"
+                            className="font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5"
+                          >
+                            <span>{formattedOrderNo}</span>
+                          </Link>
+                        </td>
+                        <td className="p-4">
+                          <p className="font-bold text-slate-900 leading-tight">{custName}</p>
+                          {company && (
+                            <p className="text-[11px] text-slate-400 font-normal mt-0.5 truncate max-w-[200px]">
+                              {company}
+                            </p>
+                          )}
+                        </td>
+                        <td className="p-4 text-slate-700 font-medium whitespace-nowrap">
+                          {orderDateStr}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-1.5 max-w-[240px]">
+                            <span className="font-semibold text-slate-800 truncate" title={prodName}>
+                              {prodName}
+                            </span>
+                            {additionalCount > 0 && (
+                              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                +{additionalCount} more
+                              </span>
+                            )}
+                          </div>
+                          {firstItem?.dimensionKey && (
+                            <p className="text-[11px] text-slate-400 font-normal truncate mt-0.5">
+                              {firstItem.dimensionKey}
+                            </p>
+                          )}
+                        </td>
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <span className="font-bold text-slate-900">
+                            {totalQty.toLocaleString('en-IN')}
+                          </span>
+                          <span className="text-slate-400 text-[11px] ml-1 font-normal">units</span>
+                        </td>
+                        <td className="p-4 text-center whitespace-nowrap">
+                          {renderOrderStatusBadge(ord.status)}
+                        </td>
+                        <td className="p-4 pr-6 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleExportSingleOrder(ord)}
+                              disabled={exportingOrderId === ord._id}
+                              className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg inline-flex items-center justify-center transition cursor-pointer disabled:opacity-50"
+                              title="Export Order Dossier to Excel (.xlsx)"
+                            >
+                              <Download size={14} className={exportingOrderId === ord._id ? 'animate-bounce' : ''} />
+                            </button>
+                            <Link
+                              to="/orders"
+                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg inline-flex items-center justify-center transition"
+                              title="View Order"
+                            >
+                              <ArrowRight size={14} />
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="block md:hidden divide-y divide-slate-100">
+              {recentOrders.map((ord) => {
+                const custName = ord.customerId?.name || ord.customerName || 'N/A';
+                const company = ord.customerId?.company || ord.company || '';
+                const formattedOrderNo = ord.orderNo || `ORD-${ord._id?.slice(-6)}`;
+                const orderDateStr = ord.orderDate
+                  ? new Date(ord.orderDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'N/A';
+                const firstItem = ord.lineItems?.[0];
+                const prodName = firstItem?.name || firstItem?.productId?.name || firstItem?.dimensionKey || 'Custom Labels';
+                const additionalCount = (ord.lineItems?.length || 1) - 1;
+                const totalQty = ord.lineItems?.reduce((sum, it) => sum + (it.qty || 0), 0) || ord.qty || 0;
+
+                return (
+                  <div key={ord._id} className="p-4 space-y-3 hover:bg-slate-50/50 transition">
+                    <div className="flex items-center justify-between gap-2">
+                      <Link to="/orders" className="font-bold text-sm text-blue-600 hover:underline">
+                        {formattedOrderNo}
+                      </Link>
+                      {renderOrderStatusBadge(ord.status)}
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm leading-tight">{custName}</p>
+                      {company && <p className="text-xs text-slate-400 mt-0.5">{company}</p>}
+                    </div>
+
+                    <div className="bg-slate-50/80 rounded-xl p-3 grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase font-semibold text-slate-400 block">Product</span>
+                        <span className="font-medium text-slate-800 truncate block mt-0.5" title={prodName}>
+                          {prodName} {additionalCount > 0 ? `(+${additionalCount})` : ''}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-semibold text-slate-400 block">Quantity</span>
+                        <span className="font-bold text-slate-900 block mt-0.5">
+                          {totalQty.toLocaleString('en-IN')} units
+                        </span>
+                      </div>
+                      <div className="col-span-2 pt-2 mt-1 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>PO Date: <strong className="text-slate-700">{orderDateStr}</strong></span>
+                        <div className="flex items-center gap-2.5">
+                          <button
+                            onClick={() => handleExportSingleOrder(ord)}
+                            disabled={exportingOrderId === ord._id}
+                            className="text-emerald-600 hover:text-emerald-700 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                            title="Export to Excel (.xlsx)"
+                          >
+                            <Download size={11} className={exportingOrderId === ord._id ? 'animate-bounce' : ''} />
+                            <span>Export</span>
+                          </button>
+                          <Link to="/orders" className="text-blue-600 font-semibold inline-flex items-center gap-1">
+                            <span>Details</span>
+                            <ArrowRight size={11} />
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="p-8 sm:p-12 text-center">
+            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+              <ShoppingBag size={22} />
+            </div>
+            <h3 className="font-bold text-slate-800 text-sm">No Recent Orders</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto font-normal">
+              New orders received in the system will automatically appear here with live updates.
+            </p>
+            <Link
+              to="/orders"
+              className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+            >
+              <span>Go to Orders Page</span>
+              <ArrowRight size={12} />
+            </Link>
+          </div>
+        )}
       </div>
 
       {isManagerOrAdmin && (

@@ -2240,14 +2240,21 @@ function KanbanLeadCard({
   const menuRef = useRef(null);
 
   useEffect(() => {
+    if (!showMenu) return;
+
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setShowMenu(false);
       }
     };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showMenu]);
 
   const getPriorityColorClass = (p) => {
     switch (p) {
@@ -2439,7 +2446,7 @@ function KanbanLeadCard({
         </span>
 
         {/* Action Buttons Row */}
-        <div className="flex items-center gap-1" ref={menuRef}>
+        <div className="flex items-center gap-1">
           {/* Call Icon */}
           <button
             type="button"
@@ -2482,15 +2489,15 @@ function KanbanLeadCard({
           </button>
 
           {/* 3-dots Menu Button */}
-          <div className="relative">
+          <div className="relative" ref={menuRef}>
             <button
               type="button"
               title="More Options"
               onClick={(e) => {
                 e.stopPropagation();
-                setShowMenu(!showMenu);
+                setShowMenu((prev) => !prev);
               }}
-              className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg transition"
+              className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg transition cursor-pointer"
             >
               <MoreHorizontal size={14} />
             </button>

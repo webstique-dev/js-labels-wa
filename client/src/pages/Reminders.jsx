@@ -87,6 +87,23 @@ export default function Reminders() {
     fetchReminders();
   }, []);
 
+  useEffect(() => {
+    if (!activeDropdownId) return;
+
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.reminder-dropdown-container')) {
+        setActiveDropdownId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [activeDropdownId]);
+
   const getInitials = (name) => {
     if (!name) return 'CU';
     const parts = name.trim().split(' ');
@@ -475,10 +492,13 @@ export default function Reminders() {
                         </button>
                       </div>
 
-                      <div className="relative">
+                      <div className="relative reminder-dropdown-container">
                         <button
                           type="button"
-                          onClick={() => setActiveDropdownId(activeDropdownId === card._id ? null : card._id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveDropdownId(activeDropdownId === card._id ? null : card._id);
+                          }}
                           className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
                         >
                           <MoreHorizontal size={13} />
