@@ -7,6 +7,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import NewOrderModal from '../components/NewOrderModal';
 import AccordionCard from '../components/ui/AccordionCard';
 import CollapsibleFilterCard from '../components/ui/CollapsibleFilterCard';
+import LoadingButton from '../components/ui/LoadingButton';
 import {
   Calendar,
   Download,
@@ -23,7 +24,11 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
-  Search
+  Search,
+  FileSpreadsheet,
+  UploadCloud,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { SkeletonTable } from '../components/ui/Skeleton';
 import { exportAllOrdersToExcel, exportSingleOrderToExcel } from '../utils/exportUtils';
@@ -44,7 +49,45 @@ export default function Orders() {
   const [exportingAll, setExportingAll] = useState(false);
   const [exportingOrderId, setExportingOrderId] = useState(null);
 
+  // Bulk Import Invoices State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+
   const canDelete = role === 'super_admin';
+
+  const handleImportSubmit = async (e) => {
+    e?.preventDefault();
+    if (!importFile) {
+      notify.error('Please select an Excel file (.xlsx or .xls) to import');
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+      setImportResult(null);
+
+      const form = new FormData();
+      form.append('file', importFile);
+
+      const res = await api.post('/orders/import-excel', form, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setImportResult(res.data);
+      notify.success(res.data?.message || 'Invoice orders imported successfully!');
+      fetchOrders();
+    } catch (err) {
+      console.error('Invoice orders import failed:', err);
+      const msg = err.response?.data?.message || 'Failed to import orders from Excel file';
+      notify.error(msg);
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const handleExportAllOrders = async () => {
     try {
@@ -180,6 +223,20 @@ export default function Orders() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+          {/* Import Invoices Button */}
+          <button
+            onClick={() => {
+              setImportFile(null);
+              setImportResult(null);
+              setShowImportModal(true);
+            }}
+            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-2xs transition cursor-pointer"
+            title="Import orders from invoice Excel spreadsheet (.xlsx)"
+          >
+            <UploadCloud size={14} className="text-emerald-600" />
+            <span>Import Invoices (.xlsx)</span>
+          </button>
+
           {/* Export All Orders Button */}
           <button
             onClick={handleExportAllOrders}
@@ -654,7 +711,7 @@ export default function Orders() {
                 <div className="text-right">
                   <p className="text-[10px] text-slate-400 font-medium">PO Date</p>
                   <p className="font-semibold text-slate-800">
-                    {new Date(viewingOrder.orderDate || viewingOrder.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {new Date(viewingOrder.poDate || viewingOrder.orderDate || viewingOrder.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>
                 </div>
               </div>
@@ -716,6 +773,11 @@ export default function Orders() {
                                 {item.dimensionKey && (
                                   <div className="text-[10px] text-slate-400 font-mono">Dimension: {item.dimensionKey}</div>
                                 )}
+                                {item.description && (
+                                  <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-2" title={item.description}>
+                                    {item.description}
+                                  </div>
+                                )}
                               </td>
                               <td className="p-2.5 text-right text-slate-600 font-medium">{item.qty?.toLocaleString('en-IN')}</td>
                             </tr>
@@ -762,6 +824,149 @@ export default function Orders() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Invoices Excel Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200/80 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <FileSpreadsheet size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Import Orders from Invoice File</h3>
+                  <p className="text-[11px] text-slate-400">Upload an Excel (.xlsx) file containing invoice rows</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportResult(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {importResult ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs space-y-2">
+                  <div className="flex items-center gap-2 font-semibold text-sm">
+                    <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                    <span>{importResult.message || 'Import completed successfully!'}</span>
+                  </div>
+                  {importResult.summary && (
+                    <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] font-medium border-t border-emerald-200">
+                      <div>Parsed Line Items: <span className="font-bold text-slate-800">{importResult.summary.totalParsedLineItems}</span></div>
+                      <div>Orders Created: <span className="font-bold text-emerald-700">{importResult.summary.createdOrdersCount}</span></div>
+                      <div>Products Created: <span className="font-bold text-blue-700">{importResult.summary.productsCreatedCount}</span></div>
+                      <div>Products Enriched: <span className="font-bold text-indigo-700">{importResult.summary.productsUpdatedCount}</span></div>
+                    </div>
+                  )}
+                </div>
+
+                {importResult.errors && importResult.errors.length > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] space-y-1 max-h-36 overflow-y-auto">
+                    <div className="flex items-center gap-1 font-semibold text-amber-900">
+                      <AlertCircle size={14} />
+                      <span>{importResult.errors.length} Warnings/Skipped Rows:</span>
+                    </div>
+                    {importResult.errors.map((err, i) => (
+                      <div key={i} className="pl-2 border-l-2 border-amber-300">{err}</div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setImportFile(null);
+                      setImportResult(null);
+                    }}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleImportSubmit} className="space-y-4 text-xs">
+                <div className="p-4 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50/60 hover:bg-slate-50 transition text-center space-y-2">
+                  <input
+                    type="file"
+                    id="order-excel-file-input"
+                    accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setImportFile(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="order-excel-file-input"
+                    className="cursor-pointer flex flex-col items-center justify-center space-y-2 py-4"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                      <UploadCloud size={20} />
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-800 hover:text-emerald-700">
+                        {importFile ? importFile.name : 'Click to select Excel file'}
+                      </span>
+                      <p className="text-[11px] text-slate-500 font-normal">
+                        Supports invoice workbooks (.xlsx or .xls)
+                      </p>
+                    </div>
+                  </label>
+                  {importFile && (
+                    <div className="text-[11px] text-emerald-700 font-medium">
+                      Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-600 space-y-1">
+                  <span className="font-semibold text-slate-800 block">Automatic Processing Rules:</span>
+                  <ul className="list-disc list-inside space-y-0.5 text-slate-500">
+                    <li>Matches customer via exact name, phone number, and billing address.</li>
+                    <li>Groups consecutive invoice lines by Customer and Date into single orders.</li>
+                    <li>Sets Invoice Date as the order PO Date.</li>
+                    <li>Matches items to product catalog and updates product descriptions.</li>
+                  </ul>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={isImporting}
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setImportFile(null);
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <LoadingButton
+                    type="submit"
+                    disabled={!importFile}
+                    loading={isImporting}
+                    loadingText="Importing..."
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-2xs cursor-pointer disabled:opacity-50"
+                  >
+                    Upload & Import
+                  </LoadingButton>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

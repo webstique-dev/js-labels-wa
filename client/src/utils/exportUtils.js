@@ -71,6 +71,74 @@ export async function exportCustomerToExcel(customerId, customerName = 'Customer
 }
 
 /**
+ * Export full customer directory and billing details to formatted Excel spreadsheet.
+ * 
+ * @param {object} options
+ * @param {string} [options.search='']
+ * @param {object} [options.notify=null]
+ */
+export async function exportAllCustomersToExcel({ search = '', notify = null } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    const res = await api.get(`/customers/export-all${queryStr}`, {
+      responseType: 'blob'
+    });
+
+    const nowStr = new Date().toISOString().split('T')[0];
+    let filename = `JS_Labels_Customers_${nowStr}.xlsx`;
+
+    const disposition = res.headers['content-disposition'];
+    if (disposition && disposition.indexOf('filename=') !== -1) {
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1];
+      }
+    }
+
+    const blob = new Blob([res.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    if (notify) {
+      notify.success('Customer directory exported to Excel successfully!');
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to export all customers to excel:', err);
+    let errMsg = 'Failed to export customers to Excel';
+
+    if (err.response?.data instanceof Blob) {
+      try {
+        const text = await err.response.data.text();
+        const json = JSON.parse(text);
+        if (json.message) errMsg = json.message;
+      } catch (e) {
+        // default
+      }
+    } else if (err.response?.data?.message) {
+      errMsg = err.response.data.message;
+    }
+
+    if (notify) {
+      notify.error(errMsg);
+    }
+    throw err;
+  }
+}
+
+/**
  * Download Product Details & Job Time History Excel report.
  * 
  * @param {string} productId - ID of product to export
@@ -119,6 +187,80 @@ export async function exportProductToExcel(productId, productName = 'Product', n
   } catch (err) {
     console.error('Failed to export product excel:', err);
     let errMsg = 'Failed to export product details to Excel';
+
+    if (err.response?.data instanceof Blob) {
+      try {
+        const text = await err.response.data.text();
+        const json = JSON.parse(text);
+        if (json.message) errMsg = json.message;
+      } catch (e) {
+        // default
+      }
+    } else if (err.response?.data?.message) {
+      errMsg = err.response.data.message;
+    }
+
+    if (notify) {
+      notify.error(errMsg);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Export all products to formatted Excel spreadsheet.
+ * 
+ * @param {object} options
+ * @param {string} [options.search='']
+ * @param {string} [options.category='']
+ * @param {string} [options.status='']
+ * @param {string} [options.unit='']
+ * @param {object} [options.notify=null]
+ */
+export async function exportAllProductsToExcel({ search = '', category = '', status = '', unit = '', notify = null } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (category && category !== 'all') params.append('category', category);
+    if (status && status !== 'all') params.append('status', status);
+    if (unit && unit !== 'all') params.append('unit', unit);
+
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    const res = await api.get(`/products/export-all${queryStr}`, {
+      responseType: 'blob'
+    });
+
+    const nowStr = new Date().toISOString().split('T')[0];
+    let filename = `JS_Labels_Products_${nowStr}.xlsx`;
+
+    const disposition = res.headers['content-disposition'];
+    if (disposition && disposition.indexOf('filename=') !== -1) {
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1];
+      }
+    }
+
+    const blob = new Blob([res.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    if (notify) {
+      notify.success('Products exported to Excel successfully!');
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to export all products to excel:', err);
+    let errMsg = 'Failed to export products to Excel';
 
     if (err.response?.data instanceof Blob) {
       try {

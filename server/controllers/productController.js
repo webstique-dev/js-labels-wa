@@ -1,24 +1,30 @@
 const Product = require('../models/Product');
 const ExcelJS = require('exceljs');
+const { parseProductsFromExcelWorkbook, generateProductsExcelWorkbook } = require('../utils/productExcelHelper');
 
 // GET /api/products
 const getProducts = async (req, res) => {
   try {
-    const { category, status, search, page, limit } = req.query;
+    const { category, status, search, unit, page, limit } = req.query;
 
-    const query = {};
+    const query = { isDeleted: { $ne: true } };
 
     // Filter by status
-    if (status && status.trim()) {
+    if (status && status.trim() && status !== 'all') {
       query.status = status.trim();
     }
 
     // Filter by category
-    if (category && category.trim()) {
+    if (category && category.trim() && category !== 'all') {
       query.category = new RegExp(`^${category.trim()}$`, 'i');
     }
 
-    // Search by name or dimension
+    // Filter by unit (MM or MTR)
+    if (unit && unit.trim() && unit !== 'all') {
+      query.unit = unit.trim().toUpperCase();
+    }
+
+    // Search by name, dimension, job, material, color, or unit
     if (search && search.trim()) {
       const searchTrimmed = search.trim();
       const searchRegex = new RegExp(searchTrimmed.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'i');
@@ -31,12 +37,16 @@ const getProducts = async (req, res) => {
         { name: searchRegex },
         { dimensionKey: dimRegex },
         { dimensionKey: searchRegex },
-        { category: searchRegex }
+        { category: searchRegex },
+        { jobName: searchRegex },
+        { material: searchRegex },
+        { colour: searchRegex },
+        { unit: searchRegex }
       ];
 
-      // If search is numeric (e.g. searching "45"), also match widthMm or heightMm
-      const numVal = parseFloat(searchTrimmed);
-      if (!isNaN(numVal)) {
+      // If search is a standalone numeric value (e.g. searching "45"), also match widthMm or heightMm
+      if (/^\d+(\.\d+)?$/.test(searchTrimmed)) {
+        const numVal = Number(searchTrimmed);
         orConditions.push({ widthMm: numVal });
         orConditions.push({ heightMm: numVal });
       }
@@ -79,6 +89,145 @@ const getProducts = async (req, res) => {
   }
 };
 
+// GET /api/products/export-all
+const exportAllProductsExcel = async (req, res) => {
+  try {
+    const { category, status, search, unit } = req.query;
+    const query = { isDeleted: { $ne: true } };
+
+    if (status && status.trim() && status !== 'all') {
+      query.status = status.trim();
+    }
+    if (category && category.trim() && category !== 'all') {
+      query.category = new RegExp(`^${category.trim()}$`, 'i');
+    }
+    if (unit && unit.trim() && unit !== 'all') {
+      query.unit = unit.trim().toUpperCase();
+    }
+    if (search && search.trim()) {
+      const searchTrimmed = search.trim();
+      const searchRegex = new RegExp(searchTrimmed.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'i');
+      const normalizedDim = searchTrimmed.replace(/\s*x\s*/i, 'x');
+      const dimRegex = new RegExp(normalizedDim.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'i');
+
+      query.$or = [
+        { name: searchRegex },
+        { dimensionKey: dimRegex },
+        { dimensionKey: searchRegex },
+        { category: searchRegex },
+        { jobName: searchRegex },
+        { material: searchRegex },
+        { colour: searchRegex },
+        { unit: searchRegex }
+      ];
+    }
+
+    const products = await Product.find(query).sort({ name: 1, createdAt: -1 });
+
+    const workbook = generateProductsExcelWorkbook(products, {
+      title: 'JS LABELS — PRODUCTS CATALOG'
+    });
+
+    const nowStr = new Date().toISOString().split('T')[0];
+    const filename = `JS_Labels_Products_${nowStr}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Error exporting products to Excel:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ message: 'Server error generating products Excel export' });
+    }
+  }
+};
+
+// POST /api/products/import-excel
+const importProductsExcel = async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ message: 'Please upload a valid .xlsx or .xls file' });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+
+    const { parsedProducts, errors } = parseProductsFromExcelWorkbook(workbook);
+    if (!parsedProducts || parsedProducts.length === 0) {
+      return res.status(400).json({
+        message: 'No valid product rows found in the uploaded spreadsheet',
+        errors
+      });
+    }
+
+    let createdCount = 0;
+    let updatedCount = 0;
+    let mtrCount = 0;
+    let mmCount = 0;
+
+    for (const item of parsedProducts) {
+      if (item.unit === 'MTR') mtrCount++;
+      else mmCount++;
+
+      const existing = await Product.findOne({
+        name: item.name,
+        isDeleted: { $ne: true }
+      });
+
+      if (existing) {
+        existing.widthMm = item.widthMm;
+        existing.heightMm = item.heightMm;
+        existing.unit = item.unit;
+        existing.jobName = item.jobName || existing.jobName;
+        existing.material = item.material || existing.material;
+        existing.colour = item.colour || existing.colour;
+        existing.category = item.category || existing.category;
+        existing.status = item.status;
+        existing.notes = item.notes || existing.notes;
+        if (item.unitPrice != null) existing.unitPrice = item.unitPrice;
+        if (item.defaultUsageCycleDays != null) existing.defaultUsageCycleDays = item.defaultUsageCycleDays;
+
+        await existing.save();
+        updatedCount++;
+      } else {
+        const newProduct = new Product({
+          name: item.name,
+          widthMm: item.widthMm,
+          heightMm: item.heightMm,
+          unit: item.unit,
+          jobName: item.jobName,
+          category: item.category,
+          material: item.material,
+          colour: item.colour,
+          status: item.status,
+          notes: item.notes,
+          unitPrice: item.unitPrice,
+          defaultUsageCycleDays: item.defaultUsageCycleDays
+        });
+        await newProduct.save();
+        createdCount++;
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully processed ${parsedProducts.length} products (${createdCount} created, ${updatedCount} updated)`,
+      totalProcessed: parsedProducts.length,
+      createdCount,
+      updatedCount,
+      unitBreakdown: { mm: mmCount, mtr: mtrCount },
+      errors
+    });
+  } catch (error) {
+    console.error('Error importing products from Excel:', error);
+    return res.status(500).json({
+      message: error.message || 'Server error processing products import'
+    });
+  }
+};
+
 // GET /api/products/:id
 const getProductById = async (req, res) => {
   try {
@@ -101,6 +250,7 @@ const createProduct = async (req, res) => {
       name,
       widthMm,
       heightMm,
+      unit,
       jobName,
       material,
       colour,
@@ -108,6 +258,7 @@ const createProduct = async (req, res) => {
       category,
       defaultUsageCycleDays,
       unitPrice,
+      notes,
       status
     } = req.body;
 
@@ -115,31 +266,27 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: 'Product name is required' });
     }
 
-    if (widthMm == null || isNaN(Number(widthMm)) || Number(widthMm) <= 0) {
-      return res.status(400).json({ message: 'Valid width in mm is required' });
+    const parsedWidth = (widthMm !== undefined && widthMm !== null && widthMm !== '')
+      ? Number(widthMm)
+      : 0;
+
+    const parsedHeight = (heightMm !== undefined && heightMm !== null && heightMm !== '')
+      ? Number(heightMm)
+      : 0;
+
+    if (isNaN(parsedWidth) || parsedWidth < 0) {
+      return res.status(400).json({ message: 'Width must be a valid non-negative number' });
     }
 
-    if (heightMm == null || isNaN(Number(heightMm)) || Number(heightMm) <= 0) {
-      return res.status(400).json({ message: 'Valid height in mm is required' });
+    if (isNaN(parsedHeight) || parsedHeight < 0) {
+      return res.status(400).json({ message: 'Height must be a valid non-negative number' });
     }
 
+    const finalUnit = (unit && String(unit).trim().toUpperCase() === 'MTR') ? 'MTR' : 'MM';
     const finalJobName = (jobName || '').trim();
-    if (!finalJobName) {
-      return res.status(400).json({ message: 'Job Name is required' });
-    }
-
     const finalMaterial = (material || '').trim();
-    if (!finalMaterial) {
-      return res.status(400).json({ message: 'Material is required' });
-    }
-
     const finalColour = (colour || color || '').trim();
-    if (!finalColour) {
-      return res.status(400).json({ message: 'Colour is required' });
-    }
 
-    const parsedWidth = Number(widthMm);
-    const parsedHeight = Number(heightMm);
     const parsedUnitPrice = (unitPrice !== '' && unitPrice !== null && unitPrice !== undefined)
       ? Number(unitPrice)
       : null;
@@ -149,17 +296,23 @@ const createProduct = async (req, res) => {
       ? parsedCycleDays
       : 30;
 
+    const dimensionKey = (parsedWidth > 0 || parsedHeight > 0)
+      ? (finalUnit === 'MTR' ? `${parsedWidth}x${parsedHeight} MTR` : `${parsedWidth}x${parsedHeight}`)
+      : 'N/A';
+
     const product = new Product({
       name: name.trim(),
       widthMm: parsedWidth,
       heightMm: parsedHeight,
-      dimensionKey: `${parsedWidth}x${parsedHeight}`,
+      unit: finalUnit,
+      dimensionKey,
       jobName: finalJobName,
       material: finalMaterial,
       colour: finalColour,
-      category: category ? category.trim() : undefined,
+      category: category ? category.trim() : 'General',
       defaultUsageCycleDays: parsedUsageCycle,
       unitPrice: isNaN(parsedUnitPrice) ? null : parsedUnitPrice,
+      notes: (notes || '').trim(),
       status: ['active', 'inactive'].includes(status) ? status : 'active'
     });
 
@@ -183,6 +336,7 @@ const updateProduct = async (req, res) => {
       name,
       widthMm,
       heightMm,
+      unit,
       jobName,
       material,
       colour,
@@ -190,6 +344,7 @@ const updateProduct = async (req, res) => {
       category,
       defaultUsageCycleDays,
       unitPrice,
+      notes,
       status
     } = req.body;
 
@@ -205,22 +360,33 @@ const updateProduct = async (req, res) => {
       product.name = name.trim();
     }
 
+    if (unit !== undefined) {
+      product.unit = String(unit).trim().toUpperCase() === 'MTR' ? 'MTR' : 'MM';
+    }
+
     if (widthMm !== undefined) {
-      if (isNaN(Number(widthMm)) || Number(widthMm) <= 0) {
-        return res.status(400).json({ message: 'Width must be a positive number' });
+      const pW = Number(widthMm);
+      if (isNaN(pW) || pW < 0) {
+        return res.status(400).json({ message: 'Width must be a non-negative number' });
       }
-      product.widthMm = Number(widthMm);
+      product.widthMm = pW;
     }
 
     if (heightMm !== undefined) {
-      if (isNaN(Number(heightMm)) || Number(heightMm) <= 0) {
-        return res.status(400).json({ message: 'Height must be a positive number' });
+      const pH = Number(heightMm);
+      if (isNaN(pH) || pH < 0) {
+        return res.status(400).json({ message: 'Height must be a non-negative number' });
       }
-      product.heightMm = Number(heightMm);
+      product.heightMm = pH;
     }
 
     // Recalculate dimensionKey
-    product.dimensionKey = `${product.widthMm}x${product.heightMm}`;
+    const activeUnit = (product.unit || 'MM').toUpperCase();
+    if (product.widthMm > 0 || product.heightMm > 0) {
+      product.dimensionKey = activeUnit === 'MTR' ? `${product.widthMm}x${product.heightMm} MTR` : `${product.widthMm}x${product.heightMm}`;
+    } else {
+      product.dimensionKey = 'N/A';
+    }
 
     if (jobName !== undefined) {
       product.jobName = jobName ? jobName.trim() : '';
@@ -236,7 +402,11 @@ const updateProduct = async (req, res) => {
     }
 
     if (category !== undefined) {
-      product.category = category ? category.trim() : undefined;
+      product.category = category ? category.trim() : 'General';
+    }
+
+    if (notes !== undefined) {
+      product.notes = notes ? notes.trim() : '';
     }
 
     if (defaultUsageCycleDays !== undefined) {
@@ -476,12 +646,16 @@ const exportProductExcel = async (req, res) => {
     );
     const latestTime = sortedTimes.length > 0 ? sortedTimes[0] : null;
 
+    const unit = (product.unit || 'MM').toUpperCase();
+    const dimKey = product.dimensionKey || (product.widthMm && product.heightMm ? (unit === 'MTR' ? `${product.widthMm}x${product.heightMm} MTR` : `${product.widthMm}x${product.heightMm}`) : 'N/A');
+
     const specs = [
-      ['Product Friendly Name', product.name || '—', 'Dimension Key', product.dimensionKey || `${product.widthMm}x${product.heightMm}`],
-      ['Width (mm)', `${product.widthMm} mm`, 'Height (mm)', `${product.heightMm} mm`],
-      ['Job Name', product.jobName || '—', 'Category', product.category || 'General'],
-      ['Material', product.material || '—', 'Colour', product.colour || '—'],
-      ['Default Usage Cycle', `${product.defaultUsageCycleDays || 30} Days`, 'Status', (product.status || 'active').toUpperCase()],
+      ['Product Friendly Name', product.name || '—', 'Dimension Key', dimKey],
+      ['Width', `${product.widthMm} ${unit}`, 'Height', `${product.heightMm} ${unit}`],
+      ['Size Unit', unit, 'Category', product.category || 'General'],
+      ['Job Name', product.jobName || '—', 'Colour', product.colour || '—'],
+      ['Material', product.material || '—', 'Status', (product.status || 'active').toUpperCase()],
+      ['Default Usage Cycle', `${product.defaultUsageCycleDays || 30} Days`, 'Unit Price', product.unitPrice ? `₹${product.unitPrice}` : '—'],
       ['Total Job Time Records', `${sortedTimes.length} Logged`, 'Latest Job Time', latestTime ? `${latestTime.timeSpent} (on ${latestTime.date})` : 'None Logged'],
       ['Created At', product.createdAt ? new Date(product.createdAt).toLocaleString('en-IN') : '—', 'Last Updated', product.updatedAt ? new Date(product.updatedAt).toLocaleString('en-IN') : '—']
     ];
@@ -575,7 +749,7 @@ const exportProductExcel = async (req, res) => {
             indent: colIdx === 1 ? 0 : 1
           };
           if (colIdx === 3) {
-            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFB91C1C' } }; // Highlight duration
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFB91C1C' } };
           }
         });
 
@@ -595,7 +769,6 @@ const exportProductExcel = async (req, res) => {
       views: [{ showGridLines: true }]
     });
 
-    // 1. Time Sheet Header
     timeSheet.mergeCells('A1:E1');
     const timeTitleCell = timeSheet.getCell('A1');
     timeTitleCell.value = `COMPLETE JOB TIME LOG — ${product.name}`;
@@ -606,7 +779,7 @@ const exportProductExcel = async (req, res) => {
 
     timeSheet.mergeCells('A2:E2');
     const timeSubCell = timeSheet.getCell('A2');
-    timeSubCell.value = `Total Recorded Entries: ${sortedTimes.length}  |  Dimension: ${product.widthMm}x${product.heightMm} mm  |  Material: ${product.material || 'Standard'}`;
+    timeSubCell.value = `Total Recorded Entries: ${sortedTimes.length}  |  Dimension: ${dimKey}  |  Material: ${product.material || 'Standard'}`;
     timeSubCell.font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FF94A3B8' } };
     timeSubCell.fill = sectionFill;
     timeSubCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
@@ -614,7 +787,6 @@ const exportProductExcel = async (req, res) => {
 
     timeSheet.getRow(3).height = 8;
 
-    // 2. Table Column Headers
     const headers = ['#', 'Date of Job', 'Job Completion Time', 'Notes & Remarks', 'Recorded Timestamp'];
     const timeHeaderRow = timeSheet.getRow(4);
     timeHeaderRow.values = headers;
@@ -630,7 +802,6 @@ const exportProductExcel = async (req, res) => {
       };
     });
 
-    // 3. Rows
     if (sortedTimes.length === 0) {
       const emptyRow = timeSheet.getRow(5);
       timeSheet.mergeCells('A5:E5');
@@ -678,7 +849,6 @@ const exportProductExcel = async (req, res) => {
       { key: 'E', width: 26 }
     ];
 
-    // Filename: ProductName_ProductDetails.xlsx
     const safeName = (product.name || 'Product').replace(/[^a-zA-Z0-9_-]/g, '_');
     const filename = `${safeName}_ProductDetails.xlsx`;
 
@@ -704,5 +874,7 @@ module.exports = {
   addJobTime,
   updateJobTime,
   deleteJobTime,
-  exportProductExcel
+  exportProductExcel,
+  exportAllProductsExcel,
+  importProductsExcel
 };

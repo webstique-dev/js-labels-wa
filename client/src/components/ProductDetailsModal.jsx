@@ -226,7 +226,12 @@ export default function ProductDetailsModal({
                 </h2>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-900 text-white font-mono font-bold text-[11px] rounded-md shadow-2xs">
                   <Ruler size={11} className="text-red-400 stroke-[2.5]" />
-                  {product.dimensionKey || `${product.widthMm}x${product.heightMm}`}
+                  {product.dimensionKey || (product.widthMm && product.heightMm ? (product.unit === 'MTR' ? `${product.widthMm}x${product.heightMm} MTR` : `${product.widthMm}x${product.heightMm}`) : 'N/A')}
+                </span>
+                <span className={`px-2 py-0.5 font-bold text-[10px] rounded-md uppercase tracking-wider ${
+                  product.unit === 'MTR' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                }`}>
+                  {product.unit || 'MM'}
                 </span>
               </div>
               <p className="text-xs text-slate-500">
@@ -248,7 +253,23 @@ export default function ProductDetailsModal({
         {/* Modal Scrollable Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1">
           {/* Product Specifications Summary Chips */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 text-xs">
+            <div className="space-y-0.5">
+              <span className="text-[10px] uppercase font-semibold text-slate-400 flex items-center gap-1">
+                <Ruler size={11} /> Dimensions
+              </span>
+              <p className="font-semibold text-slate-900 truncate">
+                {product.widthMm != null && product.heightMm != null ? `${product.widthMm} x ${product.heightMm} ${product.unit || 'MM'}` : '—'}
+              </p>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] uppercase font-semibold text-slate-400 flex items-center gap-1">
+                Size Unit
+              </span>
+              <p className="font-bold text-slate-900 truncate">
+                {product.unit || 'MM'}
+              </p>
+            </div>
             <div className="space-y-0.5">
               <span className="text-[10px] uppercase font-semibold text-slate-400 flex items-center gap-1">
                 <Briefcase size={11} /> Job Name

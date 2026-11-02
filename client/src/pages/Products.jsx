@@ -19,13 +19,17 @@ import {
   Tag,
   Box,
   Timer,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Download,
+  UploadCloud,
+  FileUp,
+  AlertCircle
 } from 'lucide-react';
 import { SkeletonTable } from '../components/ui/Skeleton';
 import Button from '../components/ui/Button';
 import SelectOrCreate from '../components/ui/SelectOrCreate';
 import ProductDetailsModal from '../components/ProductDetailsModal';
-import { exportProductToExcel } from '../utils/exportUtils';
+import { exportProductToExcel, exportAllProductsToExcel } from '../utils/exportUtils';
 
 const PRESET_CATEGORIES = [
   'BOPP',
@@ -167,6 +171,14 @@ export default function Products() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [unitFilter, setUnitFilter] = useState('');
+
+  // Bulk Export & Import State
+  const [isExportingAll, setIsExportingAll] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   // Add / Edit Modal State
   const [showModal, setShowModal] = useState(false);
@@ -179,11 +191,12 @@ export default function Products() {
   const [selectedProductForDetails, setSelectedProductForDetails] = useState(null);
   const [exportingProductId, setExportingProductId] = useState(null);
 
-  // Form State (defaultUsageCycleDays remains 30 behind the scenes)
+  // Form State (supports both MM and MTR units)
   const [formData, setFormData] = useState({
     name: '',
     widthMm: '',
     heightMm: '',
+    unit: 'MM',
     jobName: '',
     category: '',
     material: '',
@@ -421,6 +434,7 @@ export default function Products() {
       if (search && search.trim()) params.search = search.trim();
       if (categoryFilter) params.category = categoryFilter;
       if (statusFilter) params.status = statusFilter;
+      if (unitFilter) params.unit = unitFilter;
 
       const res = await api.get('/products', { params });
 
@@ -453,7 +467,7 @@ export default function Products() {
       fetchProducts();
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, categoryFilter, statusFilter, page]);
+  }, [search, categoryFilter, statusFilter, unitFilter, page]);
 
   // Reset page to 1 when filters change
   const handleFilterChange = (setter, val) => {
@@ -472,6 +486,7 @@ export default function Products() {
       name: '',
       widthMm: '',
       heightMm: '',
+      unit: 'MM',
       jobName: '',
       category: '',
       material: '',
@@ -490,6 +505,7 @@ export default function Products() {
       name: product.name || '',
       widthMm: product.widthMm != null ? String(product.widthMm) : '',
       heightMm: product.heightMm != null ? String(product.heightMm) : '',
+      unit: product.unit || 'MM',
       jobName: product.jobName || '',
       category: product.category || '',
       material: product.material || '',
@@ -532,6 +548,58 @@ export default function Products() {
     }
   };
 
+  // Handle Export All Products to Excel
+  const handleExportAllProducts = async () => {
+    if (isExportingAll) return;
+    try {
+      setIsExportingAll(true);
+      await exportAllProductsToExcel({
+        search,
+        category: categoryFilter,
+        status: statusFilter,
+        unit: unitFilter,
+        notify
+      });
+    } catch (err) {
+      // notification handled inside exportAllProductsToExcel
+    } finally {
+      setIsExportingAll(false);
+    }
+  };
+
+  // Handle Import Products from Excel
+  const handleImportSubmit = async (e) => {
+    e?.preventDefault();
+    if (!importFile) {
+      notify.error('Please select an Excel file (.xlsx or .xls) to import');
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+      setImportResult(null);
+
+      const form = new FormData();
+      form.append('file', importFile);
+
+      const res = await api.post('/products/import-excel', form, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setImportResult(res.data);
+      notify.success(res.data?.message || 'Products imported successfully!');
+      fetchProducts();
+    } catch (err) {
+      console.error('Import failed:', err);
+      const msg = err.response?.data?.message || 'Failed to import products from Excel file';
+      notify.error(msg);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   // Handle custom cycle creation helper
   const handleCustomUsageCycleCreate = (rawInput) => {
     const parsedNumber = parseInt(String(rawInput).replace(/\D/g, ''), 10);
@@ -556,30 +624,15 @@ export default function Products() {
       return;
     }
 
-    const width = parseFloat(formData.widthMm);
-    if (isNaN(width) || width <= 0) {
-      notify.error('Please enter a valid width in mm');
+    const width = formData.widthMm !== '' ? parseFloat(formData.widthMm) : 0;
+    if (isNaN(width) || width < 0) {
+      notify.error(`Please enter a valid non-negative width in ${formData.unit || 'MM'}`);
       return;
     }
 
-    const height = parseFloat(formData.heightMm);
-    if (isNaN(height) || height <= 0) {
-      notify.error('Please enter a valid height in mm');
-      return;
-    }
-
-    if (!formData.jobName || !formData.jobName.trim()) {
-      notify.error('Job Name is required');
-      return;
-    }
-
-    if (!formData.material || !formData.material.trim()) {
-      notify.error('Material is required');
-      return;
-    }
-
-    if (!formData.colour || !formData.colour.trim()) {
-      notify.error('Colour is required');
+    const height = formData.heightMm !== '' ? parseFloat(formData.heightMm) : 0;
+    if (isNaN(height) || height < 0) {
+      notify.error(`Please enter a valid non-negative height in ${formData.unit || 'MM'}`);
       return;
     }
 
@@ -587,10 +640,11 @@ export default function Products() {
       name: formData.name.trim(),
       widthMm: width,
       heightMm: height,
-      jobName: formData.jobName.trim(),
-      category: formData.category ? formData.category.trim() : undefined,
-      material: formData.material.trim(),
-      colour: formData.colour.trim(),
+      unit: (formData.unit || 'MM').toUpperCase(),
+      jobName: formData.jobName ? formData.jobName.trim() : '',
+      category: formData.category ? formData.category.trim() : 'General',
+      material: formData.material ? formData.material.trim() : '',
+      colour: formData.colour ? formData.colour.trim() : '',
       defaultUsageCycleDays: Number(formData.defaultUsageCycleDays) || 30,
       status: formData.status || 'active'
     };
@@ -656,23 +710,24 @@ export default function Products() {
   // Quick stats calculation
   const stats = useMemo(() => {
     const activeCount = products.filter((p) => p.status === 'active').length;
-    const cycle30Count = products.filter((p) => p.defaultUsageCycleDays === 30).length;
-    const cycle45Count = products.filter((p) => p.defaultUsageCycleDays === 45).length;
+    const mmCount = products.filter((p) => (p.unit || 'MM').toUpperCase() === 'MM').length;
+    const mtrCount = products.filter((p) => (p.unit || 'MM').toUpperCase() === 'MTR').length;
     const uniqueDims = new Set(
       products.map((p) => p.dimensionKey || `${p.widthMm}x${p.heightMm}`)
     ).size;
-    return { activeCount, cycle30Count, cycle45Count, uniqueDims };
+    return { activeCount, mmCount, mtrCount, uniqueDims };
   }, [products]);
 
   // Preview dimension computed live
   const previewDimKey = useMemo(() => {
-    const w = formData.widthMm ? formData.widthMm.trim() : '';
-    const h = formData.heightMm ? formData.heightMm.trim() : '';
+    const w = formData.widthMm ? String(formData.widthMm).trim() : '';
+    const h = formData.heightMm ? String(formData.heightMm).trim() : '';
+    const u = (formData.unit || 'MM').toUpperCase();
     if (w && h) {
-      return `${w}x${h}`;
+      return u === 'MTR' ? `${w}x${h} MTR` : `${w}x${h}`;
     }
     return '';
-  }, [formData.widthMm, formData.heightMm]);
+  }, [formData.widthMm, formData.heightMm, formData.unit]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -694,7 +749,38 @@ export default function Products() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="md"
+            icon={Download}
+            loading={isExportingAll}
+            onClick={handleExportAllProducts}
+            className="text-slate-700 hover:text-slate-900 border-slate-300 hover:bg-slate-50"
+            title="Export Products Catalog to Excel (.xlsx)"
+          >
+            Export Products
+          </Button>
+
+          {canManage && (
+            <Button
+              type="button"
+              variant="outline"
+              size="md"
+              icon={UploadCloud}
+              onClick={() => {
+                setImportFile(null);
+                setImportResult(null);
+                setShowImportModal(true);
+              }}
+              className="text-slate-700 hover:text-slate-900 border-slate-300 hover:bg-slate-50"
+              title="Import Products from Excel (.xlsx)"
+            >
+              Import Products
+            </Button>
+          )}
+
           {canManage && (
             <Button
               variant="primary"
@@ -807,6 +893,17 @@ export default function Products() {
               ))}
             </select>
 
+            {/* Unit Filter */}
+            <select
+              value={unitFilter}
+              onChange={(e) => handleFilterChange(setUnitFilter, e.target.value)}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:bg-white focus:border-red-500 transition cursor-pointer"
+            >
+              <option value="">All Units</option>
+              <option value="MM">MM (Millimeter)</option>
+              <option value="MTR">MTR (Meter)</option>
+            </select>
+
             {/* Status Filter */}
             <select
               value={statusFilter}
@@ -818,7 +915,7 @@ export default function Products() {
               <option value="inactive">Inactive</option>
             </select>
 
-            {(search || categoryFilter || statusFilter) && (
+            {(search || categoryFilter || statusFilter || unitFilter) && (
               <Button
                 type="button"
                 variant="outline"
@@ -828,6 +925,7 @@ export default function Products() {
                   setSearch('');
                   setCategoryFilter('');
                   setStatusFilter('');
+                  setUnitFilter('');
                   setPage(1);
                 }}
                 className="text-red-600 hover:bg-red-50 border-red-200"
@@ -875,6 +973,7 @@ export default function Products() {
                 <thead>
                   <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">
                     <th className="py-3.5 px-4.5">Dimension</th>
+                    <th className="py-3.5 px-3 text-center">Unit</th>
                     <th className="py-3.5 px-4.5">Product Name</th>
                     <th className="py-3.5 px-4">Job Name</th>
                     <th className="py-3.5 px-4">Material & Colour</th>
@@ -901,8 +1000,23 @@ export default function Products() {
                             title="Click to view specifications & job time history"
                           >
                             <Ruler size={13} className="text-red-400 stroke-[2.5]" />
-                            <span>{p.widthMm} × {p.heightMm} mm</span>
+                            <span>
+                              {p.widthMm > 0 || p.heightMm > 0
+                                ? `${p.widthMm} × ${p.heightMm} ${p.unit || 'MM'}`
+                                : (p.dimensionKey || 'N/A')}
+                            </span>
                           </button>
+                        </td>
+
+                        {/* Size Unit Badge */}
+                        <td className="py-3.5 px-3 whitespace-nowrap text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase font-mono ${
+                            (p.unit || 'MM').toUpperCase() === 'MTR'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200/80'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                          }`}>
+                            {p.unit || 'MM'}
+                          </span>
                         </td>
 
                         {/* Product Friendly Name */}
@@ -1083,10 +1197,16 @@ export default function Products() {
                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 text-white font-mono font-bold text-xs rounded-lg shadow-2xs"
                       >
                         <Ruler size={13} className="text-red-400 stroke-[2.5]" />
-                        {p.widthMm} × {p.heightMm} mm
+                        {p.widthMm > 0 || p.heightMm > 0
+                          ? `${p.widthMm} × ${p.heightMm} ${p.unit || 'MM'}`
+                          : (p.dimensionKey || 'N/A')}
                       </button>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        ({p.dimensionKey || `${p.widthMm}x${p.heightMm}`})
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${
+                        (p.unit || 'MM').toUpperCase() === 'MTR'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      }`}>
+                        {p.unit || 'MM'}
                       </span>
                     </div>
                     <span
@@ -1298,18 +1418,50 @@ export default function Products() {
                 />
               </div>
 
-              {/* Row 2: Width (mm) & Height (mm) */}
+              {/* Row 2: Size Unit Selection */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Size Unit <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, unit: 'MM' })}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      (formData.unit || 'MM') === 'MM'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-2xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    MM (Millimeters)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, unit: 'MTR' })}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      formData.unit === 'MTR'
+                        ? 'bg-blue-50 border-blue-500 text-blue-800 shadow-2xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    MTR (Meters - Ribbon / Rolls)
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 3: Width & Height */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Width (mm) <span className="text-red-500">*</span>
+                    Width ({formData.unit || 'MM'})
                   </label>
                   <input
                     type="number"
                     step="any"
-                    required
-                    min="0.1"
-                    placeholder="e.g. 4"
+                    min="0"
+                    placeholder="e.g. 100"
                     value={formData.widthMm}
                     onChange={(e) => setFormData({ ...formData, widthMm: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500 transition font-mono"
@@ -1318,14 +1470,13 @@ export default function Products() {
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Height (mm) <span className="text-red-500">*</span>
+                    Height / Length ({formData.unit || 'MM'})
                   </label>
                   <input
                     type="number"
                     step="any"
-                    required
-                    min="0.1"
-                    placeholder="e.g. 45"
+                    min="0"
+                    placeholder={formData.unit === 'MTR' ? 'e.g. 300' : 'e.g. 75'}
                     value={formData.heightMm}
                     onChange={(e) => setFormData({ ...formData, heightMm: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500 transition font-mono"
@@ -1444,6 +1595,164 @@ export default function Products() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Import Products Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <UploadCloud size={20} className="stroke-[2.2]" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                    Import Products from Excel
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Upload an .xlsx or .xls file with product details
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportResult(null);
+                }}
+                disabled={isImporting}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </Button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* Info Note on Units and Formatting */}
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-1.5 text-xs text-blue-900">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <FileSpreadsheet size={15} className="text-blue-600" />
+                  <span>Supported Format & Units</span>
+                </div>
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  Both <strong>MM</strong> (millimeter) and <strong>MTR</strong> (meter) units are supported. If units or dimensions are specified in the product name or notes (e.g. <em>110 X 300 MTR</em>), they will be automatically parsed. Existing products will be updated without losing historical records.
+                </p>
+              </div>
+
+              {/* File Dropzone / Selector */}
+              {!importResult && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Select Spreadsheet File (.xlsx, .xls)
+                  </label>
+                  <label className="border-2 border-dashed border-slate-300 hover:border-red-400 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-50/60 hover:bg-red-50/20 transition group">
+                    <FileUp size={32} className="text-slate-400 group-hover:text-red-500 transition" />
+                    <div className="text-center">
+                      <p className="text-xs font-semibold text-slate-700">
+                        {importFile ? importFile.name : 'Click to choose or drop Excel file here'}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {importFile ? `${(importFile.size / 1024).toFixed(1)} KB` : 'Excel files up to 15MB'}
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".xlsx, .xls"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setImportFile(e.target.files[0]);
+                          setImportResult(null);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* Import Result Summary Card */}
+              {importResult && (
+                <div className="space-y-3">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                      <CheckCircle2 size={18} className="text-emerald-600" />
+                      <span>{importResult.message || 'Import Completed!'}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-emerald-900 pt-1">
+                      <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
+                        <span className="text-[10px] uppercase text-emerald-700 block font-semibold">Total Processed</span>
+                        <span className="text-base font-bold">{importResult.totalProcessed || 0}</span>
+                      </div>
+                      <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
+                        <span className="text-[10px] uppercase text-emerald-700 block font-semibold">New Created</span>
+                        <span className="text-base font-bold text-emerald-600">+{importResult.createdCount || 0}</span>
+                      </div>
+                      <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
+                        <span className="text-[10px] uppercase text-emerald-700 block font-semibold">Updated</span>
+                        <span className="text-base font-bold text-blue-600">{importResult.updatedCount || 0}</span>
+                      </div>
+                      <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
+                        <span className="text-[10px] uppercase text-emerald-700 block font-semibold">Units Split</span>
+                        <span className="text-xs font-bold text-slate-800">
+                          MM: {importResult.unitBreakdown?.mm || 0} | MTR: {importResult.unitBreakdown?.mtr || 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-slate-600"
+                    onClick={() => {
+                      setImportFile(null);
+                      setImportResult(null);
+                    }}
+                  >
+                    Upload Another File
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="md"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportResult(null);
+                }}
+                disabled={isImporting}
+              >
+                {importResult ? 'Close' : 'Cancel'}
+              </Button>
+              {!importResult && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  icon={UploadCloud}
+                  loading={isImporting}
+                  disabled={!importFile}
+                  onClick={handleImportSubmit}
+                >
+                  Start Import
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}

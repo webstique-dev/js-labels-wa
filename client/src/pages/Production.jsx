@@ -440,6 +440,25 @@ export default function Production() {
     );
   }
 
+  // Error / Empty fallback when not loading and no data
+  if (!loading && !forecastData) {
+    return (
+      <div className="p-8 text-center space-y-4 max-w-md mx-auto my-12 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+        <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
+          <AlertCircle size={24} />
+        </div>
+        <h3 className="font-bold text-slate-800 text-base">Unable to Load Production Forecasts</h3>
+        <p className="text-xs text-slate-500">There was an issue fetching the latest demand calculations.</p>
+        <button
+          onClick={() => fetchForecasts(trailingMonths)}
+          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold cursor-pointer transition"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 sm:space-y-6 2xl:space-y-8 pb-12 font-sans max-w-full overflow-hidden">
       

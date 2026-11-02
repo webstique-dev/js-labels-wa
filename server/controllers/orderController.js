@@ -28,7 +28,7 @@ const getOrders = async (req, res) => {
       Order.find(queryFilter)
         .populate('customerId', 'name company phone email city')
         .populate('salesExecutive', 'name email avatarUrl role')
-        .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice')
+        .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice unit')
         .sort({ orderDate: -1 })
         .skip(skip)
         .limit(parseInt(limit, 10)),
@@ -194,7 +194,8 @@ const createOrder = async (req, res) => {
       }
 
       // Copy dimensionKey and name directly from Product
-      const dimensionKey = product.dimensionKey || `${product.widthMm}x${product.heightMm}`;
+      const unit = (product.unit || 'MM').toUpperCase();
+      const dimensionKey = product.dimensionKey || (product.widthMm && product.heightMm ? (unit === 'MTR' ? `${product.widthMm}x${product.heightMm} MTR` : `${product.widthMm}x${product.heightMm}`) : 'N/A');
       const name = product.name;
 
       let price = null;
@@ -294,7 +295,7 @@ const createOrder = async (req, res) => {
     const populatedOrder = await Order.findById(newOrder._id)
       .populate('customerId', 'name company phone email city')
       .populate('salesExecutive', 'name email avatarUrl role')
-      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice');
+      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice unit');
 
     return res.status(201).json(populatedOrder);
   } catch (error) {
@@ -361,7 +362,8 @@ const updateOrder = async (req, res) => {
           return res.status(400).json({ message: `Item #${i + 1}: Quantity must be a positive number` });
         }
 
-        const dimensionKey = product.dimensionKey || `${product.widthMm}x${product.heightMm}`;
+        const unit = (product.unit || 'MM').toUpperCase();
+        const dimensionKey = product.dimensionKey || (product.widthMm && product.heightMm ? (unit === 'MTR' ? `${product.widthMm}x${product.heightMm} MTR` : `${product.widthMm}x${product.heightMm}`) : 'N/A');
         const name = product.name;
 
         let price = null;
@@ -415,7 +417,7 @@ const updateOrder = async (req, res) => {
     const updatedOrder = await Order.findById(order._id)
       .populate('customerId', 'name company phone email city')
       .populate('salesExecutive', 'name email avatarUrl role')
-      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice');
+      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice unit');
 
     return res.json(updatedOrder);
   } catch (error) {
@@ -500,7 +502,7 @@ const updateOrderStatus = async (req, res) => {
     const updatedOrder = await Order.findById(order._id)
       .populate('customerId', 'name company phone email city')
       .populate('salesExecutive', 'name email avatarUrl role')
-      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice');
+      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category unitPrice unit');
 
     return res.json(updatedOrder);
   } catch (error) {
@@ -553,7 +555,7 @@ const exportAllOrdersExcel = async (req, res) => {
     const orders = await Order.find(queryFilter)
       .populate('customerId', 'name company phone email city address deliveryAddress')
       .populate('salesExecutive', 'name email role')
-      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category material')
+      .populate('lineItems.productId', 'name widthMm heightMm dimensionKey category material unit')
       .sort({ orderDate: -1 });
 
     const workbook = new ExcelJS.Workbook();
@@ -733,7 +735,8 @@ const exportAllOrdersExcel = async (req, res) => {
         const p = li.productId || {};
         const prodName = li.name || p.name || 'Custom Label';
         const dimKey = li.dimensionKey || p.dimensionKey || '-';
-        const dims = (p.widthMm && p.heightMm) ? `${p.widthMm}x${p.heightMm} mm` : '-';
+        const unitStr = p.unit ? p.unit.toLowerCase() : 'mm';
+        const dims = (p.widthMm && p.heightMm) ? `${p.widthMm}x${p.heightMm} ${unitStr}` : (li.dimensionKey || '-');
         const category = p.category || '-';
         const qty = li.qty || 0;
 
@@ -976,7 +979,8 @@ const exportSingleOrderExcel = async (req, res) => {
       const p = li.productId || {};
       const prodName = li.name || p.name || 'Custom Label';
       const dimKey = li.dimensionKey || p.dimensionKey || '-';
-      const dims = (p.widthMm && p.heightMm) ? `${p.widthMm}x${p.heightMm} mm` : '-';
+      const unitStr = p.unit ? p.unit.toLowerCase() : 'mm';
+      const dims = (p.widthMm && p.heightMm) ? `${p.widthMm}x${p.heightMm} ${unitStr}` : (li.dimensionKey || '-');
       const specs = [p.category, p.material].filter(Boolean).join(' • ') || '-';
       const qty = li.qty || 0;
       grandTotalUnits += qty;
@@ -1065,6 +1069,30 @@ const exportSingleOrderExcel = async (req, res) => {
   }
 };
 
+// POST /api/orders/import-excel
+const importOrdersExcel = async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ message: 'Please upload a valid .xlsx or .xls file' });
+    }
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+
+    const { parseAndImportOrdersFromWorkbook } = require('../utils/orderExcelHelper');
+    const result = await parseAndImportOrdersFromWorkbook(workbook, { createdBy: req.user });
+
+    return res.json({
+      message: `Import complete: ${result.createdOrdersCount} orders created successfully across ${result.totalParsedLineItems} line items.`,
+      summary: result
+    });
+  } catch (error) {
+    console.error('Error importing orders from Excel:', error);
+    return res.status(500).json({ message: 'Server error processing order Excel import: ' + error.message });
+  }
+};
+
 module.exports = {
   getOrders,
   getOrdersSummary,
@@ -1073,5 +1101,6 @@ module.exports = {
   updateOrderStatus,
   deleteOrder,
   exportAllOrdersExcel,
-  exportSingleOrderExcel
+  exportSingleOrderExcel,
+  importOrdersExcel
 };

@@ -3,8 +3,11 @@ const ExcelJS = require('exceljs');
 const Customer = require('../models/Customer');
 const Order = require('../models/Order');
 const Activity = require('../models/Activity');
-
 const Lead = require('../models/Lead');
+const {
+  parseCustomersFromInvoiceWorkbook,
+  generateCustomersExcelWorkbook
+} = require('../utils/customerExcelHelper');
 
 // Sync Won Leads into Customer Documents so all won leads appear in Customer Directory
 const syncWonLeadsToCustomers = async () => {
@@ -39,13 +42,18 @@ const getCustomers = async (req, res) => {
     let queryFilter = { ...req.scopeFilter };
 
     if (search && search.trim()) {
-      const searchRegex = new RegExp(search.trim(), 'i');
+      const searchRegex = new RegExp(search.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'i');
       queryFilter.$or = [
         { name: searchRegex },
         { company: searchRegex },
         { phone: searchRegex },
+        { phone2: searchRegex },
         { email: searchRegex },
-        { city: searchRegex }
+        { city: searchRegex },
+        { state: searchRegex },
+        { pincode: searchRegex },
+        { address: searchRegex },
+        { billingAttention: searchRegex }
       ];
     }
 
@@ -72,20 +80,189 @@ const getCustomers = async (req, res) => {
   }
 };
 
+// GET /api/customers/export-all
+const exportAllCustomersExcel = async (req, res) => {
+  try {
+    const { search } = req.query;
+    let queryFilter = { ...req.scopeFilter };
+
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'i');
+      queryFilter.$or = [
+        { name: searchRegex },
+        { company: searchRegex },
+        { phone: searchRegex },
+        { phone2: searchRegex },
+        { email: searchRegex },
+        { city: searchRegex },
+        { state: searchRegex },
+        { pincode: searchRegex },
+        { address: searchRegex },
+        { billingAttention: searchRegex }
+      ];
+    }
+
+    const customers = await Customer.find(queryFilter)
+      .populate('salesExecutive', 'name email avatarUrl role')
+      .sort({ name: 1, updatedAt: -1 });
+
+    const workbook = generateCustomersExcelWorkbook(customers, {
+      title: 'JS LABELS — CUSTOMER DIRECTORY & BILLING DETAILS'
+    });
+
+    const nowStr = new Date().toISOString().split('T')[0];
+    const filename = `JS_Labels_Customers_${nowStr}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Error exporting all customers to Excel:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ message: 'Server error generating customers Excel export' });
+    }
+  }
+};
+
+// POST /api/customers/import-excel
+const importCustomersExcel = async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ message: 'Please upload a valid .xlsx or .xls file' });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+
+    const { parsedCustomers, errors } = parseCustomersFromInvoiceWorkbook(workbook);
+    if (!parsedCustomers || parsedCustomers.length === 0) {
+      return res.status(400).json({
+        message: 'No valid customer records found in the uploaded spreadsheet',
+        errors
+      });
+    }
+
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    for (const c of parsedCustomers) {
+      const orConditions = [{ name: new RegExp(`^${c.name.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}$`, 'i') }];
+      if (c.phone) {
+        orConditions.push({ phone: c.phone });
+      }
+      if (c.gstNo) {
+        orConditions.push({ gstNo: c.gstNo });
+      }
+
+      const existing = await Customer.findOne({
+        $or: orConditions,
+        isDeleted: { $ne: true }
+      });
+
+      if (existing) {
+        if (!existing.phone && c.phone) existing.phone = c.phone;
+        if (c.phone2) {
+          if (!existing.phone2) {
+            existing.phone2 = c.phone2;
+          } else {
+            const existingPhones = existing.phone2.split(',').map(s => s.trim());
+            const newPhones = c.phone2.split(',').map(s => s.trim());
+            newPhones.forEach(np => {
+              if (np && !existingPhones.includes(np)) existingPhones.push(np);
+            });
+            existing.phone2 = existingPhones.join(', ');
+          }
+        }
+        if (!existing.email && c.email) existing.email = c.email;
+        if (!existing.gstNo && c.gstNo) existing.gstNo = c.gstNo;
+        if (c.company && (!existing.company || existing.company === existing.name)) existing.company = c.company;
+        if (c.address) existing.address = c.address;
+        if (c.city) existing.city = c.city;
+        if (c.state) existing.state = c.state;
+        if (c.pincode) existing.pincode = c.pincode;
+        if (c.country) existing.country = c.country;
+        if (c.billingAttention) existing.billingAttention = c.billingAttention;
+        if (c.billingPhone) existing.billingPhone = c.billingPhone;
+        if (c.creditLimit && (!existing.creditLimit || existing.creditLimit === 100000)) existing.creditLimit = c.creditLimit;
+        if (c.paymentTerms && (!existing.paymentTerms || existing.paymentTerms === '30 Days')) existing.paymentTerms = c.paymentTerms;
+
+        await existing.save();
+        updatedCount++;
+      } else {
+        await Customer.create({
+          name: c.name,
+          company: c.company || c.name,
+          phone: c.phone,
+          phone2: c.phone2,
+          email: c.email,
+          gstNo: c.gstNo,
+          address: c.address,
+          city: c.city,
+          state: c.state,
+          pincode: c.pincode,
+          country: c.country || 'India',
+          billingAttention: c.billingAttention,
+          billingPhone: c.billingPhone,
+          creditLimit: c.creditLimit || 100000,
+          customerType: 'Regular',
+          paymentTerms: c.paymentTerms || '30 Days'
+        });
+        createdCount++;
+      }
+    }
+
+    return res.json({
+      message: `Import complete: ${createdCount} customers created, ${updatedCount} customers updated.`,
+      summary: {
+        totalParsed: parsedCustomers.length,
+        createdCount,
+        updatedCount,
+        errorsCount: errors.length
+      },
+      errors
+    });
+  } catch (error) {
+    console.error('Error importing customers from Excel:', error);
+    return res.status(500).json({ message: 'Server error processing customer Excel import: ' + error.message });
+  }
+};
+
 // POST /api/customers
 const createCustomer = async (req, res) => {
   try {
-    const { name, company, phone, email, gstNo, address, city, customerType, paymentTerms, creditLimit, tags } = req.body;
+    const {
+      name,
+      company,
+      phone,
+      phone2,
+      email,
+      gstNo,
+      address,
+      city,
+      state,
+      pincode,
+      country,
+      billingAttention,
+      billingPhone,
+      customerType,
+      paymentTerms,
+      creditLimit,
+      tags
+    } = req.body;
+
     if (!name) {
       return res.status(400).json({ message: 'Customer name is required' });
     }
 
     let cleanPhone = undefined;
     if (phone) {
-      cleanPhone = phone.toString().replace(/\D/g, '');
-      if (cleanPhone.length !== 10) {
-        return res.status(400).json({ message: 'Phone number must be exactly 10 digits' });
+      const digitsOnly = phone.toString().replace(/\D/g, '');
+      if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+        return res.status(400).json({ message: 'Please enter a valid phone number (7 to 15 digits)' });
       }
+      cleanPhone = phone.toString().trim();
     }
 
     if (email && email.trim()) {
@@ -99,10 +276,16 @@ const createCustomer = async (req, res) => {
       name: name.trim(),
       company: company ? company.trim() : undefined,
       phone: cleanPhone || phone,
+      phone2: phone2 ? phone2.toString().trim() : '',
       email: email ? email.trim().toLowerCase() : undefined,
       gstNo,
       address,
       city,
+      state: state || '',
+      pincode: pincode || '',
+      country: country || 'India',
+      billingAttention: billingAttention || '',
+      billingPhone: billingPhone || '',
       customerType: customerType || 'Regular',
       paymentTerms: paymentTerms || '30 Days',
       creditLimit: creditLimit || 100000,
@@ -279,28 +462,48 @@ const updateCustomer = async (req, res) => {
       name,
       company,
       phone,
+      phone2,
       email,
       gstNo,
       address,
       city,
+      state,
+      pincode,
+      country,
+      billingAttention,
+      billingPhone,
       customerType,
       source,
       priority,
       expectedReorderDate
     } = req.body;
 
-    const cleanPhone = phone ? phone.toString().replace(/\D/g, '') : null;
-    if (phone && cleanPhone.length !== 10) {
-      return res.status(400).json({ message: 'Phone number must be exactly 10 digits' });
+    let cleanPhone = undefined;
+    if (phone !== undefined) {
+      if (phone) {
+        const digitsOnly = phone.toString().replace(/\D/g, '');
+        if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+          return res.status(400).json({ message: 'Please enter a valid phone number (7 to 15 digits)' });
+        }
+        cleanPhone = phone.toString().trim();
+      } else {
+        cleanPhone = '';
+      }
     }
 
     if (name) customer.name = name.trim();
     if (company !== undefined) customer.company = company ? company.trim() : '';
-    if (cleanPhone && cleanPhone.length === 10) customer.phone = cleanPhone;
+    if (cleanPhone !== undefined) customer.phone = cleanPhone;
+    if (phone2 !== undefined) customer.phone2 = phone2 ? phone2.toString().trim() : '';
     if (email !== undefined) customer.email = email ? email.trim().toLowerCase() : '';
     if (gstNo !== undefined) customer.gstNo = gstNo;
     if (address !== undefined) customer.address = address;
     if (city !== undefined) customer.city = city;
+    if (state !== undefined) customer.state = state;
+    if (pincode !== undefined) customer.pincode = pincode;
+    if (country !== undefined) customer.country = country;
+    if (billingAttention !== undefined) customer.billingAttention = billingAttention;
+    if (billingPhone !== undefined) customer.billingPhone = billingPhone;
     if (customerType !== undefined) customer.customerType = customerType;
     if (source !== undefined) customer.source = source;
     if (priority !== undefined) customer.priority = priority;
@@ -328,7 +531,7 @@ const updateCustomer = async (req, res) => {
     if (linkedLead) {
       if (name) linkedLead.name = customer.name;
       if (company !== undefined) linkedLead.company = customer.company;
-      if (cleanPhone && cleanPhone.length === 10) linkedLead.phone = customer.phone;
+      if (cleanPhone !== undefined && cleanPhone) linkedLead.phone = customer.phone;
       if (email !== undefined) linkedLead.email = customer.email;
       if (gstNo !== undefined) linkedLead.gstNo = customer.gstNo;
       if (address !== undefined) linkedLead.address = customer.address;
@@ -861,5 +1064,7 @@ module.exports = {
   getCustomerTimeline,
   updateCustomer,
   deleteCustomer,
-  exportCustomerExcel
+  exportCustomerExcel,
+  exportAllCustomersExcel,
+  importCustomersExcel
 };

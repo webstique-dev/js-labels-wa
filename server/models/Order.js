@@ -5,6 +5,7 @@ const lineItemSchema = new mongoose.Schema({
   productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   dimensionKey: { type: String, required: true },
   name: { type: String },
+  description: { type: String, default: '' },
   qty: { type: Number, required: true },
   price: { type: Number, required: false, default: null },
   lineTotal: { type: Number, required: false, default: null }
@@ -14,6 +15,7 @@ const orderSchema = new mongoose.Schema({
   orderNo: { type: String, unique: true, sparse: true },
   customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
   orderDate: { type: Date, default: Date.now },
+  poDate: { type: Date },
   amount: { type: Number, required: false, default: null },
   status: {
     type: String,

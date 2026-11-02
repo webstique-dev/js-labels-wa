@@ -18,929 +18,660 @@ const formatYearMonth = (yearMonthStr) => {
 };
 
 /**
- * Core Helper: Computes a trailing-average forecast range for a single dimensionKey
+ * Core In-Memory Calculation Engine:
+ * Computes trailing-average demand forecast ranges, customer driver rankings,
+ * product-level breakdowns, and live calendar month sales ledger across all dimensions
+ * with zero N+1 database roundtrips.
  */
-const computeDimensionForecast = async (dimensionKey, trailingMonthsCount = 2, targetDate = new Date()) => {
-  const cleanDimKey = dimensionKey.trim();
+async function computeAllForecastsEngine(trailingMonthsCount = 2, targetDate = new Date(), filterDimensionKey = null) {
   const N = Math.max(1, Math.min(parseInt(trailingMonthsCount, 10) || 2, 12));
-
   const now = targetDate instanceof Date && !isNaN(targetDate.getTime()) ? targetDate : new Date();
   const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const forecastForMonth = formatYearMonth(`${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`);
+  const currentMonthFormatted = formatYearMonth(currentYearMonth);
 
-  const dimRegex = new RegExp('^' + cleanDimKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
-
-  // 1. Fetch completed calendar months strictly before current in-progress month
-  const completedMonthsAgg = await Order.aggregate([
-    {
-      $match: {
-        isDeleted: { $ne: true },
-        status: { $ne: 'cancelled' },
-        "lineItems.dimensionKey": { $regex: dimRegex }
-      }
-    },
-    { $unwind: "$lineItems" },
-    {
-      $match: {
-        "lineItems.dimensionKey": { $regex: dimRegex }
-      }
-    },
-    {
-      $group: {
-        _id: {
-          $dateToString: {
-            format: "%Y-%m",
-            date: { $ifNull: ["$orderDate", "$createdAt"] }
-          }
-        },
-        totalQty: { $sum: "$lineItems.qty" },
-        distinctOrders: { $addToSet: "$_id" }
-      }
-    },
-    {
-      $match: {
-        _id: { $lt: currentYearMonth } // Strictly completed calendar months
-      }
-    },
-    {
-      $project: {
-        _id: 0,
-        yearMonth: "$_id",
-        totalQty: 1,
-        orderCount: { $size: "$distinctOrders" }
-      }
-    },
-    { $sort: { yearMonth: -1 } },
-    { $limit: N }
+  const [orders, products, customers] = await Promise.all([
+    Order.find({ isDeleted: { $ne: true }, status: { $ne: 'cancelled' } }).lean(),
+    Product.find({ isDeleted: { $ne: true } }).lean(),
+    Customer.find({ isDeleted: { $ne: true } }).select('_id name company').lean()
   ]);
 
-  // Sort chronological (oldest to newest)
-  const trailingMonths = completedMonthsAgg.reverse().map((item) => ({
-    yearMonth: item.yearMonth,
-    month: formatYearMonth(item.yearMonth),
-    totalQty: item.totalQty,
-    orderCount: item.orderCount
-  }));
+  const custMap = new Map();
+  customers.forEach(c => custMap.set(c._id.toString(), c));
 
-  // 2. Fetch associated friendly product names and categories
-  const products = await Product.find({
-    $or: [{ dimensionKey: { $regex: dimRegex } }, { $expr: { $eq: [{ $concat: [{ $toString: "$widthMm" }, "x", { $toString: "$heightMm" }] }, cleanDimKey] } }],
-    isDeleted: { $ne: true }
+  const prodByName = new Map();
+  const prodByDim = new Map();
+  const catMap = {};
+
+  products.forEach(p => {
+    if (p.name) {
+      prodByName.set(p.name, p);
+      if (p.category) catMap[p.name] = p.category;
+    }
+    const dKeys = [];
+    if (p.dimensionKey) dKeys.push(p.dimensionKey.trim().toLowerCase());
+    if (p.widthMm && p.heightMm) dKeys.push(`${p.widthMm}x${p.heightMm}`.toLowerCase());
+
+    dKeys.forEach(k => {
+      if (!prodByDim.has(k)) prodByDim.set(k, []);
+      prodByDim.get(k).push(p);
+    });
   });
 
-  const productNames = Array.from(new Set(products.map(p => p.name).filter(Boolean)));
-  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+  const dimSet = new Set();
+  const flattenedLines = [];
 
-  // If no product found in catalog, fallback to any names recorded in line items
-  if (productNames.length === 0) {
-    const recordedNameSample = await Order.findOne({ "lineItems.dimensionKey": { $regex: dimRegex } }, { "lineItems.$": 1 });
-    if (recordedNameSample?.lineItems?.[0]?.name) {
-      productNames.push(recordedNameSample.lineItems[0].name);
+  orders.forEach(ord => {
+    const d = ord.orderDate || ord.createdAt;
+    const dateObj = d ? new Date(d) : new Date();
+    const ym = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+    const custId = ord.customerId ? ord.customerId.toString() : null;
+
+    (ord.lineItems || []).forEach(li => {
+      const dKey = (li.dimensionKey || '').trim();
+      if (!dKey) return;
+      const qty = li.qty || 0;
+      const price = li.price || 0;
+      const lineTotal = li.lineTotal != null ? li.lineTotal : (qty * price);
+
+      dimSet.add(dKey);
+      flattenedLines.push({
+        orderId: ord._id.toString(),
+        customerId: custId,
+        orderDate: dateObj,
+        yearMonth: ym,
+        name: li.name || '',
+        dimensionKey: dKey,
+        lowerDim: dKey.toLowerCase(),
+        qty,
+        price,
+        lineTotal
+      });
+    });
+  });
+
+  let cleanDims = Array.from(dimSet);
+  if (filterDimensionKey) {
+    const target = filterDimensionKey.trim().toLowerCase();
+    cleanDims = cleanDims.filter(d => d.toLowerCase() === target);
+    if (cleanDims.length === 0) {
+      cleanDims = [filterDimensionKey.trim()];
     }
   }
 
-  // 3. Current Calendar Month Actual Sales for this Dimension
-  const currentMonthAgg = await Order.aggregate([
-    {
-      $match: {
-        isDeleted: { $ne: true },
-        status: { $ne: 'cancelled' },
-        "lineItems.dimensionKey": { $regex: dimRegex }
-      }
-    },
-    {
-      $addFields: {
-        orderYearMonth: {
-          $dateToString: {
-            format: "%Y-%m",
-            date: { $ifNull: ["$orderDate", "$createdAt"] }
-          }
+  const forecasts = [];
+
+  for (const cleanDimKey of cleanDims) {
+    const lowerTarget = cleanDimKey.toLowerCase();
+    const matchingLines = flattenedLines.filter(l => l.lowerDim === lowerTarget);
+
+    // 1. Group by completed yearMonth (< currentYearMonth)
+    const completedMonthMap = new Map();
+    const currentMonthLines = [];
+
+    matchingLines.forEach(l => {
+      if (l.yearMonth < currentYearMonth) {
+        if (!completedMonthMap.has(l.yearMonth)) {
+          completedMonthMap.set(l.yearMonth, { totalQty: 0, distinctOrders: new Set() });
         }
+        const m = completedMonthMap.get(l.yearMonth);
+        m.totalQty += l.qty;
+        m.distinctOrders.add(l.orderId);
+      } else if (l.yearMonth === currentYearMonth) {
+        currentMonthLines.push(l);
       }
-    },
-    {
-      $match: {
-        orderYearMonth: currentYearMonth
-      }
-    },
-    { $unwind: "$lineItems" },
-    {
-      $match: {
-        "lineItems.dimensionKey": { $regex: dimRegex }
-      }
-    },
-    {
-      $group: {
-        _id: "$lineItems.name",
-        productId: { $first: "$lineItems.productId" },
-        productName: { $first: "$lineItems.name" },
-        totalQty: { $sum: "$lineItems.qty" },
-        totalRevenue: {
-          $sum: {
-            $ifNull: [
-              "$lineItems.lineTotal",
-              { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-            ]
-          }
-        },
-        distinctOrders: { $addToSet: "$_id" },
-        distinctCustomers: { $addToSet: "$customerId" }
-      }
-    },
-    { $sort: { totalQty: -1 } }
-  ]);
-
-  let currentMonthSoldQty = 0;
-  let currentMonthRevenue = 0;
-  const currentMonthOrderIds = new Set();
-  const currentMonthProductDetails = [];
-
-  currentMonthAgg.forEach((item) => {
-    currentMonthSoldQty += item.totalQty || 0;
-    currentMonthRevenue += item.totalRevenue || 0;
-    (item.distinctOrders || []).forEach(id => currentMonthOrderIds.add(id.toString()));
-    currentMonthProductDetails.push({
-      productName: item.productName || cleanDimKey,
-      totalQty: item.totalQty || 0,
-      totalRevenue: Math.round((item.totalRevenue || 0) * 100) / 100,
-      orderCount: (item.distinctOrders || []).length
     });
-  });
 
-  // 4. Current Month Customers for this dimension
-  const currentMonthCustAgg = await Order.aggregate([
-    {
-      $match: {
-        isDeleted: { $ne: true },
-        status: { $ne: 'cancelled' },
-        "lineItems.dimensionKey": { $regex: dimRegex }
-      }
-    },
-    {
-      $addFields: {
-        orderYearMonth: {
-          $dateToString: {
-            format: "%Y-%m",
-            date: { $ifNull: ["$orderDate", "$createdAt"] }
-          }
-        }
-      }
-    },
-    {
-      $match: {
-        orderYearMonth: currentYearMonth
-      }
-    },
-    { $unwind: "$lineItems" },
-    {
-      $match: {
-        "lineItems.dimensionKey": { $regex: dimRegex }
-      }
-    },
-    {
-      $group: {
-        _id: "$customerId",
-        qty: { $sum: "$lineItems.qty" },
-        revenue: {
-          $sum: {
-            $ifNull: [
-              "$lineItems.lineTotal",
-              { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-            ]
-          }
-        }
-      }
-    },
-    { $sort: { qty: -1 } },
-    { $limit: 5 }
-  ]);
-
-  let currentMonthCustomers = [];
-  if (currentMonthCustAgg.length > 0) {
-    const curCustIds = currentMonthCustAgg.map(c => c._id).filter(Boolean);
-    const curCustDocs = await Customer.find({ _id: { $in: curCustIds } });
-    const curCustMap = {};
-    curCustDocs.forEach(c => { curCustMap[c._id.toString()] = c; });
-
-    currentMonthCustomers = currentMonthCustAgg.map(item => {
-      const doc = curCustMap[item._id?.toString()] || {};
-      const custName = doc.name || 'Customer Account';
-      const company = doc.company || '—';
-      const pct = currentMonthSoldQty > 0
-        ? Math.round((item.qty / currentMonthSoldQty) * 100)
-        : 0;
-
+    const sortedCompletedYMs = Array.from(completedMonthMap.keys()).sort().reverse().slice(0, N);
+    const trailingMonths = sortedCompletedYMs.reverse().map(ym => {
+      const data = completedMonthMap.get(ym);
       return {
-        customerId: item._id?.toString(),
-        customerName: custName,
-        company,
-        qty: item.qty,
-        revenue: Math.round((item.revenue || 0) * 100) / 100,
-        percentage: pct
+        yearMonth: ym,
+        month: formatYearMonth(ym),
+        totalQty: data.totalQty,
+        orderCount: data.distinctOrders.size
       };
     });
-  }
 
-  // 5. Compute Trailing Average and Forecast Range
-  const availableMonthsCount = trailingMonths.length;
+    const dimCatalogProds = prodByDim.get(lowerTarget) || [];
+    const productNamesSet = new Set(dimCatalogProds.map(p => p.name).filter(Boolean));
+    const categoriesSet = new Set(dimCatalogProds.map(p => p.category).filter(Boolean));
 
-  if (availableMonthsCount === 0) {
-    return {
-      dimensionKey: cleanDimKey,
-      forecastForMonth,
-      currentMonth: formatYearMonth(currentYearMonth),
-      currentMonthYearMonth: currentYearMonth,
-      currentMonthSoldQty,
-      currentMonthRevenue: Math.round(currentMonthRevenue * 100) / 100,
-      currentMonthOrderCount: currentMonthOrderIds.size,
-      currentMonthProducts: currentMonthProductDetails,
-      currentMonthCustomers,
-      trailingMonthsCount: N,
-      completedMonthsAvailable: 0,
-      trailingMonths: [],
-      sumTrailing: 0,
-      averagePerMonth: null,
-      forecastRangeLow: null,
-      forecastRangeHigh: null,
-      lowConfidence: true,
-      insufficientData: true,
-      productNames,
-      categories,
-      mostRecentCompletedMonth: null,
-      topContributingCustomers: []
-    };
-  }
+    matchingLines.forEach(l => {
+      if (l.name) productNamesSet.add(l.name);
+    });
 
-  const individualQtys = trailingMonths.map(m => m.totalQty);
-  const sumTrailing = individualQtys.reduce((sum, q) => sum + q, 0);
-  const averagePerMonth = Math.round(sumTrailing / availableMonthsCount);
+    const productNames = Array.from(productNamesSet);
+    const categories = Array.from(categoriesSet);
 
-  let forecastRangeLow;
-  let forecastRangeHigh;
-  let lowConfidence = false;
+    // Current month stats
+    let currentMonthSoldQty = 0;
+    let currentMonthRevenue = 0;
+    const curDistinctOrders = new Set();
+    const curCustMapLocal = new Map();
+    const curProdMapLocal = new Map();
 
-  if (availableMonthsCount === 1) {
-    forecastRangeLow = individualQtys[0];
-    forecastRangeHigh = individualQtys[0];
-    lowConfidence = true; // Flag low confidence when only 1 completed month exists
-  } else {
-    forecastRangeLow = Math.min(...individualQtys);
-    forecastRangeHigh = Math.max(...individualQtys);
-    lowConfidence = false;
-  }
+    currentMonthLines.forEach(l => {
+      currentMonthSoldQty += l.qty;
+      currentMonthRevenue += l.lineTotal;
+      curDistinctOrders.add(l.orderId);
 
-  // 6. Trailing Period Label
-  const trailingPeriodLabel = availableMonthsCount === 1
-    ? trailingMonths[0].month
-    : `${trailingMonths[0].month} – ${trailingMonths[trailingMonths.length - 1].month}`;
-
-  // 7. Aggregate all recorded months' customer drivers dynamically from database
-  const monthlyCustAgg = await Order.aggregate([
-    {
-      $match: {
-        isDeleted: { $ne: true },
-        status: { $ne: 'cancelled' },
-        "lineItems.dimensionKey": { $regex: dimRegex }
+      const pName = l.name || cleanDimKey;
+      if (!curProdMapLocal.has(pName)) {
+        curProdMapLocal.set(pName, { productName: pName, totalQty: 0, totalRevenue: 0, distinctOrders: new Set() });
       }
-    },
-    {
-      $addFields: {
-        orderYearMonth: {
-          $dateToString: {
-            format: "%Y-%m",
-            date: { $ifNull: ["$orderDate", "$createdAt"] }
-          }
+      const pData = curProdMapLocal.get(pName);
+      pData.totalQty += l.qty;
+      pData.totalRevenue += l.lineTotal;
+      pData.distinctOrders.add(l.orderId);
+
+      if (l.customerId) {
+        if (!curCustMapLocal.has(l.customerId)) {
+          curCustMapLocal.set(l.customerId, { qty: 0, revenue: 0 });
         }
+        const cData = curCustMapLocal.get(l.customerId);
+        cData.qty += l.qty;
+        cData.revenue += l.lineTotal;
       }
-    },
-    { $unwind: "$lineItems" },
-    {
-      $match: {
-        "lineItems.dimensionKey": { $regex: dimRegex }
-      }
-    },
-    {
-      $group: {
-        _id: {
-          yearMonth: "$orderYearMonth",
-          customerId: "$customerId"
-        },
-        qty: { $sum: "$lineItems.qty" },
-        revenue: {
-          $sum: {
-            $ifNull: [
-              "$lineItems.lineTotal",
-              { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-            ]
-          }
-        },
-        orderCount: { $addToSet: "$_id" }
-      }
-    },
-    { $sort: { qty: -1 } }
-  ]);
+    });
 
-  // Aggregate monthly totals across all recorded months for accurate percentages
-  const monthlyTotalsAgg = await Order.aggregate([
-    {
-      $match: {
-        isDeleted: { $ne: true },
-        status: { $ne: 'cancelled' },
-        "lineItems.dimensionKey": { $regex: dimRegex }
+    const currentMonthProducts = Array.from(curProdMapLocal.values()).map(p => ({
+      productName: p.productName,
+      totalQty: p.totalQty,
+      totalRevenue: Math.round(p.totalRevenue * 100) / 100,
+      orderCount: p.distinctOrders.size
+    })).sort((a, b) => b.totalQty - a.totalQty);
+
+    const currentMonthCustomers = Array.from(curCustMapLocal.entries()).map(([cid, data]) => {
+      const doc = custMap.get(cid) || {};
+      const pct = currentMonthSoldQty > 0 ? Math.round((data.qty / currentMonthSoldQty) * 100) : 0;
+      return {
+        customerId: cid,
+        customerName: doc.name || doc.company || 'Customer Account',
+        company: doc.company || '—',
+        qty: data.qty,
+        revenue: Math.round(data.revenue * 100) / 100,
+        percentage: pct
+      };
+    }).sort((a, b) => b.qty - a.qty).slice(0, 5);
+
+    const availableMonthsCount = trailingMonths.length;
+
+    // Monthly totals and drivers across all recorded months
+    const allMonthsTotalsMap = new Map();
+    const allMonthsCustMap = new Map();
+
+    matchingLines.forEach(l => {
+      const ym = l.yearMonth;
+      if (!allMonthsTotalsMap.has(ym)) {
+        allMonthsTotalsMap.set(ym, { totalQty: 0, totalRevenue: 0, distinctOrders: new Set() });
+        allMonthsCustMap.set(ym, new Map());
       }
-    },
-    {
-      $addFields: {
-        orderYearMonth: {
-          $dateToString: {
-            format: "%Y-%m",
-            date: { $ifNull: ["$orderDate", "$createdAt"] }
-          }
+      const mTot = allMonthsTotalsMap.get(ym);
+      mTot.totalQty += l.qty;
+      mTot.totalRevenue += l.lineTotal;
+      mTot.distinctOrders.add(l.orderId);
+
+      if (l.customerId) {
+        const cMap = allMonthsCustMap.get(ym);
+        if (!cMap.has(l.customerId)) {
+          cMap.set(l.customerId, { qty: 0, revenue: 0, distinctOrders: new Set() });
         }
+        const cEntry = cMap.get(l.customerId);
+        cEntry.qty += l.qty;
+        cEntry.revenue += l.lineTotal;
+        cEntry.distinctOrders.add(l.orderId);
       }
-    },
-    { $unwind: "$lineItems" },
-    {
-      $match: {
-        "lineItems.dimensionKey": { $regex: dimRegex }
-      }
-    },
-    {
-      $group: {
-        _id: "$orderYearMonth",
-        totalQty: { $sum: "$lineItems.qty" },
-        totalRevenue: {
-          $sum: {
-            $ifNull: [
-              "$lineItems.lineTotal",
-              { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-            ]
-          }
-        },
-        orderCount: { $addToSet: "$_id" }
-      }
-    },
-    { $sort: { _id: -1 } }
-  ]);
+    });
 
-  const monthTotalMap = {};
-  monthlyTotalsAgg.forEach(m => {
-    monthTotalMap[m._id] = {
-      totalQty: m.totalQty || 0,
-      totalRevenue: Math.round((m.totalRevenue || 0) * 100) / 100,
-      orderCount: (m.orderCount || []).length
-    };
-  });
+    const availableMonths = Array.from(allMonthsTotalsMap.keys()).sort().reverse().map(ym => {
+      const data = allMonthsTotalsMap.get(ym);
+      return {
+        yearMonth: ym,
+        month: formatYearMonth(ym),
+        totalQty: data.totalQty,
+        totalRevenue: Math.round(data.totalRevenue * 100) / 100,
+        orderCount: data.distinctOrders.size
+      };
+    });
 
-  // Lookup customer profiles
-  const allRecordedCustIds = Array.from(new Set(monthlyCustAgg.map(i => i._id?.customerId).filter(Boolean)));
-  const allCustDocs = await Customer.find({ _id: { $in: allRecordedCustIds } });
-  const allCustMap = {};
-  allCustDocs.forEach(c => { allCustMap[c._id.toString()] = c; });
+    const monthlyDrivers = {};
+    for (const ym of allMonthsTotalsMap.keys()) {
+      const tot = allMonthsTotalsMap.get(ym);
+      const cMap = allMonthsCustMap.get(ym);
+      const drivers = Array.from(cMap.entries()).map(([cid, data]) => {
+        const doc = custMap.get(cid) || {};
+        const pct = tot.totalQty > 0 ? Math.round((data.qty / tot.totalQty) * 100) : 0;
+        return {
+          customerId: cid,
+          customerName: doc.name || doc.company || 'Customer Account',
+          company: doc.company || '—',
+          qty: data.qty,
+          revenue: Math.round(data.revenue * 100) / 100,
+          orderCount: data.distinctOrders.size,
+          percentage: pct
+        };
+      }).sort((a, b) => b.qty - a.qty);
 
-  // Map customer drivers per yearMonth
-  const monthlyDrivers = {};
-  monthlyCustAgg.forEach(item => {
-    const ym = item._id.yearMonth;
-    if (!ym) return;
-    if (!monthlyDrivers[ym]) {
       monthlyDrivers[ym] = {
         yearMonth: ym,
         month: formatYearMonth(ym),
-        totalQty: monthTotalMap[ym]?.totalQty || 0,
-        totalRevenue: monthTotalMap[ym]?.totalRevenue || 0,
-        orderCount: monthTotalMap[ym]?.orderCount || 0,
-        drivers: []
+        totalQty: tot.totalQty,
+        totalRevenue: Math.round(tot.totalRevenue * 100) / 100,
+        orderCount: tot.distinctOrders.size,
+        drivers
       };
     }
 
-    const doc = allCustMap[item._id?.customerId?.toString()] || {};
-    const monthTotal = monthTotalMap[ym]?.totalQty || 0;
-    const pct = monthTotal > 0 ? Math.round((item.qty / monthTotal) * 100) : 0;
+    if (availableMonthsCount === 0) {
+      forecasts.push({
+        dimensionKey: cleanDimKey,
+        forecastForMonth,
+        currentMonth: currentMonthFormatted,
+        currentMonthYearMonth: currentYearMonth,
+        currentMonthSoldQty,
+        currentMonthRevenue: Math.round(currentMonthRevenue * 100) / 100,
+        currentMonthOrderCount: curDistinctOrders.size,
+        currentMonthProducts,
+        currentMonthCustomers,
+        trailingMonthsCount: N,
+        completedMonthsAvailable: 0,
+        trailingMonths: [],
+        sumTrailing: 0,
+        averagePerMonth: null,
+        forecastRangeLow: null,
+        forecastRangeHigh: null,
+        lowConfidence: true,
+        insufficientData: true,
+        productNames,
+        categories,
+        mostRecentCompletedMonth: null,
+        topContributingCustomers: [],
+        availableMonths,
+        monthlyDrivers,
+        productBreakdowns: {}
+      });
+      continue;
+    }
 
-    monthlyDrivers[ym].drivers.push({
-      customerId: item._id?.customerId?.toString(),
-      customerName: doc.name || doc.company || 'Customer Account',
-      company: doc.company || '—',
-      qty: item.qty,
-      revenue: Math.round((item.revenue || 0) * 100) / 100,
-      orderCount: (item.orderCount || []).length,
-      percentage: pct
+    const individualQtys = trailingMonths.map(m => m.totalQty);
+    const sumTrailing = individualQtys.reduce((sum, q) => sum + q, 0);
+    const averagePerMonth = Math.round(sumTrailing / availableMonthsCount);
+    const forecastRangeLow = availableMonthsCount === 1 ? individualQtys[0] : Math.min(...individualQtys);
+    const forecastRangeHigh = availableMonthsCount === 1 ? individualQtys[0] : Math.max(...individualQtys);
+    const lowConfidence = availableMonthsCount === 1;
+
+    const trailingPeriodLabel = availableMonthsCount === 1
+      ? trailingMonths[0].month
+      : `${trailingMonths[0].month} – ${trailingMonths[trailingMonths.length - 1].month}`;
+
+    const trailingYearMonths = new Set(trailingMonths.map(m => m.yearMonth));
+    const trailingCustMap = new Map();
+
+    matchingLines.forEach(l => {
+      if (trailingYearMonths.has(l.yearMonth) && l.customerId) {
+        if (!trailingCustMap.has(l.customerId)) {
+          trailingCustMap.set(l.customerId, { qty: 0, revenue: 0, distinctOrders: new Set() });
+        }
+        const entry = trailingCustMap.get(l.customerId);
+        entry.qty += l.qty;
+        entry.revenue += l.lineTotal;
+        entry.distinctOrders.add(l.orderId);
+      }
     });
-  });
 
-  // Available months list (newest to oldest)
-  const availableMonths = monthlyTotalsAgg.map(m => ({
-    yearMonth: m._id,
-    month: formatYearMonth(m._id),
-    totalQty: m.totalQty,
-    totalRevenue: Math.round((m.totalRevenue || 0) * 100) / 100,
-    orderCount: (m.orderCount || []).length
-  }));
-
-  // 8. Top Contributing Customers across ALL trailing completed months in the selected horizon
-  const trailingYearMonths = trailingMonths.map(m => m.yearMonth);
-  let topContributingCustomers = [];
-
-  if (trailingYearMonths.length > 0) {
-    const trailingCustAgg = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          status: { $ne: 'cancelled' },
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $addFields: {
-          orderYearMonth: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: { $ifNull: ["$orderDate", "$createdAt"] }
-            }
-          }
-        }
-      },
-      {
-        $match: {
-          orderYearMonth: { $in: trailingYearMonths }
-        }
-      },
-      { $unwind: "$lineItems" },
-      {
-        $match: {
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $group: {
-          _id: "$customerId",
-          qty: { $sum: "$lineItems.qty" },
-          revenue: {
-            $sum: {
-              $ifNull: [
-                "$lineItems.lineTotal",
-                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-              ]
-            }
-          },
-          orderCount: { $addToSet: "$_id" }
-        }
-      },
-      { $sort: { qty: -1 } },
-      { $limit: 10 }
-    ]);
-
-    topContributingCustomers = trailingCustAgg.map(item => {
-      const doc = allCustMap[item._id?.toString()] || {};
-      const pct = sumTrailing > 0
-        ? Math.round((item.qty / sumTrailing) * 100)
-        : 0;
-
+    const topContributingCustomers = Array.from(trailingCustMap.entries()).map(([cid, data]) => {
+      const doc = custMap.get(cid) || {};
+      const pct = sumTrailing > 0 ? Math.round((data.qty / sumTrailing) * 100) : 0;
       return {
-        customerId: item._id?.toString(),
+        customerId: cid,
         customerName: doc.name || doc.company || 'Customer Account',
         company: doc.company || '—',
-        qty: item.qty,
-        revenue: Math.round((item.revenue || 0) * 100) / 100,
-        orderCount: (item.orderCount || []).length,
+        qty: data.qty,
+        revenue: Math.round(data.revenue * 100) / 100,
+        orderCount: data.distinctOrders.size,
         percentage: pct
       };
-    });
+    }).sort((a, b) => b.qty - a.qty).slice(0, 10);
 
-    // Also register trailing horizon in monthlyDrivers
     monthlyDrivers['trailing'] = {
       yearMonth: 'trailing',
       month: `Trailing Horizon (${trailingPeriodLabel})`,
       totalQty: sumTrailing,
-      totalRevenue: Math.round(trailingCustAgg.reduce((acc, c) => acc + (c.revenue || 0), 0) * 100) / 100,
+      totalRevenue: Math.round(topContributingCustomers.reduce((acc, c) => acc + (c.revenue || 0), 0) * 100) / 100,
       orderCount: trailingMonths.reduce((acc, m) => acc + (m.orderCount || 0), 0),
       drivers: topContributingCustomers
     };
-  }
 
-  // 9. Compute Product-Level Breakdown (Individual Products within this dimension)
-  const productBreakdowns = {};
-  for (const pName of productNames) {
-    const pCatalog = (products || []).find(p => p.name === pName) || {};
+    // Product-level breakdown
+    const productBreakdowns = {};
+    for (const pName of productNames) {
+      const pCatalog = prodByName.get(pName) || {};
+      const pLines = matchingLines.filter(l => l.name === pName);
 
-    // Completed months for this product
-    const pCompletedMonthsAgg = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          status: { $ne: 'cancelled' },
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
+      const pCompMap = new Map();
+      pLines.forEach(l => {
+        if (l.yearMonth < currentYearMonth) {
+          if (!pCompMap.has(l.yearMonth)) pCompMap.set(l.yearMonth, { totalQty: 0, totalRevenue: 0, distinctOrders: new Set() });
+          const entry = pCompMap.get(l.yearMonth);
+          entry.totalQty += l.qty;
+          entry.totalRevenue += l.lineTotal;
+          entry.distinctOrders.add(l.orderId);
         }
-      },
-      { $unwind: "$lineItems" },
-      {
-        $match: {
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: { $ifNull: ["$orderDate", "$createdAt"] }
-            }
-          },
-          totalQty: { $sum: "$lineItems.qty" },
-          totalRevenue: {
-            $sum: {
-              $ifNull: [
-                "$lineItems.lineTotal",
-                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-              ]
-            }
-          },
-          distinctOrders: { $addToSet: "$_id" }
-        }
-      },
-      {
-        $match: {
-          _id: { $lt: currentYearMonth }
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          yearMonth: "$_id",
-          totalQty: 1,
-          totalRevenue: 1,
-          orderCount: { $size: "$distinctOrders" }
-        }
-      },
-      { $sort: { yearMonth: -1 } },
-      { $limit: N }
-    ]);
+      });
 
-    const pTrailingMonths = pCompletedMonthsAgg.reverse().map((item) => ({
-      yearMonth: item.yearMonth,
-      month: formatYearMonth(item.yearMonth),
-      totalQty: item.totalQty,
-      totalRevenue: Math.round((item.totalRevenue || 0) * 100) / 100,
-      orderCount: item.orderCount
-    }));
+      const pSortedYMs = Array.from(pCompMap.keys()).sort().reverse().slice(0, N);
+      const pTrailingMonths = pSortedYMs.reverse().map(ym => {
+        const d = pCompMap.get(ym);
+        return {
+          yearMonth: ym,
+          month: formatYearMonth(ym),
+          totalQty: d.totalQty,
+          totalRevenue: Math.round(d.totalRevenue * 100) / 100,
+          orderCount: d.distinctOrders.size
+        };
+      });
 
-    const pAvailCount = pTrailingMonths.length;
-    const pQtys = pTrailingMonths.map(m => m.totalQty);
-    const pSumTrailing = pQtys.reduce((sum, q) => sum + q, 0);
-    const pAvgPerMonth = pAvailCount > 0 ? Math.round(pSumTrailing / pAvailCount) : null;
-    let pRangeLow = null;
-    let pRangeHigh = null;
-    let pLowConf = false;
+      const pAvailCount = pTrailingMonths.length;
+      const pQtys = pTrailingMonths.map(m => m.totalQty);
+      const pSumTrailing = pQtys.reduce((sum, q) => sum + q, 0);
+      const pAvgPerMonth = pAvailCount > 0 ? Math.round(pSumTrailing / pAvailCount) : null;
+      const pRangeLow = pAvailCount === 1 ? pQtys[0] : (pAvailCount > 1 ? Math.min(...pQtys) : null);
+      const pRangeHigh = pAvailCount === 1 ? pQtys[0] : (pAvailCount > 1 ? Math.max(...pQtys) : null);
+      const pLowConf = pAvailCount <= 1;
 
-    if (pAvailCount === 1) {
-      pRangeLow = pQtys[0];
-      pRangeHigh = pQtys[0];
-      pLowConf = true;
-    } else if (pAvailCount > 1) {
-      pRangeLow = Math.min(...pQtys);
-      pRangeHigh = Math.max(...pQtys);
-    }
+      const pTrailingPeriodLabel = pAvailCount === 1
+        ? pTrailingMonths[0].month
+        : (pAvailCount > 1 ? `${pTrailingMonths[0].month} – ${pTrailingMonths[pTrailingMonths.length - 1].month}` : 'No prior records');
 
-    const pTrailingPeriodLabel = pAvailCount === 1
-      ? pTrailingMonths[0].month
-      : pAvailCount > 1
-      ? `${pTrailingMonths[0].month} – ${pTrailingMonths[pTrailingMonths.length - 1].month}`
-      : 'No prior records';
+      const pCurLines = pLines.filter(l => l.yearMonth === currentYearMonth);
+      let pCurQty = 0;
+      let pCurRev = 0;
+      const pCurOrders = new Set();
+      const pCurCustMap = new Map();
 
-    // Current month for this product
-    const pCurrentDetail = currentMonthProductDetails.find(d => d.productName === pName) || {
-      productName: pName,
-      totalQty: 0,
-      totalRevenue: 0,
-      orderCount: 0
-    };
+      pCurLines.forEach(l => {
+        pCurQty += l.qty;
+        pCurRev += l.lineTotal;
+        pCurOrders.add(l.orderId);
+        if (l.customerId) {
+          if (!pCurCustMap.has(l.customerId)) pCurCustMap.set(l.customerId, { qty: 0, revenue: 0 });
+          const c = pCurCustMap.get(l.customerId);
+          c.qty += l.qty;
+          c.revenue += l.lineTotal;
+        }
+      });
 
-    // Current month customers for this product
-    const pCurrentCustAgg = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          status: { $ne: 'cancelled' },
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $addFields: {
-          orderYearMonth: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: { $ifNull: ["$orderDate", "$createdAt"] }
-            }
-          }
-        }
-      },
-      { $match: { orderYearMonth: currentYearMonth } },
-      { $unwind: "$lineItems" },
-      {
-        $match: {
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $group: {
-          _id: "$customerId",
-          qty: { $sum: "$lineItems.qty" },
-          revenue: {
-            $sum: {
-              $ifNull: [
-                "$lineItems.lineTotal",
-                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-              ]
-            }
-          },
-          orderCount: { $addToSet: "$_id" }
-        }
-      },
-      { $sort: { qty: -1 } }
-    ]);
+      const pCurCustomers = Array.from(pCurCustMap.entries()).map(([cid, data]) => {
+        const doc = custMap.get(cid) || {};
+        const pct = pCurQty > 0 ? Math.round((data.qty / pCurQty) * 100) : 0;
+        return {
+          customerId: cid,
+          customerName: doc.name || doc.company || 'Customer Account',
+          company: doc.company || '—',
+          qty: data.qty,
+          revenue: Math.round(data.revenue * 100) / 100,
+          orderCount: 1,
+          percentage: pct
+        };
+      }).sort((a, b) => b.qty - a.qty);
 
-    const pCurrentCustomers = pCurrentCustAgg.map(item => {
-      const doc = allCustMap[item._id?.toString()] || {};
-      const pct = pCurrentDetail.totalQty > 0
-        ? Math.round((item.qty / pCurrentDetail.totalQty) * 100)
-        : 0;
-      return {
-        customerId: item._id?.toString(),
-        customerName: doc.name || doc.company || 'Customer Account',
-        company: doc.company || '—',
-        qty: item.qty,
-        revenue: Math.round((item.revenue || 0) * 100) / 100,
-        orderCount: (item.orderCount || []).length,
-        percentage: pct
-      };
-    });
+      const pMonthsTotalsMap = new Map();
+      const pMonthsCustMap = new Map();
+      pLines.forEach(l => {
+        if (!pMonthsTotalsMap.has(l.yearMonth)) {
+          pMonthsTotalsMap.set(l.yearMonth, { totalQty: 0, totalRevenue: 0, distinctOrders: new Set() });
+          pMonthsCustMap.set(l.yearMonth, new Map());
+        }
+        const m = pMonthsTotalsMap.get(l.yearMonth);
+        m.totalQty += l.qty;
+        m.totalRevenue += l.lineTotal;
+        m.distinctOrders.add(l.orderId);
 
-    // Monthly Drivers for this product across all recorded months
-    const pMonthlyCustAgg = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          status: { $ne: 'cancelled' },
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
+        if (l.customerId) {
+          const cm = pMonthsCustMap.get(l.yearMonth);
+          if (!cm.has(l.customerId)) cm.set(l.customerId, { qty: 0, revenue: 0, distinctOrders: new Set() });
+          const ce = cm.get(l.customerId);
+          ce.qty += l.qty;
+          ce.revenue += l.lineTotal;
+          ce.distinctOrders.add(l.orderId);
         }
-      },
-      {
-        $addFields: {
-          orderYearMonth: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: { $ifNull: ["$orderDate", "$createdAt"] }
-            }
-          }
-        }
-      },
-      { $unwind: "$lineItems" },
-      {
-        $match: {
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            yearMonth: "$orderYearMonth",
-            customerId: "$customerId"
-          },
-          qty: { $sum: "$lineItems.qty" },
-          revenue: {
-            $sum: {
-              $ifNull: [
-                "$lineItems.lineTotal",
-                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-              ]
-            }
-          },
-          orderCount: { $addToSet: "$_id" }
-        }
-      },
-      { $sort: { qty: -1 } }
-    ]);
+      });
 
-    // Monthly totals for this product
-    const pMonthlyTotalsAgg = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          status: { $ne: 'cancelled' },
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $addFields: {
-          orderYearMonth: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: { $ifNull: ["$orderDate", "$createdAt"] }
-            }
-          }
-        }
-      },
-      { $unwind: "$lineItems" },
-      {
-        $match: {
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $group: {
-          _id: "$orderYearMonth",
-          totalQty: { $sum: "$lineItems.qty" },
-          totalRevenue: {
-            $sum: {
-              $ifNull: [
-                "$lineItems.lineTotal",
-                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-              ]
-            }
-          },
-          orderCount: { $addToSet: "$_id" }
-        }
-      },
-      { $sort: { _id: -1 } }
-    ]);
+      const pAvailableMonths = Array.from(pMonthsTotalsMap.keys()).sort().reverse().map(ym => {
+        const d = pMonthsTotalsMap.get(ym);
+        return {
+          yearMonth: ym,
+          month: formatYearMonth(ym),
+          totalQty: d.totalQty,
+          totalRevenue: Math.round(d.totalRevenue * 100) / 100,
+          orderCount: d.distinctOrders.size
+        };
+      });
 
-    const pMonthTotalMap = {};
-    pMonthlyTotalsAgg.forEach(m => {
-      pMonthTotalMap[m._id] = {
-        totalQty: m.totalQty || 0,
-        totalRevenue: Math.round((m.totalRevenue || 0) * 100) / 100,
-        orderCount: (m.orderCount || []).length
-      };
-    });
+      const pMonthlyDrivers = {};
+      for (const ym of pMonthsTotalsMap.keys()) {
+        const tot = pMonthsTotalsMap.get(ym);
+        const cm = pMonthsCustMap.get(ym);
+        const drivers = Array.from(cm.entries()).map(([cid, data]) => {
+          const doc = custMap.get(cid) || {};
+          const pct = tot.totalQty > 0 ? Math.round((data.qty / tot.totalQty) * 100) : 0;
+          return {
+            customerId: cid,
+            customerName: doc.name || doc.company || 'Customer Account',
+            company: doc.company || '—',
+            qty: data.qty,
+            revenue: Math.round(data.revenue * 100) / 100,
+            orderCount: data.distinctOrders.size,
+            percentage: pct
+          };
+        }).sort((a, b) => b.qty - a.qty);
 
-    const pMonthlyDrivers = {};
-    pMonthlyCustAgg.forEach(item => {
-      const ym = item._id.yearMonth;
-      if (!ym) return;
-      if (!pMonthlyDrivers[ym]) {
         pMonthlyDrivers[ym] = {
           yearMonth: ym,
           month: formatYearMonth(ym),
-          totalQty: pMonthTotalMap[ym]?.totalQty || 0,
-          totalRevenue: pMonthTotalMap[ym]?.totalRevenue || 0,
-          orderCount: pMonthTotalMap[ym]?.orderCount || 0,
-          drivers: []
+          totalQty: tot.totalQty,
+          totalRevenue: Math.round(tot.totalRevenue * 100) / 100,
+          orderCount: tot.distinctOrders.size,
+          drivers
         };
       }
-      const doc = allCustMap[item._id?.customerId?.toString()] || {};
-      const mTot = pMonthTotalMap[ym]?.totalQty || 0;
-      const pct = mTot > 0 ? Math.round((item.qty / mTot) * 100) : 0;
-      pMonthlyDrivers[ym].drivers.push({
-        customerId: item._id?.customerId?.toString(),
-        customerName: doc.name || doc.company || 'Customer Account',
-        company: doc.company || '—',
-        qty: item.qty,
-        revenue: Math.round((item.revenue || 0) * 100) / 100,
-        orderCount: (item.orderCount || []).length,
-        percentage: pct
+
+      const pTrailingYMs = new Set(pTrailingMonths.map(m => m.yearMonth));
+      const pTrailingCustMap = new Map();
+      pLines.forEach(l => {
+        if (pTrailingYMs.has(l.yearMonth) && l.customerId) {
+          if (!pTrailingCustMap.has(l.customerId)) pTrailingCustMap.set(l.customerId, { qty: 0, revenue: 0, distinctOrders: new Set() });
+          const ce = pTrailingCustMap.get(l.customerId);
+          ce.qty += l.qty;
+          ce.revenue += l.lineTotal;
+          ce.distinctOrders.add(l.orderId);
+        }
       });
-    });
 
-    const pAvailableMonths = pMonthlyTotalsAgg.map(m => ({
-      yearMonth: m._id,
-      month: formatYearMonth(m._id),
-      totalQty: m.totalQty,
-      totalRevenue: Math.round((m.totalRevenue || 0) * 100) / 100,
-      orderCount: (m.orderCount || []).length
-    }));
+      const pTopCustomers = Array.from(pTrailingCustMap.entries()).map(([cid, data]) => {
+        const doc = custMap.get(cid) || {};
+        const pct = pSumTrailing > 0 ? Math.round((data.qty / pSumTrailing) * 100) : 0;
+        return {
+          customerId: cid,
+          customerName: doc.name || doc.company || 'Customer Account',
+          company: doc.company || '—',
+          qty: data.qty,
+          revenue: Math.round(data.revenue * 100) / 100,
+          orderCount: data.distinctOrders.size,
+          percentage: pct
+        };
+      }).sort((a, b) => b.qty - a.qty).slice(0, 10);
 
-    // Top drivers across trailing months for this product
-    const pTrailingCustAgg = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          status: { $ne: 'cancelled' },
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $addFields: {
-          orderYearMonth: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: { $ifNull: ["$orderDate", "$createdAt"] }
-            }
-          }
-        }
-      },
-      {
-        $match: {
-          orderYearMonth: { $in: pTrailingMonths.map(m => m.yearMonth) }
-        }
-      },
-      { $unwind: "$lineItems" },
-      {
-        $match: {
-          "lineItems.name": pName,
-          "lineItems.dimensionKey": { $regex: dimRegex }
-        }
-      },
-      {
-        $group: {
-          _id: "$customerId",
-          qty: { $sum: "$lineItems.qty" },
-          revenue: {
-            $sum: {
-              $ifNull: [
-                "$lineItems.lineTotal",
-                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-              ]
-            }
-          },
-          orderCount: { $addToSet: "$_id" }
-        }
-      },
-      { $sort: { qty: -1 } },
-      { $limit: 10 }
-    ]);
-
-    const pTopContributingCustomers = pTrailingCustAgg.map(item => {
-      const doc = allCustMap[item._id?.toString()] || {};
-      const pct = pSumTrailing > 0 ? Math.round((item.qty / pSumTrailing) * 100) : 0;
-      return {
-        customerId: item._id?.toString(),
-        customerName: doc.name || doc.company || 'Customer Account',
-        company: doc.company || '—',
-        qty: item.qty,
-        revenue: Math.round((item.revenue || 0) * 100) / 100,
-        orderCount: (item.orderCount || []).length,
-        percentage: pct
+      pMonthlyDrivers['trailing'] = {
+        yearMonth: 'trailing',
+        month: `Trailing Horizon (${pTrailingPeriodLabel})`,
+        totalQty: pSumTrailing,
+        totalRevenue: Math.round(pTopCustomers.reduce((acc, c) => acc + (c.revenue || 0), 0) * 100) / 100,
+        orderCount: pTrailingMonths.reduce((acc, m) => acc + (m.orderCount || 0), 0),
+        drivers: pTopCustomers
       };
+
+      productBreakdowns[pName] = {
+        productName: pName,
+        category: pCatalog.category || 'Label',
+        unitPrice: pCatalog.unitPrice ?? null,
+        forecastRangeLow: pRangeLow,
+        forecastRangeHigh: pRangeHigh,
+        lowConfidence: pLowConf,
+        sumTrailing: pSumTrailing,
+        averagePerMonth: pAvgPerMonth,
+        trailingMonths: pTrailingMonths,
+        trailingPeriodLabel: pTrailingPeriodLabel,
+        currentMonthSoldQty: pCurQty,
+        currentMonthRevenue: Math.round(pCurRev * 100) / 100,
+        currentMonthOrderCount: pCurOrders.size,
+        currentMonthCustomers: pCurCustomers,
+        availableMonths: pAvailableMonths,
+        monthlyDrivers: pMonthlyDrivers,
+        topContributingCustomers: pTopCustomers
+      };
+    }
+
+    forecasts.push({
+      dimensionKey: cleanDimKey,
+      forecastForMonth,
+      currentMonth: currentMonthFormatted,
+      currentMonthYearMonth: currentYearMonth,
+      currentMonthSoldQty,
+      currentMonthRevenue: Math.round(currentMonthRevenue * 100) / 100,
+      currentMonthOrderCount: curDistinctOrders.size,
+      currentMonthProducts,
+      currentMonthCustomers,
+      trailingMonthsCount: N,
+      completedMonthsAvailable: availableMonthsCount,
+      trailingMonths,
+      trailingPeriodLabel,
+      availableMonths,
+      monthlyDrivers,
+      productBreakdowns,
+      sumTrailing,
+      averagePerMonth,
+      forecastRangeLow,
+      forecastRangeHigh,
+      lowConfidence,
+      insufficientData: false,
+      productNames,
+      categories,
+      mostRecentCompletedMonth: trailingMonths[trailingMonths.length - 1]?.month || null,
+      topContributingCustomers
     });
-
-    pMonthlyDrivers['trailing'] = {
-      yearMonth: 'trailing',
-      month: `Trailing Horizon (${pTrailingPeriodLabel})`,
-      totalQty: pSumTrailing,
-      totalRevenue: Math.round(pTrailingCustAgg.reduce((acc, c) => acc + (c.revenue || 0), 0) * 100) / 100,
-      orderCount: pTrailingMonths.reduce((acc, m) => acc + (m.orderCount || 0), 0),
-      drivers: pTopContributingCustomers
-    };
-
-    productBreakdowns[pName] = {
-      productName: pName,
-      category: pCatalog.category || 'Label',
-      unitPrice: pCatalog.unitPrice ?? null,
-      forecastRangeLow: pRangeLow,
-      forecastRangeHigh: pRangeHigh,
-      lowConfidence: pLowConf,
-      sumTrailing: pSumTrailing,
-      averagePerMonth: pAvgPerMonth,
-      trailingMonths: pTrailingMonths,
-      trailingPeriodLabel: pTrailingPeriodLabel,
-      currentMonthSoldQty: pCurrentDetail.totalQty,
-      currentMonthRevenue: pCurrentDetail.totalRevenue,
-      currentMonthOrderCount: pCurrentDetail.orderCount,
-      currentMonthCustomers: pCurrentCustomers,
-      availableMonths: pAvailableMonths,
-      monthlyDrivers: pMonthlyDrivers,
-      topContributingCustomers: pTopContributingCustomers
-    };
   }
 
-  return {
-    dimensionKey: cleanDimKey,
-    forecastForMonth,
-    currentMonth: formatYearMonth(currentYearMonth),
+  // Sort by forecastRangeHigh descending, then sumTrailing descending
+  forecasts.sort((a, b) => {
+    const highA = a.forecastRangeHigh ?? (a.insufficientData ? -1 : 0);
+    const highB = b.forecastRangeHigh ?? (b.insufficientData ? -1 : 0);
+    if (highB !== highA) return highB - highA;
+    return (b.sumTrailing || 0) - (a.sumTrailing || 0);
+  });
+
+  // Current calendar month summary across entire catalog
+  const curAllLines = flattenedLines.filter(l => l.yearMonth === currentYearMonth);
+  let totalCurrentMonthSoldQty = 0;
+  let totalCurrentMonthRevenue = 0;
+  const globalDistinctOrders = new Set();
+  const globalCurProdMap = new Map();
+
+  curAllLines.forEach(l => {
+    totalCurrentMonthSoldQty += l.qty;
+    totalCurrentMonthRevenue += l.lineTotal;
+    globalDistinctOrders.add(l.orderId);
+
+    const prodKey = `${l.name}:::${l.dimensionKey}`;
+    if (!globalCurProdMap.has(prodKey)) {
+      globalCurProdMap.set(prodKey, {
+        productName: l.name || 'Unnamed Product',
+        dimensionKey: l.dimensionKey || 'Standard',
+        category: catMap[l.name] || 'Label',
+        totalQty: 0,
+        totalRevenue: 0,
+        distinctOrders: new Set(),
+        distinctCustomers: new Set()
+      });
+    }
+    const pEntry = globalCurProdMap.get(prodKey);
+    pEntry.totalQty += l.qty;
+    pEntry.totalRevenue += l.lineTotal;
+    pEntry.distinctOrders.add(l.orderId);
+    if (l.customerId) pEntry.distinctCustomers.add(l.customerId);
+  });
+
+  const productsSoldCurrentMonth = Array.from(globalCurProdMap.values()).map(item => {
+    const buyingCustomers = Array.from(item.distinctCustomers).map(cid => {
+      const doc = custMap.get(cid);
+      return doc?.name || doc?.company || null;
+    }).filter(Boolean);
+
+    return {
+      productName: item.productName,
+      dimensionKey: item.dimensionKey,
+      category: item.category,
+      totalQty: item.totalQty,
+      totalRevenue: Math.round(item.totalRevenue * 100) / 100,
+      orderCount: item.distinctOrders.size,
+      customerCount: item.distinctCustomers.size,
+      buyingCustomers: Array.from(new Set(buyingCustomers))
+    };
+  }).sort((a, b) => b.totalQty - a.totalQty);
+
+  const currentMonthSummary = {
+    currentMonth: currentMonthFormatted,
     currentMonthYearMonth: currentYearMonth,
-    currentMonthSoldQty,
-    currentMonthRevenue: Math.round(currentMonthRevenue * 100) / 100,
-    currentMonthOrderCount: currentMonthOrderIds.size,
-    currentMonthProducts: currentMonthProductDetails,
-    currentMonthCustomers,
+    totalSoldQty: totalCurrentMonthSoldQty,
+    totalRevenue: Math.round(totalCurrentMonthRevenue * 100) / 100,
+    totalOrders: globalDistinctOrders.size,
+    distinctProductsCount: productsSoldCurrentMonth.length,
+    productsSold: productsSoldCurrentMonth
+  };
+
+  return {
+    forecastForMonth,
+    currentMonth: currentMonthFormatted,
     trailingMonthsCount: N,
-    completedMonthsAvailable: availableMonthsCount,
-    trailingMonths,
-    trailingPeriodLabel,
-    availableMonths,
-    monthlyDrivers,
-    productBreakdowns,
-    sumTrailing,
-    averagePerMonth,
-    forecastRangeLow,
-    forecastRangeHigh,
-    lowConfidence,
-    insufficientData: false,
-    productNames,
-    categories,
-    mostRecentCompletedMonth: trailingMonths[trailingMonths.length - 1]?.month || null,
-    topContributingCustomers
+    totalDimensions: forecasts.length,
+    currentMonthSummary,
+    forecasts
+  };
+}
+
+/**
+ * Core Helper: Computes a trailing-average forecast range for a single dimensionKey
+ */
+const computeDimensionForecast = async (dimensionKey, trailingMonthsCount = 2, targetDate = new Date()) => {
+  const result = await computeAllForecastsEngine(trailingMonthsCount, targetDate, dimensionKey);
+  return result.forecasts[0] || {
+    dimensionKey: dimensionKey.trim(),
+    forecastForMonth: result.forecastForMonth,
+    currentMonth: result.currentMonth,
+    currentMonthYearMonth: result.currentMonthSummary?.currentMonthYearMonth || '',
+    currentMonthSoldQty: 0,
+    currentMonthRevenue: 0,
+    currentMonthOrderCount: 0,
+    currentMonthProducts: [],
+    currentMonthCustomers: [],
+    trailingMonthsCount: result.trailingMonthsCount,
+    completedMonthsAvailable: 0,
+    trailingMonths: [],
+    sumTrailing: 0,
+    averagePerMonth: null,
+    forecastRangeLow: null,
+    forecastRangeHigh: null,
+    lowConfidence: true,
+    insufficientData: true,
+    productNames: [],
+    categories: [],
+    mostRecentCompletedMonth: null,
+    topContributingCustomers: [],
+    availableMonths: [],
+    monthlyDrivers: {},
+    productBreakdowns: {}
   };
 };
 
@@ -968,140 +699,8 @@ const getAllDimensionsForecast = async (req, res) => {
   try {
     const { trailingMonths = 2 } = req.query;
     const N = Math.max(1, Math.min(parseInt(trailingMonths, 10) || 2, 12));
-    const now = new Date();
-    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const forecastForMonth = formatYearMonth(`${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`);
-    const currentMonthFormatted = formatYearMonth(currentYearMonth);
-
-    // 1. Find all distinct dimension keys ever recorded in orders
-    const distinctDimensions = await Order.distinct("lineItems.dimensionKey", {
-      isDeleted: { $ne: true },
-      status: { $ne: 'cancelled' }
-    });
-
-    const cleanDims = distinctDimensions.filter(d => d && typeof d === 'string' && d.trim().length > 0);
-
-    // 2. Compute forecast for every dimension concurrently
-    const forecasts = await Promise.all(
-      cleanDims.map(dimKey => computeDimensionForecast(dimKey, N))
-    );
-
-    // 3. Sort by forecastRangeHigh descending, then sumTrailing descending
-    forecasts.sort((a, b) => {
-      const highA = a.forecastRangeHigh ?? (a.insufficientData ? -1 : 0);
-      const highB = b.forecastRangeHigh ?? (b.insufficientData ? -1 : 0);
-      if (highB !== highA) return highB - highA;
-      return (b.sumTrailing || 0) - (a.sumTrailing || 0);
-    });
-
-    // 4. Compute comprehensive current calendar month product sales summary across entire catalog
-    const currentMonthAllAgg = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          status: { $ne: 'cancelled' }
-        }
-      },
-      {
-        $addFields: {
-          orderYearMonth: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: { $ifNull: ["$orderDate", "$createdAt"] }
-            }
-          }
-        }
-      },
-      {
-        $match: {
-          orderYearMonth: currentYearMonth
-        }
-      },
-      { $unwind: "$lineItems" },
-      {
-        $group: {
-          _id: {
-            name: "$lineItems.name",
-            dimensionKey: "$lineItems.dimensionKey"
-          },
-          productId: { $first: "$lineItems.productId" },
-          productName: { $first: "$lineItems.name" },
-          dimensionKey: { $first: "$lineItems.dimensionKey" },
-          totalQty: { $sum: "$lineItems.qty" },
-          totalRevenue: {
-            $sum: {
-              $ifNull: [
-                "$lineItems.lineTotal",
-                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-              ]
-            }
-          },
-          distinctOrders: { $addToSet: "$_id" },
-          distinctCustomers: { $addToSet: "$customerId" }
-        }
-      },
-      { $sort: { totalQty: -1 } }
-    ]);
-
-    // Fetch product catalog categories for enrichment
-    const catalogProducts = await Product.find({ isDeleted: { $ne: true } });
-    const catMap = {};
-    catalogProducts.forEach(p => {
-      if (p.name) catMap[p.name] = p.category;
-    });
-
-    // Fetch customer details for buying customer names
-    const allCustIds = Array.from(new Set(currentMonthAllAgg.flatMap(i => i.distinctCustomers || [])));
-    const custDocs = await Customer.find({ _id: { $in: allCustIds } }, { name: 1, company: 1 });
-    const customerLookup = {};
-    custDocs.forEach(c => {
-      customerLookup[c._id.toString()] = c.name || c.company || 'Customer';
-    });
-
-    let totalCurrentMonthSoldQty = 0;
-    let totalCurrentMonthRevenue = 0;
-    const globalDistinctOrders = new Set();
-
-    const productsSoldCurrentMonth = currentMonthAllAgg.map(item => {
-      totalCurrentMonthSoldQty += item.totalQty || 0;
-      totalCurrentMonthRevenue += item.totalRevenue || 0;
-      (item.distinctOrders || []).forEach(o => globalDistinctOrders.add(o.toString()));
-
-      const buyingCustomers = (item.distinctCustomers || [])
-        .map(cid => customerLookup[cid?.toString()])
-        .filter(Boolean);
-
-      return {
-        productName: item.productName || item._id.name || 'Unnamed Product',
-        dimensionKey: item.dimensionKey || item._id.dimensionKey || 'Standard',
-        category: catMap[item.productName] || 'Label',
-        totalQty: item.totalQty || 0,
-        totalRevenue: Math.round((item.totalRevenue || 0) * 100) / 100,
-        orderCount: (item.distinctOrders || []).length,
-        customerCount: (item.distinctCustomers || []).length,
-        buyingCustomers: Array.from(new Set(buyingCustomers))
-      };
-    });
-
-    const currentMonthSummary = {
-      currentMonth: currentMonthFormatted,
-      currentMonthYearMonth: currentYearMonth,
-      totalSoldQty: totalCurrentMonthSoldQty,
-      totalRevenue: Math.round(totalCurrentMonthRevenue * 100) / 100,
-      totalOrders: globalDistinctOrders.size,
-      distinctProductsCount: productsSoldCurrentMonth.length,
-      productsSold: productsSoldCurrentMonth
-    };
-
-    return res.json({
-      forecastForMonth,
-      currentMonth: currentMonthFormatted,
-      trailingMonthsCount: N,
-      totalDimensions: forecasts.length,
-      currentMonthSummary,
-      forecasts
-    });
+    const result = await computeAllForecastsEngine(N, new Date());
+    return res.json(result);
   } catch (error) {
     console.error('Error calculating all dimension forecasts:', error);
     return res.status(500).json({ message: 'Server error calculating all dimension forecasts' });
@@ -1453,83 +1052,18 @@ const exportAllProductionExcel = async (req, res) => {
     const { trailingMonths = 2 } = req.query;
     const N = Math.max(1, Math.min(parseInt(trailingMonths, 10) || 2, 12));
 
-    const now = new Date();
-    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const forecastForMonth = formatYearMonth(`${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`);
-    const currentMonthFormatted = formatYearMonth(currentYearMonth);
-
-    // 1. Fetch all distinct dimension keys
-    const distinctDimensions = await Order.distinct("lineItems.dimensionKey", {
-      isDeleted: { $ne: true },
-      status: { $ne: 'cancelled' }
-    });
-    const cleanDims = distinctDimensions.filter(d => d && typeof d === 'string' && d.trim().length > 0);
-
-    // 2. Compute forecast for every dimension concurrently
-    const forecasts = await Promise.all(
-      cleanDims.map(dimKey => computeDimensionForecast(dimKey, N))
-    );
-
-    // 3. Current month catalog summary
-    const currentMonthAllAgg = await Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          status: { $ne: 'cancelled' }
-        }
-      },
-      {
-        $addFields: {
-          orderYearMonth: {
-            $dateToString: {
-              format: "%Y-%m",
-              date: { $ifNull: ["$orderDate", "$createdAt"] }
-            }
-          }
-        }
-      },
-      {
-        $match: {
-          orderYearMonth: currentYearMonth
-        }
-      },
-      { $unwind: "$lineItems" },
-      {
-        $group: {
-          _id: {
-            name: "$lineItems.name",
-            dimensionKey: "$lineItems.dimensionKey"
-          },
-          productId: { $first: "$lineItems.productId" },
-          productName: { $first: "$lineItems.name" },
-          dimensionKey: { $first: "$lineItems.dimensionKey" },
-          totalQty: { $sum: "$lineItems.qty" },
-          totalRevenue: {
-            $sum: {
-              $ifNull: [
-                "$lineItems.lineTotal",
-                { $multiply: ["$lineItems.qty", { $ifNull: ["$lineItems.price", 0] }] }
-              ]
-            }
-          },
-          distinctOrders: { $addToSet: "$_id" },
-          distinctCustomers: { $addToSet: "$customerId" }
-        }
-      },
-      { $sort: { totalQty: -1 } }
-    ]);
+    const result = await computeAllForecastsEngine(N, new Date());
+    const { forecasts, currentMonthSummary, forecastForMonth, currentMonth: currentMonthFormatted } = result;
 
     // Catalog products for enrichment
-    const catalogProducts = await Product.find({ isDeleted: { $ne: true } });
+    const catalogProducts = await Product.find({ isDeleted: { $ne: true } }).lean();
     const productCatalogMap = {};
     catalogProducts.forEach(p => {
       if (p.name) productCatalogMap[p.name] = p;
     });
 
-    const allCustIds = Array.from(new Set(currentMonthAllAgg.flatMap(i => i.distinctCustomers || [])));
-    const custDocs = await Customer.find({ _id: { $in: allCustIds } }, { name: 1, company: 1 });
     const customerLookup = {};
+    const custDocs = await Customer.find({ isDeleted: { $ne: true } }, { name: 1, company: 1 }).lean();
     custDocs.forEach(c => {
       customerLookup[c._id.toString()] = c.name || c.company || 'Customer';
     });

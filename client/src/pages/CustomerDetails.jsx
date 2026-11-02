@@ -86,12 +86,15 @@ export default function CustomerDetails() {
     name: '',
     company: '',
     phone: '',
+    phone2: '',
     email: '',
     gstNo: '',
+    billingAttention: '',
     address: '',
     city: '',
     state: '',
     pincode: '',
+    country: 'India',
     customerType: '',
     source: 'website',
     expectedReorderDate: ''
@@ -187,10 +190,16 @@ export default function CustomerDetails() {
           name: custData.name || '',
           company: custData.company || '',
           phone: custData.phone || '',
+          phone2: custData.phone2 || '',
           email: custData.email || '',
           gstNo: custData.gstNo || '',
+          billingAttention: custData.billingAttention || '',
           source: custData.source || 'website',
-          address: custData.address || custData.city || '',
+          address: custData.address || '',
+          city: custData.city || '',
+          state: custData.state || '',
+          pincode: custData.pincode || '',
+          country: custData.country || 'India',
           expectedReorderDate: custData.expectedReorderDate
             ? new Date(custData.expectedReorderDate).toISOString().split('T')[0]
             : ''
@@ -212,11 +221,15 @@ export default function CustomerDetails() {
     e.preventDefault();
     try {
       setIsSaving(true);
-      const cleanPhone = (formData.phone || '').replace(/\D/g, '');
-      if (cleanPhone.length !== 10) {
-        notify.error('Phone number must be exactly 10 digits');
-        setIsSaving(false);
-        return;
+      let cleanPhone = undefined;
+      if (formData.phone) {
+        const digitsOnly = formData.phone.replace(/\D/g, '');
+        if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+          notify.error('Please enter a valid phone number (7 to 15 digits)');
+          setIsSaving(false);
+          return;
+        }
+        cleanPhone = formData.phone.trim();
       }
 
       if (formData.email && formData.email.trim()) {
@@ -231,10 +244,15 @@ export default function CustomerDetails() {
       const payload = {
         name: formData.name.trim(),
         company: formData.company ? formData.company.trim() : '',
-        phone: cleanPhone,
+        phone: cleanPhone || formData.phone,
+        phone2: formData.phone2 ? formData.phone2.trim() : '',
         email: formData.email ? formData.email.trim().toLowerCase() : '',
-        address: formData.address,
-        city: formData.address,
+        billingAttention: formData.billingAttention ? formData.billingAttention.trim() : '',
+        address: formData.address ? formData.address.trim() : '',
+        city: formData.city ? formData.city.trim() : '',
+        state: formData.state ? formData.state.trim() : '',
+        pincode: formData.pincode ? formData.pincode.trim() : '',
+        country: formData.country || 'India',
         gstNo: formData.gstNo,
         source: formData.source,
         expectedReorderDate: formData.expectedReorderDate || undefined
@@ -612,23 +630,48 @@ export default function CustomerDetails() {
                   <div className="flex items-center justify-between text-slate-700 font-medium">
                     <div className="flex items-center gap-2.5">
                       <Phone size={15} className="text-slate-400 shrink-0" />
-                      <span>{customerPhone}</span>
+                      <div>
+                        <span>{customerPhone}</span>
+                        <span className="text-[10px] text-slate-400 font-normal ml-1.5">(Primary)</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={handleCallClick}
                         className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
-                        title="Call"
+                        title="Call Primary Phone"
                       >
                         <Phone size={13} />
                       </button>
                       <button
                         onClick={handleWhatsAppClick}
                         className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
-                        title="WhatsApp"
+                        title="WhatsApp Primary Phone"
                       >
                         <WhatsAppIcon size={13} className="text-emerald-600" />
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Secondary Phone / Phone 2 */}
+                {customer.phone2 && (
+                  <div className="flex items-center justify-between text-slate-700 font-medium">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <PhoneCall size={15} className="text-slate-400 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="truncate block" title={customer.phone2}>{customer.phone2}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">(Secondary)</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <a
+                        href={`tel:${customer.phone2.split(',')[0].trim()}`}
+                        className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                        title="Call Secondary Phone"
+                      >
+                        <Phone size={13} />
+                      </a>
                     </div>
                   </div>
                 )}
@@ -637,7 +680,7 @@ export default function CustomerDetails() {
                 {customerEmail && (
                   <div className="flex items-center gap-2.5 text-slate-700 font-medium truncate">
                     <Mail size={15} className="text-slate-400 shrink-0" />
-                    <span className="truncate">{customerEmail}</span>
+                    <a href={`mailto:${customerEmail}`} className="truncate hover:text-blue-600">{customerEmail}</a>
                   </div>
                 )}
 
@@ -649,11 +692,28 @@ export default function CustomerDetails() {
                   </div>
                 )}
 
+                {/* Billing Attention */}
+                {customer.billingAttention && (
+                  <div className="flex items-center gap-2.5 text-slate-700 font-medium">
+                    <User size={15} className="text-slate-400 shrink-0" />
+                    <span>Attn: {customer.billingAttention}</span>
+                  </div>
+                )}
+
                 {/* Address */}
-                {customerAddress && (
+                {(customerAddress || customer.city || customer.state || customer.pincode) && (
                   <div className="flex items-start gap-2.5 text-slate-700 font-medium">
                     <MapPin size={15} className="text-slate-400 shrink-0 mt-0.5" />
-                    <span className="leading-relaxed">{customerAddress}</span>
+                    <div className="leading-relaxed">
+                      {customerAddress && <div>{customerAddress}</div>}
+                      <div>
+                        {[customer.city, customer.state].filter(Boolean).join(', ')}
+                        {customer.pincode ? ` - ${customer.pincode}` : ''}
+                      </div>
+                      {customer.country && customer.country !== 'India' && (
+                        <div className="text-[11px] text-slate-500">{customer.country}</div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1417,7 +1477,7 @@ export default function CustomerDetails() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Phone</label>
+                  <label className="font-bold text-slate-700 block mb-1">Primary Phone</label>
                   <input
                     type="text"
                     value={formData.phone}
@@ -1427,11 +1487,34 @@ export default function CustomerDetails() {
                   />
                 </div>
                 <div>
+                  <label className="font-bold text-slate-700 block mb-1">Phone 2 / Secondary</label>
+                  <input
+                    type="text"
+                    value={formData.phone2}
+                    onChange={(e) => setFormData({ ...formData, phone2: e.target.value })}
+                    placeholder="e.g. 9176989333, 044-234567"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="font-bold text-slate-700 block mb-1">Email</label>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Billing Attention</label>
+                  <input
+                    type="text"
+                    value={formData.billingAttention}
+                    onChange={(e) => setFormData({ ...formData, billingAttention: e.target.value })}
+                    placeholder="e.g. Accounts Dept"
                     className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
                   />
                 </div>
@@ -1465,13 +1548,47 @@ export default function CustomerDetails() {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Address / Location</label>
+                <label className="font-bold text-slate-700 block mb-1">Billing Address</label>
                 <input
                   type="text"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  placeholder="Street / Plot / Area"
                   className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
                 />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">City</label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder="Chennai"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">State</label>
+                  <input
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    placeholder="Tamil Nadu"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Postal Code</label>
+                  <input
+                    type="text"
+                    value={formData.pincode}
+                    onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                    placeholder="600001"
+                    className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 font-medium"
+                  />
+                </div>
               </div>
 
               <div>
